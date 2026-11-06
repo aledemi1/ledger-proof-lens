@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { to: "/", label: "Все проверки", Icon: LayoutList, exact: true },
+  { to: "/", label: "Главная", Icon: ScanSearch, exact: true },
+  { to: "/audits", label: "Все проверки", Icon: LayoutList, exact: false },
   { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
 ] as const;
 

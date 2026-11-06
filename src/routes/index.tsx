@@ -1,14 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AuditsListPage } from "@/pages/AuditsListPage";
+import { LandingPage } from "@/pages/LandingPage";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Проверки отчётности — Sverko" },
-      { name: "description", content: "Список проверок отчётности по первичным документам: статусы, результаты и расхождения." },
-      { property: "og:title", content: "Проверки отчётности — Sverko" },
-      { property: "og:description", content: "Сверка отчётов с первичными документами и поиск расхождений." },
+      { title: "Sverko — проверка достоверности отчётности по первичным документам" },
+      {
+        name: "description",
+        content:
+          "Sverko сопоставляет показатели отчёта со счетами, накладными и актами, находит расхождения и готовит обоснованное заключение со ссылками на источники.",
+      },
+      { property: "og:title", content: "Sverko — проверка достоверности отчётности" },
+      {
+        property: "og:description",
+        content: "Автоматическая сверка отчётов с первичными документами: расхождения, источники и заключение.",
+      },
     ],
   }),
-  component: AuditsListPage,
+  component: LandingPage,
 });

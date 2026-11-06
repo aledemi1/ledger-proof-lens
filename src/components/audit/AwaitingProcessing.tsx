@@ -14,7 +14,7 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 lg:px-8">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4">
-        <Link to="/"><ArrowLeft /> Все проверки</Link>
+        <Link to="/audits"><ArrowLeft /> Все проверки</Link>
       </Button>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold tracking-tight">{session.title}</h1>
@@ -56,7 +56,7 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
           className="mt-6 text-danger hover:text-danger"
           onClick={async () => {
             await auditService.deleteDraft(session.id);
-            navigate({ to: "/" });
+            navigate({ to: "/audits" });
           }}
         >
           <Trash2 /> Удалить черновик

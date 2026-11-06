@@ -37,7 +37,7 @@ export function WorkspacePage({ id }: { id: string }) {
     return (
       <div className="p-8">
         <p className="text-sm text-muted-foreground">Проверка не найдена.</p>
-        <Button asChild variant="outline" className="mt-4"><Link to="/">К списку проверок</Link></Button>
+        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К списку проверок</Link></Button>
       </div>
     );
   if (session.status === "awaiting_processing" || session.checks.length === 0)
@@ -182,7 +182,7 @@ function Workspace({
       <div className="border-b border-border bg-card px-4 pb-3 pt-3 lg:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Button asChild variant="ghost" size="icon" className="size-8 shrink-0" aria-label="К списку проверок">
-            <Link to="/"><ArrowLeft /></Link>
+            <Link to="/audits"><ArrowLeft /></Link>
           </Button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

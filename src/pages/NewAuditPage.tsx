@@ -187,7 +187,7 @@ export function NewAuditPage() {
 
       <div className="mt-4 flex items-center justify-between">
         {step === 0 ? (
-          <Button asChild variant="ghost"><Link to="/"><ArrowLeft /> К списку</Link></Button>
+          <Button asChild variant="ghost"><Link to="/audits"><ArrowLeft /> К списку</Link></Button>
         ) : (
           <Button variant="ghost" onClick={() => setStep(step - 1)}><ArrowLeft /> Назад</Button>
         )}

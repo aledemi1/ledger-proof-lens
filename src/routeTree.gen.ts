@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as AuditsIndexRouteImport } from './routes/audits.index'
 import { Route as AuditsIdIndexRouteImport } from './routes/audits.$id.index'
 import { Route as AuditsIdConclusionRouteImport } from './routes/audits.$id.conclusion'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditsIndexRoute = AuditsIndexRouteImport.update({
+  id: '/audits/',
+  path: '/audits/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuditsIdIndexRoute = AuditsIdIndexRouteImport.update({
@@ -38,12 +44,14 @@ const AuditsIdConclusionRoute = AuditsIdConclusionRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
+  '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/new': typeof NewRoute
+  '/audits': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id': typeof AuditsIdIndexRoute
 }
@@ -51,20 +59,29 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/new': typeof NewRoute
+  '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/new' | '/audits/$id/conclusion' | '/audits/$id/'
+  fullPaths:
+    '/' | '/new' | '/audits/' | '/audits/$id/conclusion' | '/audits/$id/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new' | '/audits/$id/conclusion' | '/audits/$id'
-  id: '__root__' | '/' | '/new' | '/audits/$id/conclusion' | '/audits/$id/'
+  to: '/' | '/new' | '/audits' | '/audits/$id/conclusion' | '/audits/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/new'
+    | '/audits/'
+    | '/audits/$id/conclusion'
+    | '/audits/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   NewRoute: typeof NewRoute
+  AuditsIndexRoute: typeof AuditsIndexRoute
   AuditsIdConclusionRoute: typeof AuditsIdConclusionRoute
   AuditsIdIndexRoute: typeof AuditsIdIndexRoute
 }
@@ -83,6 +100,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audits/': {
+      id: '/audits/'
+      path: '/audits'
+      fullPath: '/audits/'
+      preLoaderRoute: typeof AuditsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audits/$id/': {
@@ -105,6 +129,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   NewRoute: NewRoute,
+  AuditsIndexRoute: AuditsIndexRoute,
   AuditsIdConclusionRoute: AuditsIdConclusionRoute,
   AuditsIdIndexRoute: AuditsIdIndexRoute,
 }
