@@ -41,7 +41,7 @@ function write(store: Store) {
 function hydrate(session: AuditSession, store: Store): AuditSession {
   const reviews = store.reviews[session.id] ?? {};
   const checks = session.checks.map((c) => (reviews[c.id] ? { ...c, ...reviews[c.id] } : c));
-  const decision = session.id in store.decisions ? store.decisions[session.id] : session.reviewerDecision;
+  const decision = session.id in store.decisions ? (store.decisions[session.id] ?? null) : session.reviewerDecision;
   const status =
     session.status === "awaiting_processing" ? session.status : decision ? "completed" : "in_review";
   return { ...session, checks, reviewerDecision: decision, status };

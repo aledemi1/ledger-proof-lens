@@ -21,7 +21,7 @@ describe("demo audit rules", () => {
   it("cost discrepancy highlights the 250 000 ₽ fragment in the act", () => {
     const c = demoSession.checks.find((x) => x.id === "c8")!;
     expect(c.sourceValue).toBe("250 000 ₽");
-    expect(c.evidenceReferences[0].locationInDocument).toBe("act-cost");
+    expect(c.evidenceReferences[0]?.locationInDocument).toBe("act-cost");
   });
 
   it("recommends accept only when all blocking issues are verified and reviews done", () => {

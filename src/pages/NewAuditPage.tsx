@@ -119,7 +119,10 @@ export function NewAuditPage() {
                 onFiles={(fs) => {
                   const f = fs[0];
                   if (!f) return;
-                  if (!REPORT_EXTENSIONS.includes(fileExt(f.name))) return toast.error("Неподдерживаемый формат. Допустимы PDF, XLSX, XLS, CSV, DOCX");
+                  if (!REPORT_EXTENSIONS.includes(fileExt(f.name))) {
+                    toast.error("Неподдерживаемый формат. Допустимы PDF, XLSX, XLS, CSV, DOCX");
+                    return;
+                  }
                   setReport(f);
                 }}
               />

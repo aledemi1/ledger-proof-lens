@@ -28,3 +28,9 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Frontend-only for now: pages read/write data only through `src/services/auditService.ts` (`AuditService` interface, mock impl in `mockAuditService.ts`), so a real API client can replace the mock without touching pages.
+- Route files in `src/routes` stay thin and render page components from `src/pages`; domain types live in `src/types/audit.ts`, demo data in `src/mocks`.
+- Reviewer verdicts are stored separately from automatic `CheckResult.status`; never let a reviewer action change the automatic status.
+- Document highlights come only from `EvidenceReference.locationInDocument` anchors in synthetic previews; never invent coordinates for user files, and never store user file contents in localStorage.

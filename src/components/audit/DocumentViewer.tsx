@@ -56,7 +56,7 @@ export function DocumentViewer(p: Props) {
         <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
           {isSheet ? <FileSpreadsheet className="size-4" /> : <FileText className="size-4" />}
         </span>
-        <Select value={p.docId ?? undefined} onValueChange={p.onDocChange}>
+        <Select value={p.docId ?? ""} onValueChange={p.onDocChange}>
           <SelectTrigger className="h-8 min-w-0 flex-1 border-transparent px-2 text-sm font-medium shadow-none hover:bg-muted">
             <SelectValue placeholder="Выберите документ" />
           </SelectTrigger>

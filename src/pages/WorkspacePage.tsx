@@ -64,7 +64,7 @@ function Workspace({
   isDemo: boolean;
 }) {
   const issues = useMemo(() => checks.filter(isIssue), [checks]);
-  const [selectedId, setSelectedId] = useState<string>(() => issues[0]?.id ?? checks[0]?.id);
+  const [selectedId, setSelectedId] = useState<string>(() => issues[0]?.id ?? checks[0]?.id ?? "");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [docFilter, setDocFilter] = useState<string>("all");
@@ -119,7 +119,8 @@ function Workspace({
   const stepIssue = (dir: -1 | 1) => {
     if (!issues.length) return;
     const next = issuePos < 0 ? (dir === 1 ? 0 : issues.length - 1) : (issuePos + dir + issues.length) % issues.length;
-    setSelectedId(issues[next].id);
+    const n = issues[next];
+    if (n) setSelectedId(n.id);
   };
 
   // Keyboard: ↑/↓ moves through visible rows, J/K through issues.

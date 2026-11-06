@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { DocBlock, DocPage, DocSegment } from "@/types/audit";
 
 interface MarkCtx {
-  active?: string;
+  active?: string | undefined;
   /** Anchors that are linked to some check — clickable. */
   linked: Set<string>;
   onMarkClick?: (anchor: string) => void;

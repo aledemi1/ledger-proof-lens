@@ -28,7 +28,7 @@ export function CheckDetails({
   check: CheckResult;
   docName: (id: string) => string;
   onShowEvidence: (i: number) => void;
-  onShowReport?: () => void;
+  onShowReport?: (() => void) | undefined;
 }) {
   const [comment, setComment] = useState(check.reviewerComment);
   const [expanded, setExpanded] = useState(true);
@@ -53,7 +53,7 @@ export function CheckDetails({
   const t = titles[check.status];
 
   return (
-    <div className="max-h-[46vh] overflow-auto px-4 py-3 animate-in-up lg:px-6">
+    <div className="max-h-[42vh] overflow-auto px-4 py-3 animate-in-up lg:px-6">
       <div className="flex items-center gap-2">
         <h2 className={cn("text-sm font-semibold", t.cls)}>{t.text}</h2>
         {issue && <span className={cn("text-xs", severityMeta[check.severity].cls)}>· {severityMeta[check.severity].label}</span>}

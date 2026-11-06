@@ -85,7 +85,7 @@ export interface ReviewerDecision {
 export interface AuditSession {
   id: string;
   title: string;
-  description?: string;
+  description?: string | undefined;
   createdAt: string;
   status: SessionStatus;
   isDemo: boolean;
@@ -137,12 +137,12 @@ export interface NewDraftFile {
 
 export interface NewDraftInput {
   title: string;
-  description?: string;
+  description?: string | undefined;
   report: NewDraftFile;
   supporting: NewDraftFile[];
 }
 
 export interface ReviewUpdate {
-  reviewerStatus?: ReviewerStatus;
-  reviewerComment?: string;
+  reviewerStatus?: ReviewerStatus | undefined;
+  reviewerComment?: string | undefined;
 }
