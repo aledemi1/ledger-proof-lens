@@ -118,11 +118,11 @@ export function DocumentViewer(p: Props) {
       {p.notFoundNotice && (
         <div className="flex items-start gap-2 border-b border-border bg-orange-soft px-3 py-2 text-xs text-orange">
           <FileX2 className="mt-0.5 size-3.5 shrink-0" />
-          <span>{p.notFoundNotice}</span>
+          <div><p className="font-medium">Подтверждающий документ не найден</p><p className="mt-1">Просмотр комплекта вручную</p></div>
         </div>
       )}
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto bg-muted/70 p-4 sm:p-6">
+      <div ref={scrollRef} className="document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3">
         {!doc ? (
           <Empty text="Выберите показатель или документ для просмотра." />
         ) : doc.preview.kind === "none" ? (

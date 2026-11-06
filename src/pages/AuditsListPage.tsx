@@ -36,18 +36,18 @@ export function AuditsListPage() {
     { label: "Требуют доработки", value: all.filter((s) => resultOf(s) === "revise").length, dot: "bg-danger" },
     { label: "Ожидают рассмотрения", value: all.filter((s) => s.status !== "completed").length, dot: "bg-warning" },
   ];
-  const hasDemo = all.some((s) => s.isDemo);
+  const allDemo = all.length > 0 && all.every((s) => s.isDemo);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Проверка отчётности</h1>
-            {hasDemo && <DemoBadge />}
+            <h1 className="text-2xl font-semibold tracking-tight">Все проверки</h1>
+            {allDemo && <DemoBadge />}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Проверяйте отчёты по первичным документам и находите расхождения в несколько шагов
+            Результаты сверки и этапы рассмотрения отчётов
           </p>
         </div>
         <Button asChild>
@@ -57,16 +57,16 @@ export function AuditsListPage() {
 
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-lg border border-border bg-card px-4 py-3 shadow-panel">
+          <div key={s.label} className="rounded-lg border border-border bg-card px-4 py-2 shadow-panel">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className={cn("size-1.5 rounded-full", s.dot)} /> {s.label}
             </div>
-            <div className="mt-1 text-2xl font-semibold tabular">{sessions ? s.value : "—"}</div>
+            <div className="mt-0.5 text-xl font-semibold tabular">{sessions ? s.value : "—"}</div>
           </div>
         ))}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
+      <div className="mt-6 overflow-hidden border-y border-border bg-card">
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
           <div className="relative min-w-48 flex-1 sm:max-w-xs">
             <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -74,7 +74,7 @@ export function AuditsListPage() {
           </div>
           <div className="flex flex-wrap gap-1">
             {filters.map((f) => (
-              <button
+              <Button variant="ghost" size="sm"
                 key={f.id}
                 onClick={() => setFilter(f.id)}
                 className={cn(
@@ -83,7 +83,7 @@ export function AuditsListPage() {
                 )}
               >
                 {f.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -94,8 +94,8 @@ export function AuditsListPage() {
                 <th className="px-4 py-2 font-medium">Название проверки</th>
                 <th className="px-3 py-2 font-medium">Дата создания</th>
                 <th className="px-3 py-2 text-right font-medium">Документов</th>
-                <th className="px-3 py-2 font-medium">Результат</th>
-                <th className="px-3 py-2 font-medium">Статус</th>
+                <th className="px-3 py-2 font-medium">Результат сверки</th>
+                <th className="px-3 py-2 font-medium">Этап работы</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -110,7 +110,7 @@ export function AuditsListPage() {
                   >
                     <td className="px-4 py-2.5">
                       <div className="font-medium">{s.title}</div>
-                      {s.isDemo && <div className="text-[11px] text-muted-foreground">Пример · синтетические данные</div>}
+                      {s.isDemo && !allDemo && <div className="text-[11px] text-muted-foreground">Пример · синтетические данные</div>}
                       {!s.isDemo && <div className="text-[11px] text-muted-foreground">Локальный черновик</div>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{formatDate(s.createdAt)}</td>

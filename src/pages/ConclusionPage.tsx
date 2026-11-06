@@ -80,13 +80,13 @@ export function ConclusionPage({ id }: { id: string }) {
         {session.isDemo && <DemoBadge className="ml-auto" />}
       </div>
 
-      <h1 className="text-2xl font-semibold tracking-tight">Заключение по результатам проверки</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{session.title}</p>
+      <h1 className="no-print text-2xl font-semibold tracking-tight">Заключение по результатам проверки</h1>
+      <p className="no-print mt-1 text-sm text-muted-foreground">{session.title}</p>
 
       {/* Recommendation vs decision */}
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-4 shadow-panel">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Автоматическая рекомендация</div>
+      <div className="no-print mt-5 grid gap-6 border-y border-border py-4 md:grid-cols-2">
+        <div className="bg-card p-4">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Рекомендация системы</div>
           <div className="mt-2 flex items-center gap-2">
             <span className={cn("size-2.5 rounded-full", rec.dot)} />
             <span className="text-base font-semibold">Рекомендация: {rec.label.charAt(0).toLowerCase() + rec.label.slice(1)}</span>
@@ -99,7 +99,7 @@ export function ConclusionPage({ id }: { id: string }) {
                 : "Блокирующих замечаний нет."}
           </p>
         </div>
-        <div className="no-print rounded-lg border border-border bg-card p-4 shadow-panel">
+        <div className="bg-card p-4">
           <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Решение проверяющего</div>
           {session.reviewerDecision ? (
             <div className="mt-2">
@@ -114,10 +114,10 @@ export function ConclusionPage({ id }: { id: string }) {
             </div>
           ) : (
             <>
-              <p className="mt-2 text-sm text-muted-foreground">Окончательное решение принимает сотрудник.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Решение пока не принято</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => onDecide("accept")}>Принять отчёт</Button>
-                <Button size="sm" onClick={() => onDecide("revise")}>Вернуть на доработку</Button>
+                <Button size="sm" variant="outline" onClick={() => onDecide("revise")}>Вернуть на доработку</Button>
               </div>
             </>
           )}
@@ -125,7 +125,11 @@ export function ConclusionPage({ id }: { id: string }) {
       </div>
 
       {/* Official document */}
-      <article className="mt-6 rounded-lg border border-border bg-paper p-6 text-ink shadow-panel sm:p-10">
+      <article className="conclusion-document mt-6 border border-border bg-paper p-5 text-ink shadow-panel sm:p-8">
+        <div className="no-print mb-5 flex flex-wrap justify-end gap-2 border-b border-border pb-4">
+          <Button variant="outline" size="sm" onClick={copy}>{copied ? <Check /> : <Copy />} Скопировать заключение</Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()}><Printer /> Печать / сохранить в PDF</Button>
+        </div>
         <header className="border-b border-border pb-4 text-center">
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Sverko · проверка отчётности</div>
           <h2 className="mt-2 font-doc text-lg font-bold uppercase">Заключение по результатам проверки</h2>
@@ -199,12 +203,6 @@ export function ConclusionPage({ id }: { id: string }) {
           </div>
         </section>
       </article>
-
-      <div className="no-print mt-5 flex flex-wrap gap-2">
-        <Button onClick={copy}>{copied ? <Check /> : <Copy />} Скопировать заключение</Button>
-        <Button variant="outline" onClick={() => window.print()}><Printer /> Печать / сохранить в PDF</Button>
-        <Button asChild variant="ghost"><Link to="/audits/$id" params={{ id }}><ArrowLeft /> Вернуться к проверке</Link></Button>
-      </div>
 
       <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
         <DialogContent>

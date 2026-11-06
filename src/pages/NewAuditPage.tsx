@@ -66,7 +66,7 @@ export function NewAuditPage() {
           <p className="mt-1 text-sm text-muted-foreground">Загрузите отчёт и подтверждающие документы.</p>
         </div>
         <Button variant="outline" onClick={() => navigate({ to: "/audits/$id", params: { id: DEMO_SESSION_ID } })}>
-          <PlayCircle /> Открыть демонстрационную проверку
+          <PlayCircle /> Открыть демо-проверку
         </Button>
       </div>
 
@@ -74,24 +74,23 @@ export function NewAuditPage() {
       <ol className="mt-6 grid grid-cols-4 gap-2">
         {steps.map((s, i) => (
           <li key={s}>
-            <button
+            <Button variant="ghost" className="h-auto w-full flex-col items-stretch px-0 hover:bg-transparent"
               disabled={i > step}
               onClick={() => setStep(i)}
-              className="w-full text-left disabled:cursor-default"
             >
               <div className={cn("h-1 rounded-full bg-muted", i <= step && "bg-primary")} />
-              <div className={cn("mt-2 flex items-center gap-1.5 text-xs", i === step ? "font-medium text-foreground" : "text-muted-foreground")}>
-                <span className={cn("grid size-4 place-items-center rounded-full border text-[10px]", i < step ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+              <div className={cn("mt-2 flex items-center gap-1.5 text-xs", i === step ? "font-semibold text-primary" : "text-muted-foreground")}>
+                <span className={cn("grid size-4 place-items-center rounded-full border text-[10px]", i <= step ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
                   {i < step ? <Check className="size-2.5" /> : i + 1}
                 </span>
-                <span className="hidden sm:inline">{s}</span>
+                <span className="break-words">{s}</span>
               </div>
-            </button>
+            </Button>
           </li>
         ))}
       </ol>
 
-      <div className="mt-6 rounded-lg border border-border bg-card p-5 shadow-panel sm:p-6">
+      <div className="mt-6 border-y border-border bg-card p-5 sm:p-6">
         {step === 0 && (
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -157,6 +156,8 @@ export function NewAuditPage() {
             )}
           </div>
         )}
+
+        {(step === 1 || step === 2) && <div className="mt-4 flex gap-2 border-l-2 border-primary bg-primary-soft px-3 py-3 text-sm"><ServerOff className="mt-0.5 size-4 shrink-0 text-primary" /><p>В текущей версии обработка файлов недоступна. Сохраняются только названия и размеры; содержимое файлов не отправляется. <Link to="/audits/$id" params={{ id: DEMO_SESSION_ID }} className="font-medium text-primary underline">Открыть демо без файлов</Link></p></div>}
 
         {step === 3 && report && (
           <div className="space-y-4">

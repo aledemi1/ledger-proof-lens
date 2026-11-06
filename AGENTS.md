@@ -34,3 +34,6 @@ use the editor.
 - Route files in `src/routes` stay thin and render page components from `src/pages`; domain types live in `src/types/audit.ts`, demo data in `src/mocks`.
 - Reviewer verdicts are stored separately from automatic `CheckResult.status`; never let a reviewer action change the automatic status.
 - Document highlights come only from `EvidenceReference.locationInDocument` anchors in synthetic previews; never invent coordinates for user files, and never store user file contents in localStorage.
+
+- Keep route-aware navigation in AppShell: homepage uses a compact top bar and review workspaces use an icon rail to reserve space for evidence.
+- Landing evidence previews are filtered views of synthetic pages obtained through auditService, with existing evidence anchors; do not duplicate document values.

@@ -4,6 +4,8 @@ import { AuditsListPage } from "@/pages/AuditsListPage";
 export const Route = createFileRoute("/audits/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Проверки отчётности — Sverko" },
       { name: "description", content: "Список проверок отчётности по первичным документам: статусы, результаты и расхождения." },
       { property: "og:title", content: "Проверки отчётности — Sverko" },

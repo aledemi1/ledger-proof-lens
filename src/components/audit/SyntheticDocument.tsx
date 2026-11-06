@@ -162,7 +162,7 @@ export function SyntheticPage({
       data-page={pageNumber}
       className={cn(
         "relative mx-auto w-full max-w-[640px] bg-paper text-ink shadow-paper",
-        sheet ? "rounded-md p-3" : "min-h-[560px] p-6 font-doc sm:p-10",
+        sheet ? "rounded-md p-3" : "min-h-[560px] p-5 font-doc sm:p-6",
       )}
     >
       {page.blocks.map((b, i) => (

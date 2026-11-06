@@ -15,14 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DocumentViewer } from "@/components/audit/DocumentViewer";
 import { CheckDetails } from "@/components/audit/CheckDetails";
 import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { checkStatusMeta, CheckStatusBadge, DemoBadge, SessionStatusBadge } from "@/components/audit/badges";
 import { useAuditSession } from "@/hooks/useAudit";
 import { isIssue } from "@/lib/conclusion";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, CheckResult, CheckStatus } from "@/types/audit";
@@ -43,7 +41,7 @@ export function WorkspacePage({ id }: { id: string }) {
   if (session.status === "awaiting_processing" || session.checks.length === 0)
     return <AwaitingProcessing session={session} documents={documents} />;
 
-  return <Workspace sessionId={id} checks={session.checks} documents={documents} title={session.title} createdAt={session.createdAt} status={session.status} isDemo={session.isDemo} />;
+  return <Workspace sessionId={id} checks={session.checks} documents={documents} title={session.title} status={session.status} isDemo={session.isDemo} />;
 }
 
 function Workspace({
@@ -51,7 +49,6 @@ function Workspace({
   checks,
   documents,
   title,
-  createdAt,
   status,
   isDemo,
 }: {
@@ -59,7 +56,6 @@ function Workspace({
   checks: CheckResult[];
   documents: AuditDocument[];
   title: string;
-  createdAt: string;
   status: "in_review" | "completed" | "awaiting_processing";
   isDemo: boolean;
 }) {
@@ -71,7 +67,6 @@ function Workspace({
   const [onlyIssues, setOnlyIssues] = useState(false);
   const [evIdx, setEvIdx] = useState(0);
   const [viewerDoc, setViewerDoc] = useState<string | null>(null);
-  const [mobileTab, setMobileTab] = useState<"table" | "doc">("table");
 
   const selected = checks.find((c) => c.id === selectedId) ?? null;
   const docName = (docId: string) => documents.find((d) => d.id === docId)?.name ?? docId;
@@ -88,7 +83,7 @@ function Workspace({
   const evidence = selected?.evidenceReferences[evIdx] ?? null;
   const [focusOverride, setFocusOverride] = useState<typeof evidence>(null);
   useEffect(() => setFocusOverride(null), [selectedId, evIdx]);
-  const activeEvidence = focusOverride ?? evidence;
+  const activeEvidence = selected?.status === "not_found" && !focusOverride ? null : focusOverride ?? evidence;
 
   const anchorToCheck = useMemo(() => {
     const m = new Map<string, string>();
@@ -114,7 +109,7 @@ function Workspace({
 
   const select = (cid: string, openDoc = false) => {
     setSelectedId(cid);
-    if (openDoc) setMobileTab("doc");
+    if (openDoc && window.innerWidth < 1024) document.getElementById("selected-source")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const stepIssue = (dir: -1 | 1) => {
     if (!issues.length) return;
@@ -141,7 +136,9 @@ function Workspace({
   });
 
   useEffect(() => {
-    document.querySelector(`[data-row="${selectedId}"]`)?.scrollIntoView({ block: "nearest" });
+    const row = document.querySelector<HTMLElement>(`[data-row="${selectedId}"]`);
+    const container = row?.closest<HTMLElement>(".results-scroll");
+    if (row && container) container.scrollTop = Math.max(0, container.scrollTop + row.getBoundingClientRect().top - container.getBoundingClientRect().top - 70);
   }, [selectedId]);
 
   const onMarkClick = (anchor: string) => {
@@ -155,7 +152,7 @@ function Workspace({
     if (!selected?.reportReference) return;
     setViewerDoc(selected.reportReference.documentId);
     setFocusOverride(selected.reportReference);
-    setMobileTab("doc");
+    if (window.innerWidth < 1024) document.getElementById("selected-source")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const showEvidence = (i: number) => {
     if (!selected) return;
@@ -164,7 +161,7 @@ function Workspace({
     setEvIdx(i);
     setFocusOverride(null);
     setViewerDoc(e.documentId);
-    setMobileTab("doc");
+    if (window.innerWidth < 1024) document.getElementById("selected-source")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const stats = {
@@ -177,24 +174,24 @@ function Workspace({
   const sourceDocs = documents.filter((d) => d.type !== "report");
 
   return (
-    <div className="flex flex-col lg:h-screen">
+    <div className="audit-workspace flex flex-col lg:h-screen">
       {/* Header */}
       <div className="border-b border-border bg-card px-4 pb-3 pt-3 lg:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Button asChild variant="ghost" size="icon" className="size-8 shrink-0" aria-label="К списку проверок">
             <Link to="/audits"><ArrowLeft /></Link>
           </Button>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 basis-[calc(100%-44px)] lg:flex-1 lg:basis-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
+              <h1 className="text-base font-semibold sm:text-lg">{title}</h1>
               <SessionStatusBadge status={status} />
               {isDemo && <DemoBadge />}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Создана {formatDate(createdAt, true)} · {documents.length} документов
+              {documents.length} документов · Рассмотрено {reviewed} из {issues.length} замечаний
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -214,7 +211,7 @@ function Workspace({
         </div>
 
         {/* Summary strip */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <div className="mt-2 hidden flex-wrap items-center gap-x-6 gap-y-2 text-sm xl:flex">
           <Stat label="Всего показателей" value={stats.total} />
           <Stat label="Подтверждено" value={stats.match} dot="bg-success" onClick={() => setStatusFilter("match")} />
           <Stat label="Выявлено замечаний" value={stats.issues} dot="bg-danger" onClick={() => { setStatusFilter("all"); setOnlyIssues(true); }} />
@@ -228,19 +225,9 @@ function Workspace({
         </div>
       </div>
 
-      {/* Mobile tabs */}
-      <div className="border-b border-border bg-card px-4 py-2 lg:hidden">
-        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as "table" | "doc")}>
-          <TabsList className="w-full">
-            <TabsTrigger value="table" className="flex-1">Показатели</TabsTrigger>
-            <TabsTrigger value="doc" className="flex-1">Документ</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(420px,1fr)]">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,58fr)_minmax(0,42fr)]">
         {/* Left: results */}
-        <section className={cn("flex min-h-0 flex-col border-border lg:border-r", mobileTab !== "table" && "hidden lg:flex")}>
+        <section className={cn("flex min-h-0 flex-col border-border lg:border-r", "workspace-results")}>
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2 lg:px-6">
             <div className="relative min-w-40 flex-1">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -270,15 +257,14 @@ function Workspace({
             </label>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto bg-card">
-            <table className="w-full min-w-[720px] text-sm">
+          <div className="results-scroll relative min-h-0 flex-1 overflow-auto bg-card">
+            <table className="results-table w-full table-fixed text-sm">
               <thead className="sticky top-0 z-10 bg-muted/95 text-left text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
                 <tr>
-                  <th className="py-2 pl-4 pr-2 font-medium lg:pl-6">Показатель</th>
-                  <th className="px-2 py-2 font-medium">В отчёте</th>
-                  <th className="px-2 py-2 font-medium">В первичном документе</th>
+                  <th className="w-[35%] py-2 pl-4 pr-2 font-medium">Показатель</th>
+                  <th className="w-[20%] px-2 py-2 text-right font-medium">В отчёте</th>
+                  <th className="w-[20%] px-2 py-2 text-right font-medium">В документе</th>
                   <th className="px-2 py-2 font-medium">Результат</th>
-                  <th className="py-2 pl-2 pr-4 font-medium">Источник</th>
                 </tr>
               </thead>
               <tbody>
@@ -300,6 +286,24 @@ function Workspace({
                           <span className={cn("size-1.5 shrink-0 rounded-full", checkStatusMeta[c.status].dot)} />
                           {c.fieldName}
                         </div>
+                      <div className="mt-1">
+                        {ev0 ? (
+                          <Button variant="link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              select(c.id, true);
+                            }}
+                            className="h-auto max-w-full justify-start gap-1 whitespace-normal p-0 text-left text-xs text-primary"
+                          >
+                            <FileText className="size-3.5 shrink-0" />
+                            <span className="truncate">{docName(ev0.documentId)}</span>
+                            <span className="shrink-0 text-muted-foreground">· с. {ev0.pageNumber}</span>
+                            {c.evidenceReferences.length > 1 && <span className="shrink-0 rounded bg-primary-soft px-1">+{c.evidenceReferences.length - 1}</span>}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Не найден</span>
+                        )}
+                      </div>
                         {isIssue(c) && c.reviewerStatus !== "pending" && (
                           <div className={cn("ml-3 mt-0.5 text-[11px]", c.reviewerStatus === "confirmed" ? "text-danger" : "text-success")}>
                             {c.reviewerStatus === "confirmed" ? "Замечание подтверждено" : "Проверено вручную"}
@@ -310,40 +314,23 @@ function Workspace({
                           <div className="ml-3 mt-0.5 text-[11px] text-muted-foreground"><MessageSquare className="inline size-3" /> есть комментарий</div>
                         )}
                       </td>
-                      <td className="max-w-48 px-2 py-2 tabular"><span className="line-clamp-2">{c.reportValue}</span></td>
-                      <td className="max-w-48 px-2 py-2 tabular">
-                        {c.sourceValue ? <span className="line-clamp-2">{c.sourceValue}</span> : <span className="text-muted-foreground">—</span>}
+                      <td className="px-2 py-2 text-right tabular"><span className={cn("value-text", /[₽]|шт\./.test(c.reportValue) && "whitespace-nowrap")}>{c.reportValue}</span></td>
+                      <td className="px-2 py-2 text-right tabular">
+                        {c.sourceValue ? <span className={cn("value-text", /[₽]|шт\./.test(c.sourceValue) && "whitespace-nowrap")}>{c.sourceValue}</span> : <span className="text-muted-foreground">—</span>}
                         {c.discrepancy && <div className="text-xs font-semibold text-danger">Δ {c.discrepancy}</div>}
                       </td>
-                      <td className="px-2 py-2"><CheckStatusBadge status={c.status} /></td>
-                      <td className="py-2 pl-2 pr-4">
-                        {ev0 ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              select(c.id, true);
-                            }}
-                            className="inline-flex max-w-44 items-center gap-1 text-xs text-primary hover:underline"
-                          >
-                            <FileText className="size-3.5 shrink-0" />
-                            <span className="truncate">{docName(ev0.documentId)}</span>
-                            <span className="shrink-0 text-muted-foreground">· с. {ev0.pageNumber}</span>
-                            {c.evidenceReferences.length > 1 && <span className="shrink-0 rounded bg-primary-soft px-1">+{c.evidenceReferences.length - 1}</span>}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Не найден</span>
-                        )}
-                      </td>
+                      <td className="px-2 py-2"><CheckStatusBadge status={c.status} className="max-w-full whitespace-normal rounded-md leading-tight" /></td>
+
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                       Нет показателей по заданным условиям.{" "}
-                      <button className="text-primary hover:underline" onClick={() => { setSearch(""); setStatusFilter("all"); setDocFilter("all"); setOnlyIssues(false); }}>
+                      <Button variant="link" className="h-auto p-0" onClick={() => { setSearch(""); setStatusFilter("all"); setDocFilter("all"); setOnlyIssues(false); }}>
                         Сбросить фильтры
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 )}
@@ -359,7 +346,7 @@ function Workspace({
               </span>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => stepIssue(-1)}><ChevronUp /> Пред.</Button>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => stepIssue(1)}>След. <ChevronDown /></Button>
-              <span className="ml-auto hidden text-muted-foreground xl:inline">↑↓ — строки · J/K — замечания</span>
+
             </div>
             {selected && (
               <CheckDetails
@@ -375,7 +362,7 @@ function Workspace({
         </section>
 
         {/* Right: document */}
-        <section className={cn("min-h-[70vh] bg-card lg:min-h-0", mobileTab !== "doc" && "hidden lg:block")}>
+        <section id="selected-source" className="workspace-source min-h-[560px] bg-card lg:min-h-0">
           <DocumentViewer
             documents={documents}
             docId={viewerDoc}
@@ -388,7 +375,7 @@ function Workspace({
               if (n) showEvidence((evIdx + dir + n) % n);
             }}
             sourceDocIds={selected?.evidenceReferences.map((e) => e.documentId) ?? []}
-            linkedAnchors={linked}
+            linkedAnchors={selected?.status === "not_found" && !focusOverride ? new Set() : linked}
             onMarkClick={onMarkClick}
             notFoundNotice={
               selected?.status === "not_found" && !focusOverride
@@ -403,12 +390,9 @@ function Workspace({
 }
 
 function Stat({ label, value, dot, onClick }: { label: string; value: number; dot?: string; onClick?: () => void }) {
-  const C = onClick ? "button" : "div";
+  const contents = <>{dot && <span className={cn("size-2 translate-y-[-1px] self-center rounded-full", dot)} />}<span className="text-lg font-semibold tabular">{value}</span><span className="text-xs text-muted-foreground">{label}</span></>;
+  if (onClick) return <Button variant="ghost" className="h-auto justify-start gap-2 p-0 text-left" onClick={onClick}>{contents}</Button>;
   return (
-    <C onClick={onClick} className={cn("flex items-baseline gap-2 text-left", onClick && "rounded hover:text-primary")}>
-      {dot && <span className={cn("size-2 translate-y-[-1px] self-center rounded-full", dot)} />}
-      <span className="text-lg font-semibold tabular">{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </C>
+    <div className="flex items-baseline gap-2 text-left">{contents}</div>
   );
 }

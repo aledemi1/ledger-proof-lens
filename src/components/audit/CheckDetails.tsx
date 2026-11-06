@@ -43,7 +43,7 @@ export function CheckDetails({
       reviewerStatus === "confirmed"
         ? "Замечание подтверждено"
         : reviewerStatus === "verified"
-          ? "Отмечено как проверенное"
+          ? "Замечание снято"
           : reviewerStatus === "pending"
             ? "Решение отменено"
             : "Комментарий сохранён",
@@ -53,24 +53,17 @@ export function CheckDetails({
   const t = titles[check.status];
 
   return (
-    <div className="max-h-[42vh] overflow-auto px-4 py-3 animate-in-up lg:px-6">
-      <div className="flex items-center gap-2">
-        <h2 className={cn("text-sm font-semibold", t.cls)}>{t.text}</h2>
-        {issue && <span className={cn("text-xs", severityMeta[check.severity].cls)}>· {severityMeta[check.severity].label}</span>}
-        <div className="ml-auto flex items-center gap-2">
-          {issue && <ReviewerBadge status={check.reviewerStatus} />}
-          <button onClick={() => setExpanded((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground">
-            {expanded ? "Свернуть" : "Подробнее"}
-          </button>
-        </div>
+    <div className="review-details overflow-auto px-4 py-3 animate-in-up">
+      <div className="flex items-start justify-between gap-2">
+        <h2 className="text-base font-semibold">{check.fieldName}</h2>
+        <Button variant="ghost" size="sm" className="h-6 text-muted-foreground" onClick={() => setExpanded((v) => !v)}>{expanded ? "Свернуть" : "Подробнее"}</Button>
       </div>
-
-      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr_auto_1fr]">
-        <Kv k="Показатель" v={check.fieldName} className="col-span-2 sm:col-span-6" />
-        <Kv k="В отчёте" v={check.reportValue} />
-        <Kv k={sourceLabel[check.status]} v={check.sourceValue ?? "не найдено"} muted={!check.sourceValue} />
-        {check.discrepancy && <Kv k="Разница" v={check.discrepancy} strong />}
+      <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+        <div><p className="text-xs text-muted-foreground">В отчёте</p><p className="mt-0.5 break-words font-semibold tabular">{check.reportValue}</p></div>
+        <div><p className="text-xs text-muted-foreground">{sourceLabel[check.status]}</p><p className="mt-0.5 break-words font-semibold tabular">{check.sourceValue ?? "Подтверждающий документ не найден"}</p></div>
       </div>
+      {check.discrepancy && <p className="mt-1 text-sm font-semibold text-danger">В отчёте на {check.discrepancy.replace(/^[+−-]/, "")} {check.discrepancy.startsWith("+") ? "больше" : "меньше"}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Результат системы:</span><span className={cn("font-medium", t.cls)}>{t.text}</span>{issue && <span className={severityMeta[check.severity].cls}>· {severityMeta[check.severity].label}</span>}</div>
 
       {expanded && (
         <>
@@ -92,12 +85,14 @@ export function CheckDetails({
       )}
 
       {issue && (
-        <div className="mt-3 space-y-2">
+        <div className="review-actions mt-3 space-y-2 border-t border-border pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-medium">Решение сотрудника</span><ReviewerBadge status={check.reviewerStatus} /></div>
+          {needsReason && <p className="text-xs text-muted-foreground">Для снятия укажите причину</p>}
           <Textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder={needsReason ? "Комментарий проверяющего (обязателен, чтобы снять замечание)" : "Комментарий проверяющего"}
-            className="min-h-14 text-sm"
+            placeholder="Комментарий проверяющего"
+            className="min-h-10 text-sm"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant={check.reviewerStatus === "confirmed" ? "destructive" : "outline"} onClick={() => update("confirmed")}>
@@ -110,7 +105,7 @@ export function CheckDetails({
               title={needsReason && !comment.trim() ? "Укажите в комментарии, почему замечание снимается" : undefined}
               onClick={() => update("verified")}
             >
-              <CheckCircle2 /> Отметить как проверенное
+              <CheckCircle2 /> Снять замечание
             </Button>
             {check.reviewerStatus !== "pending" && (
               <Button size="sm" variant="ghost" onClick={() => update("pending")}>
@@ -136,17 +131,6 @@ export function CheckDetails({
           {dirty && <Button size="sm" variant="outline" onClick={() => update()}>Сохранить</Button>}
         </div>
       )}
-    </div>
-  );
-}
-
-function Kv({ k, v, strong, muted, className }: { k: string; v: string; strong?: boolean; muted?: boolean; className?: string }) {
-  return (
-    <div className={cn("contents", className)}>
-      <span className={cn("text-xs text-muted-foreground sm:self-center", className && "hidden")}>{k}</span>
-      <span className={cn("tabular", strong && "font-semibold text-danger", muted && "italic text-muted-foreground", className)}>
-        {className ? <><span className="mr-2 text-xs text-muted-foreground">{k}:</span><b className="font-medium">{v}</b></> : v}
-      </span>
     </div>
   );
 }
