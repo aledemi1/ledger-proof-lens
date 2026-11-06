@@ -27,4 +27,4 @@ export interface AuditService {
   subscribe(listener: () => void): () => void;
 }
 
-export { mockAuditService as auditService } from "./mockAuditService";
+export { apiAuditService as auditService } from "./apiAuditService";

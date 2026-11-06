@@ -30,10 +30,11 @@ use the editor.
 <!-- LOVABLE:END -->
 
 ## Project rules
-- Frontend-only for now: pages read/write data only through `src/services/auditService.ts` (`AuditService` interface, mock impl in `mockAuditService.ts`), so a real API client can replace the mock without touching pages.
+- Pages read and write audits only through `src/services/auditService.ts`. Demo sessions stay in `src/mocks`. Uploaded audits go through the local API in `src/server`. If that API fails, show the error on the current audit and do not substitute demo data.
 - Route files in `src/routes` stay thin and render page components from `src/pages`; domain types live in `src/types/audit.ts`, demo data in `src/mocks`.
 - Reviewer verdicts are stored separately from automatic `CheckResult.status`; never let a reviewer action change the automatic status.
-- Document highlights come only from `EvidenceReference.locationInDocument` anchors in synthetic previews; never invent coordinates for user files, and never store user file contents in localStorage.
+- Highlights for uploaded files come only from anchors or coordinates the extractor actually produced. If only a page and a quote are known, show those and do not invent a box. Never store user file contents in localStorage.
+- Before editing, sync with the remote if the branch is behind and the worktree is clean. Commit and push a requested change when it is done; do not commit secrets.
 
 - Keep route-aware navigation in AppShell: homepage uses a compact top bar and review workspaces use an icon rail to reserve space for evidence.
 - Landing evidence previews are filtered views of synthetic pages obtained through auditService, with existing evidence anchors; do not duplicate document values.

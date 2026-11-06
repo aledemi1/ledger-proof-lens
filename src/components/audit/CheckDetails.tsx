@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewerBadge, severityMeta } from "./badges";
+import { evidencePlace } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
 import type { CheckResult, ReviewerStatus } from "@/types/audit";
@@ -35,7 +36,7 @@ export function CheckDetails({
   const issue = check.status !== "match";
   const dirty = comment.trim() !== check.reviewerComment.trim();
   // Dismissing a factual mismatch / missing evidence requires an explanation.
-  const needsReason = check.status === "mismatch" || check.status === "not_found";
+  const needsReason = issue;
 
   const update = async (reviewerStatus?: ReviewerStatus) => {
     await auditService.updateReview(sessionId, check.id, { reviewerStatus, reviewerComment: comment.trim() });
@@ -72,7 +73,7 @@ export function CheckDetails({
           <div className="mt-2 flex flex-wrap gap-1.5">
             {check.evidenceReferences.map((e, i) => (
               <Button key={i} variant="outline" size="sm" className="h-7 text-xs" onClick={() => onShowEvidence(i)}>
-                <FileText /> {docName(e.documentId)} · стр. {e.pageNumber}
+                <FileText /> {docName(e.documentId)} · {evidencePlace(e)}
               </Button>
             ))}
             {onShowReport && (

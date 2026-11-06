@@ -21,6 +21,7 @@ import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { checkStatusMeta, CheckStatusBadge, DemoBadge, SessionStatusBadge } from "@/components/audit/badges";
 import { useAuditSession } from "@/hooks/useAudit";
 import { isIssue } from "@/lib/conclusion";
+import { evidencePlace } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, CheckResult, CheckStatus } from "@/types/audit";
@@ -28,9 +29,17 @@ import type { AuditDocument, CheckResult, CheckStatus } from "@/types/audit";
 type StatusFilter = "all" | CheckStatus;
 
 export function WorkspacePage({ id }: { id: string }) {
-  const { session, documents, loading } = useAuditSession(id);
+  const { session, documents, loading, error } = useAuditSession(id);
 
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Загрузка проверки…</div>;
+  if (error)
+    return (
+      <div className="mx-auto max-w-xl p-8">
+        <p className="text-sm font-medium">Не удалось открыть проверку</p>
+        <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К списку проверок</Link></Button>
+      </div>
+    );
   if (!session)
     return (
       <div className="p-8">
@@ -41,7 +50,17 @@ export function WorkspacePage({ id }: { id: string }) {
   if (session.status === "awaiting_processing" || session.checks.length === 0)
     return <AwaitingProcessing session={session} documents={documents} />;
 
-  return <Workspace sessionId={id} checks={session.checks} documents={documents} title={session.title} status={session.status} isDemo={session.isDemo} />;
+  return (
+    <Workspace
+      sessionId={id}
+      checks={session.checks}
+      documents={documents}
+      title={session.title}
+      status={session.status}
+      isDemo={session.isDemo}
+      notices={[...(session.notices ?? []), ...(session.fileErrors?.map((file) => `«${file.fileName}»: ${file.reason}`) ?? [])]}
+    />
+  );
 }
 
 function Workspace({
@@ -51,6 +70,7 @@ function Workspace({
   title,
   status,
   isDemo,
+  notices,
 }: {
   sessionId: string;
   checks: CheckResult[];
@@ -58,6 +78,7 @@ function Workspace({
   title: string;
   status: "in_review" | "completed" | "awaiting_processing";
   isDemo: boolean;
+  notices: string[];
 }) {
   const issues = useMemo(() => checks.filter(isIssue), [checks]);
   const [selectedId, setSelectedId] = useState<string>(() => issues[0]?.id ?? checks[0]?.id ?? "");
@@ -210,6 +231,14 @@ function Workspace({
           </div>
         </div>
 
+        {notices.length > 0 && (
+          <div className="mt-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-foreground">
+            {notices.map((notice) => (
+              <p key={notice}>{notice}</p>
+            ))}
+          </div>
+        )}
+
         {/* Summary strip */}
         <div className="mt-2 hidden flex-wrap items-center gap-x-6 gap-y-2 text-sm xl:flex">
           <Stat label="Всего показателей" value={stats.total} />
@@ -297,7 +326,7 @@ function Workspace({
                           >
                             <FileText className="size-3.5 shrink-0" />
                             <span className="truncate">{docName(ev0.documentId)}</span>
-                            <span className="shrink-0 text-muted-foreground">· с. {ev0.pageNumber}</span>
+                            <span className="shrink-0 text-muted-foreground">· {evidencePlace(ev0)}</span>
                             {c.evidenceReferences.length > 1 && <span className="shrink-0 rounded bg-primary-soft px-1">+{c.evidenceReferences.length - 1}</span>}
                           </Button>
                         ) : (

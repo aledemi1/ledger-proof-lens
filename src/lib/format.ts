@@ -20,6 +20,12 @@ export function fileExt(name: string) {
   return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 
+export function evidencePlace(e: { pageNumber: number; locationLabel?: string | undefined }): string {
+  if (e.locationLabel) return e.locationLabel;
+  if (e.pageNumber > 0) return `стр. ${e.pageNumber}`;
+  return "фрагмент документа";
+}
+
 export function plural(n: number, one: string, few: string, many: string) {
   const m10 = n % 10;
   const m100 = n % 100;

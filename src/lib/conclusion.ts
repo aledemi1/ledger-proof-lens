@@ -58,11 +58,12 @@ export function buildFindings(checks: CheckResult[], documents: AuditDocument[])
     sourceValue: c.sourceValue,
     status: c.status,
     severity: c.severity,
-    summary: summarize(c),
+    summary: c.explanation.trim() ? c.explanation : summarize(c),
     evidence: c.evidenceReferences.map((e) => ({
       documentId: e.documentId,
       documentName: name(e.documentId),
       pageNumber: e.pageNumber,
+      ...(e.locationLabel ? { locationLabel: e.locationLabel } : {}),
     })),
     reviewerStatus: c.reviewerStatus,
     reviewerComment: c.reviewerComment,

@@ -9,7 +9,7 @@ import { CheckStatusBadge, DemoBadge, ReviewerBadge, recommendationMeta } from "
 import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { useAuditSession } from "@/hooks/useAudit";
 import { buildConclusion } from "@/lib/conclusion";
-import { formatDate } from "@/lib/format";
+import { evidencePlace, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { auditService } from "@/services/auditService";
 import type { Decision, Recommendation } from "@/types/audit";
@@ -18,17 +18,20 @@ const conflicts = (d: Decision, r: Recommendation) => (d === "accept" ? r !== "a
 const decisionLabel: Record<Decision, string> = { accept: "Отчёт принят", revise: "Отчёт возвращён на доработку" };
 
 export function ConclusionPage({ id }: { id: string }) {
-  const { session, documents, loading } = useAuditSession(id);
+  const { session, documents, loading, error } = useAuditSession(id);
   const [pending, setPending] = useState<Decision | null>(null);
   const [reason, setReason] = useState("");
   const [copied, setCopied] = useState(false);
 
   if (loading) return <div className="p-8 text-sm text-muted-foreground">Загрузка…</div>;
+  if (error) return <div className="p-8 text-sm text-muted-foreground">{error}</div>;
   if (!session) return <div className="p-8 text-sm text-muted-foreground">Проверка не найдена.</div>;
   if (session.checks.length === 0) return <AwaitingProcessing session={session} documents={documents} />;
 
   const c = buildConclusion(session, documents);
   const rec = recommendationMeta[c.recommendation];
+  const openMismatches = c.findings.filter((f) => f.status === "mismatch" && f.reviewerStatus !== "verified").length;
+  const openMissing = c.findings.filter((f) => f.status === "not_found" && f.reviewerStatus !== "verified").length;
   const report = documents.find((d) => d.id === session.reportDocumentId);
 
   const decide = async (d: Decision, comment = "") => {
@@ -50,7 +53,7 @@ export function ConclusionPage({ id }: { id: string }) {
       ...c.findings.map(
         (f, i) =>
           `${i + 1}. ${f.fieldName}: в отчёте — ${f.reportValue}; в первичном документе — ${f.sourceValue ?? "не найдено"}. ${f.summary}` +
-          (f.evidence.length ? ` Источник: ${f.evidence.map((e) => `${e.documentName}, стр. ${e.pageNumber}`).join("; ")}.` : "") +
+          (f.evidence.length ? ` Источник: ${f.evidence.map((e) => `${e.documentName}, ${evidencePlace(e)}`).join("; ")}.` : "") +
           (f.reviewerComment ? ` Комментарий проверяющего: ${f.reviewerComment}` : ""),
       ),
       "",
@@ -93,7 +96,7 @@ export function ConclusionPage({ id }: { id: string }) {
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             {c.recommendation === "revise"
-              ? `Найдено ${c.stats.mismatches} расхождени${c.stats.mismatches === 1 ? "е" : "я"} и ${c.stats.notFound} неподтверждённ${c.stats.notFound === 1 ? "ый показатель" : "ых показателя"}, не снятых проверяющим.`
+              ? `Найдено ${openMismatches} расхождени${openMismatches === 1 ? "е" : "я"} и ${openMissing} неподтверждённ${openMissing === 1 ? "ый показатель" : "ых показателя"}, не снятых проверяющим.`
               : c.recommendation === "manual_review"
                 ? "Остались спорные показатели, требующие ручной проверки."
                 : "Блокирующих замечаний нет."}
@@ -137,6 +140,12 @@ export function ConclusionPage({ id }: { id: string }) {
           <p className="mt-1 text-xs text-muted-foreground">Дата проверки: {formatDate(session.createdAt)}{session.isDemo ? " · демонстрационные данные" : ""}</p>
         </header>
 
+        {(session.notices?.length || session.fileErrors?.length) ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            {[...(session.notices ?? []), ...(session.fileErrors?.map((file) => `«${file.fileName}»: ${file.reason}`) ?? [])].join(" ")}
+          </p>
+        ) : null}
+
         <section className="mt-5">
           <h3 className="text-sm font-semibold">1. Сводка</h3>
           <dl className="mt-2 grid grid-cols-[1fr_auto] gap-y-1 text-sm sm:max-w-md">
@@ -172,7 +181,7 @@ export function ConclusionPage({ id }: { id: string }) {
                     <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs">
                       {f.evidence.map((e, j) => (
                         <Link key={j} to="/audits/$id" params={{ id }} className="inline-flex items-center gap-1 text-primary hover:underline">
-                          <FileText className="size-3" /> {e.documentName}, стр. {e.pageNumber}
+                          <FileText className="size-3" /> {e.documentName}, {evidencePlace(e)}
                         </Link>
                       ))}
                     </div>

@@ -21,7 +21,7 @@ const filters: { id: Filter; label: string }[] = [
 const resultOf = (s: AuditSession) => (s.checks.length ? computeRecommendation(s.checks) : null);
 
 export function AuditsListPage() {
-  const sessions = useSessions();
+  const { sessions, error } = useSessions();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -54,6 +54,12 @@ export function AuditsListPage() {
           <Link to="/new"><Plus /> Новая проверка</Link>
         </Button>
       </div>
+
+      {error && (
+        <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}. Демонстрационные проверки по-прежнему доступны, подменять ими загруженные комплекты приложение не будет.
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
@@ -111,7 +117,7 @@ export function AuditsListPage() {
                     <td className="px-4 py-2.5">
                       <div className="font-medium">{s.title}</div>
                       {s.isDemo && !allDemo && <div className="text-[11px] text-muted-foreground">Пример · синтетические данные</div>}
-                      {!s.isDemo && <div className="text-[11px] text-muted-foreground">Локальный черновик</div>}
+                      {!s.isDemo && <div className="text-[11px] text-muted-foreground">{s.processingError ? s.processingError : "Загруженные документы"}</div>}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{formatDate(s.createdAt)}</td>
                     <td className="px-3 py-2.5 text-right tabular">{s.supportingDocumentIds.length + (s.reportDocumentId ? 1 : 0)}</td>

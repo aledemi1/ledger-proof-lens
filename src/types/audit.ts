@@ -5,6 +5,7 @@ export type Severity = "high" | "medium" | "low";
 /** Reviewer verdict — stored separately from the automatic CheckStatus. */
 export type ReviewerStatus = "pending" | "confirmed" | "verified";
 export type SessionStatus = "awaiting_processing" | "in_review" | "completed";
+export type ProcessingStage = "queued" | "reading" | "extracting" | "matching" | "done" | "failed";
 export type Recommendation = "accept" | "revise" | "manual_review";
 export type Decision = "accept" | "revise";
 
@@ -34,8 +35,38 @@ export interface DocPage {
   blocks: DocBlock[];
 }
 
+export interface GridCell {
+  anchor: string;
+  text: string;
+  address: string;
+}
+
+export interface GridSheet {
+  name: string;
+  rows: { index: number; cells: GridCell[] }[];
+}
+
+export interface FlowBlock {
+  kind: "paragraph" | "table";
+  anchor?: string;
+  text?: string;
+  rows?: { cells: { anchor: string; text: string }[] }[];
+}
+
+export interface EvidenceBox {
+  /** Normalized 0..1 against the rendered page or image. Present only when extraction measured it. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type DocumentPreview =
   | { kind: "synthetic"; pages: DocPage[] }
+  | { kind: "grid"; sheets: GridSheet[] }
+  | { kind: "flow"; blocks: FlowBlock[] }
+  | { kind: "pdf"; url: string; pageCount: number }
+  | { kind: "image"; url: string; width: number; height: number }
   | { kind: "none"; reason: string };
 
 export interface AuditDocument {
@@ -52,8 +83,12 @@ export interface EvidenceReference {
   documentId: string;
   pageNumber: number;
   sourceText: string;
-  /** Anchor inside a synthetic preview. Never invented for user files. */
+  /** Anchor inside the preview the user is looking at. Omitted when the spot cannot be marked. */
   locationInDocument?: string;
+  /** Human place: sheet and cell, paragraph, or page. Preferred over a bare page number. */
+  locationLabel?: string;
+  /** Real box from extraction. Never invented from a quote alone. */
+  box?: EvidenceBox;
   note?: string;
 }
 
@@ -94,6 +129,11 @@ export interface AuditSession {
   checks: CheckResult[];
   recommendation: Recommendation | null;
   reviewerDecision: ReviewerDecision | null;
+  processingStage?: ProcessingStage;
+  processingError?: string;
+  fileErrors?: { fileName: string; reason: string }[];
+  notices?: string[];
+  incomplete?: boolean;
 }
 
 export interface Finding {
@@ -104,7 +144,7 @@ export interface Finding {
   status: CheckStatus;
   severity: Severity;
   summary: string;
-  evidence: { documentId: string; documentName: string; pageNumber: number }[];
+  evidence: { documentId: string; documentName: string; pageNumber: number; locationLabel?: string }[];
   reviewerStatus: ReviewerStatus;
   reviewerComment: string;
 }
@@ -133,11 +173,15 @@ export interface NewDraftFile {
   size: number;
   mimeType: string;
   type: DocumentType;
+  /** Original selected in the browser. The mock ignores it; the API upload requires it. */
+  file?: File;
 }
 
 export interface NewDraftInput {
   title: string;
   description?: string | undefined;
+  /** Stable across a double click so the server returns the same audit. */
+  idempotencyKey?: string;
   report: NewDraftFile;
   supporting: NewDraftFile[];
 }

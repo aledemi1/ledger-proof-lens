@@ -1,29 +1,56 @@
 import { useCallback, useEffect, useState } from "react";
+import { AuditApiError } from "@/services/apiAuditService";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, AuditSession } from "@/types/audit";
 
-/** Loads on the client (data lives in localStorage) and refreshes on any service mutation. */
+/** Loads audits and refreshes when the service changes or a server job is still running. */
 export function useSessions() {
   const [sessions, setSessions] = useState<AuditSession[] | null>(null);
-  useEffect(() => {
-    const load = () => auditService.listSessions().then(setSessions);
-    load();
-    return auditService.subscribe(load);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const list = await auditService.listSessions();
+      setSessions(list);
+      setError(null);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Не удалось загрузить проверки";
+      setError(message);
+      if (reason instanceof AuditApiError && reason.demos.length) setSessions(reason.demos);
+    }
   }, []);
-  return sessions;
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 4000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+  useEffect(() => auditService.subscribe(load), [load]);
+  return { sessions, error };
 }
 
 export function useAuditSession(id: string) {
   const [session, setSession] = useState<AuditSession | null | undefined>(undefined);
   const [documents, setDocuments] = useState<AuditDocument[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
-    const [s, d] = await Promise.all([auditService.getSession(id), auditService.getDocuments(id)]);
-    setSession(s);
-    setDocuments(d);
+    try {
+      const [nextSession, nextDocuments] = await Promise.all([auditService.getSession(id), auditService.getDocuments(id)]);
+      setSession(nextSession);
+      setDocuments(nextDocuments);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось загрузить проверку");
+      setSession(null);
+      setDocuments([]);
+    }
   }, [id]);
   useEffect(() => {
-    load();
+    void load();
     return auditService.subscribe(load);
   }, [load]);
-  return { session, documents, loading: session === undefined };
+  useEffect(() => {
+    if (!session || session.status !== "awaiting_processing" || session.processingError) return;
+    const timer = window.setInterval(() => void load(), 1500);
+    return () => window.clearInterval(timer);
+  }, [session, load]);
+  return { session, documents, loading: session === undefined && !error, error };
 }

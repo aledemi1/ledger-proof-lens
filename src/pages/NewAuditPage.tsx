@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type DragEvent } from "react";
-import { ArrowLeft, ArrowRight, Check, FileText, PlayCircle, ServerOff, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileText, PlayCircle, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { docTypeLabel, REPORT_EXTENSIONS, selectableDocTypes, SUPPORTING_EXTENSIONS } from "@/lib/documentTypes";
 import { fileExt, formatSize, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { AuditApiError } from "@/services/apiAuditService";
 import { auditService } from "@/services/auditService";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
 import type { DocumentType } from "@/types/audit";
@@ -30,6 +31,8 @@ export function NewAuditPage() {
   const [report, setReport] = useState<File | null>(null);
   const [supporting, setSupporting] = useState<Picked[]>([]);
   const [busy, setBusy] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<{ fileName: string; reason: string }[]>([]);
+  const idempotencyKey = useRef(crypto.randomUUID());
 
   const canNext = [title.trim().length > 0, !!report, supporting.length > 0, true][step];
 
@@ -48,14 +51,23 @@ export function NewAuditPage() {
   const create = async () => {
     if (!report) return;
     setBusy(true);
-    const s = await auditService.createDraft({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      report: { name: report.name, size: report.size, mimeType: report.type, type: "report" },
-      supporting: supporting.map((p) => ({ name: p.file.name, size: p.file.size, mimeType: p.file.type, type: p.type })),
-    });
-    toast.success("Черновик проверки создан");
-    navigate({ to: "/audits/$id", params: { id: s.id } });
+    setUploadErrors([]);
+    try {
+      const s = await auditService.createDraft({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        idempotencyKey: idempotencyKey.current,
+        report: { name: report.name, size: report.size, mimeType: report.type, type: "report", file: report },
+        supporting: supporting.map((p) => ({ name: p.file.name, size: p.file.size, mimeType: p.file.type, type: p.type, file: p.file })),
+      });
+      toast.success("Проверка запущена");
+      navigate({ to: "/audits/$id", params: { id: s.id } });
+    } catch (reason) {
+      const files = reason instanceof AuditApiError ? reason.files : [];
+      setUploadErrors(files);
+      toast.error(reason instanceof Error ? reason.message : "Не удалось запустить проверку");
+      setBusy(false);
+    }
   };
 
   return (
@@ -157,7 +169,11 @@ export function NewAuditPage() {
           </div>
         )}
 
-        {(step === 1 || step === 2) && <div className="mt-4 flex gap-2 border-l-2 border-primary bg-primary-soft px-3 py-3 text-sm"><ServerOff className="mt-0.5 size-4 shrink-0 text-primary" /><p>В текущей версии обработка файлов недоступна. Сохраняются только названия и размеры; содержимое файлов не отправляется. <Link to="/audits/$id" params={{ id: DEMO_SESSION_ID }} className="font-medium text-primary underline">Открыть демо без файлов</Link></p></div>}
+        {(step === 1 || step === 2) && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Файлы уйдут на сервер только после «Начать проверку». Демонстрационную проверку можно открыть без загрузки.
+          </p>
+        )}
 
         {step === 3 && report && (
           <div className="space-y-4">
@@ -175,13 +191,16 @@ export function NewAuditPage() {
                 </div>
               ))}
             </div>
-            <div className="flex gap-3 rounded-md border border-border bg-muted p-3 text-sm">
-              <ServerOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <p className="text-muted-foreground">
-                Автоматический анализ требует подключения серверной обработки. Сейчас будет создан локальный черновик со
-                статусом «Ожидает обработки». Файлы не отправляются и не сохраняются — только их названия и размеры.
-              </p>
-            </div>
+            {uploadErrors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                {uploadErrors.map((item) => (
+                  <p key={item.fileName}><span className="font-medium">{item.fileName}:</span> {item.reason}</p>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              После запуска сервер сохранит оригиналы и будет сверять комплект в фоне. Вкладку можно закрыть и открыть проверку позже из реестра.
+            </p>
           </div>
         )}
       </div>

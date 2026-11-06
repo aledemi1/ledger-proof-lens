@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, FileText, ServerOff, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Loader, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoBadge, SessionStatusBadge } from "./badges";
 import { docTypeLabel } from "@/lib/documentTypes";
@@ -25,14 +25,28 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
       {session.description && <p className="mt-3 text-sm">{session.description}</p>}
 
       <div className="mt-6 flex gap-3 rounded-lg border border-border bg-card p-4 shadow-panel">
-        <ServerOff className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+        {session.processingError ? <TriangleAlert className="mt-0.5 size-5 shrink-0 text-danger" /> : <Loader className="mt-0.5 size-5 shrink-0 text-muted-foreground" />}
         <div className="text-sm">
-          <p className="font-medium">Ожидает подключения обработки документов</p>
-          <p className="mt-1 text-muted-foreground">
-            Сопоставление показателей выполняется на сервере, который пока не подключён. Файлы никуда не отправлялись,
-            их содержимое не сохранялось — в черновике хранятся только названия и размеры. Результаты появятся здесь после
-            подключения серверной обработки.
+          <p className="font-medium">
+            {session.processingError
+              ? "Проверка не завершена"
+              : session.processingStage === "reading" || session.processingStage === "extracting"
+                ? "Читаем документы"
+                : session.processingStage === "matching"
+                  ? "Сверяем показатели"
+                  : session.processingStage
+                    ? "Проверка выполняется"
+                    : "Ожидает обработки"}
           </p>
+          <p className="mt-1 text-muted-foreground">
+            {session.processingError ??
+              "Сервер сохранил оригиналы и обрабатывает комплект в фоне. Вкладку можно закрыть и вернуться через реестр — статус обновится."}
+          </p>
+          {session.fileErrors?.map((file) => (
+            <p key={file.fileName} className="mt-2">
+              <span className="font-medium">{file.fileName}:</span> {file.reason}
+            </p>
+          ))}
         </div>
       </div>
 
