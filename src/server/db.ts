@@ -47,10 +47,11 @@ export function db(): DatabaseSync {
       preview_json TEXT
     );
     CREATE TABLE IF NOT EXISTS checks (
-      id TEXT PRIMARY KEY,
+      id TEXT NOT NULL,
       session_id TEXT NOT NULL,
       position INTEGER NOT NULL,
-      payload TEXT NOT NULL
+      payload TEXT NOT NULL,
+      PRIMARY KEY (session_id, id)
     );
     CREATE TABLE IF NOT EXISTS reviews (
       session_id TEXT NOT NULL,
@@ -61,8 +62,29 @@ export function db(): DatabaseSync {
       PRIMARY KEY (session_id, check_id)
     );
   `);
+  scopeCheckIdsToSession(next);
   database = next;
   return next;
+}
+
+function scopeCheckIdsToSession(connection: DatabaseSync): void {
+  const columns = connection.prepare("PRAGMA table_info(checks)").all() as { name: string; pk: number }[];
+  if (columns.filter((column) => column.pk > 0).length > 1) return;
+  connection.exec(`
+    BEGIN;
+    ALTER TABLE checks RENAME TO checks_global_ids;
+    CREATE TABLE checks (
+      id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (session_id, id)
+    );
+    INSERT INTO checks (id, session_id, position, payload)
+      SELECT id, session_id, position, payload FROM checks_global_ids;
+    DROP TABLE checks_global_ids;
+    COMMIT;
+  `);
 }
 
 export function closeDb(): void {

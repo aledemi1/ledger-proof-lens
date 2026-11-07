@@ -2,8 +2,9 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { closeDb, readSession, saveReview } from "@/server/db";
+import { closeDb, db, readSession, saveReview } from "@/server/db";
 import { readFile } from "@/server/extract";
 import {
   actPdf,
@@ -143,6 +144,45 @@ describe("document reconciliation", () => {
     expect(reviewed?.status).toBe("mismatch");
     expect(reviewed?.reviewerStatus).toBe("verified");
     expect(reviewed?.reviewerComment).toContain("письмом");
+  });
+
+  it("keeps check ids separate for every audit in one database", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-"));
+    closeDb();
+    const ids: string[] = [];
+    for (const quantity of [47, 50]) {
+      const form = new FormData();
+      form.set("title", `Комплект ${quantity}`);
+      form.set("idempotencyKey", `separate-${quantity}`);
+      form.set("report", new File([new Uint8Array(supplyReport())], "Отчет_поставка.xlsx"), "Отчет_поставка.xlsx");
+      form.set("supporting", new File([new Uint8Array(waybill("34", quantity))], "Накладная_34.xlsx"), "Накладная_34.xlsx");
+      const response = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie: `sverko_sid=${owner}` } }));
+      const created = (await response.json()) as { id: string };
+      await enqueue(created.id);
+      ids.push(created.id);
+    }
+    const [first, second] = ids.map((id) => readSession(id));
+    expect(first?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("mismatch");
+    expect(second?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("match");
+    const quantityId = second!.checks.find((check) => check.fieldName === "Количество")!.id;
+    saveReview(second!.id, quantityId, "confirmed", "");
+    expect(readSession(first!.id)?.checks.find((check) => check.id === quantityId)?.reviewerStatus).toBe("pending");
+  });
+
+  it("moves checks from the older single-key table", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sverko-"));
+    process.env["SVERKO_DATA_DIR"] = dir;
+    closeDb();
+    const legacy = new DatabaseSync(path.join(dir, "sverko.sqlite"));
+    legacy.exec(`
+      CREATE TABLE checks (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, position INTEGER NOT NULL, payload TEXT NOT NULL);
+      INSERT INTO checks VALUES ('c1', 'aud_old', 0, '{}');
+    `);
+    legacy.close();
+    const connection = db();
+    expect(connection.prepare("SELECT session_id FROM checks WHERE id = 'c1'").all()).toEqual([{ session_id: "aud_old" }]);
+    connection.prepare("INSERT INTO checks VALUES ('c1', 'aud_new', 0, '{}')").run();
+    expect(connection.prepare("SELECT COUNT(*) AS n FROM checks WHERE id = 'c1'").get()).toEqual({ n: 2 });
   });
 
   it("recognizes a readable scan", async () => {

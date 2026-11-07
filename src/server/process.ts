@@ -23,7 +23,12 @@ export function enqueue(sessionId: string): Promise<void> {
   if (checkCount(sessionId) > 0) return Promise.resolve();
   const session = readSession(sessionId);
   if (!session || session.processingStage === "failed") return Promise.resolve();
-  const job = processSession(sessionId).finally(() => jobs.delete(sessionId));
+  const job = processSession(sessionId)
+    .catch((error: unknown) => {
+      console.error(error);
+      markFailed(sessionId, "Обработка прервалась из-за внутренней ошибки сервера. Загрузите комплект ещё раз.", []);
+    })
+    .finally(() => jobs.delete(sessionId));
   jobs.set(sessionId, job);
   return job;
 }

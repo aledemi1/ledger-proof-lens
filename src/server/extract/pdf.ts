@@ -1,3 +1,4 @@
+import { importExternal } from "../external";
 import type { Box, Fragment, ReadDocument } from "../model";
 import { ocrUnavailableReason, recognizeImage } from "./ocr";
 
@@ -7,7 +8,7 @@ interface Glyph {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await importExternal<typeof import("pdfjs-dist/legacy/build/pdf.mjs")>("pdfjs-dist/legacy/build/pdf.mjs");
   let document: { numPages: number; getPage: (n: number) => Promise<PdfPage>; destroy?: () => Promise<void> };
   try {
     const task = pdfjs.getDocument({

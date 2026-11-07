@@ -1,4 +1,5 @@
 import path from "node:path";
+import { importExternal } from "../external";
 import type { Box } from "../model";
 import { dataDir } from "../paths";
 
@@ -14,7 +15,7 @@ async function getWorker() {
   if (workerPromise) return workerPromise;
   workerPromise = (async () => {
     try {
-      const { createWorker, PSM } = await import("tesseract.js");
+      const { createWorker, PSM } = await importExternal<typeof import("tesseract.js")>("tesseract.js");
       const worker = await createWorker("rus+eng", 1, {
         cachePath: path.join(dataDir(), "tessdata"),
       });
