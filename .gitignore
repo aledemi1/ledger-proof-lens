@@ -17,6 +17,7 @@ dist-ssr
 *.local
 .env
 .data
+scripts/.cache
 
 # Wrangler / Cloudflare
 .wrangler/

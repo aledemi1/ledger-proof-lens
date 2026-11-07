@@ -3,9 +3,9 @@ import { buildConclusion, computeRecommendation, computeStats } from "@/lib/conc
 import { demoDocuments, demoSession } from "@/mocks/demoAudit";
 
 describe("demo audit rules", () => {
-  it("has 12 checks: 7 match, 2 mismatch, 1 not found, 2 need review", () => {
+  it("has 10 checks: 5 match, 4 mismatch, 1 not found", () => {
     const s = computeStats(demoSession.checks);
-    expect([s.total, s.matched, s.mismatches, s.notFound, s.needsReview]).toEqual([12, 7, 2, 1, 2]);
+    expect([s.total, s.matched, s.mismatches, s.notFound, s.needsReview]).toEqual([10, 5, 4, 1, 0]);
   });
 
   it("recommends returning the report for revision", () => {
@@ -13,15 +13,18 @@ describe("demo audit rules", () => {
   });
 
   it("marking a mismatch as verified keeps its original automatic status", () => {
-    const checks = demoSession.checks.map((c) => (c.id === "c8" ? { ...c, reviewerStatus: "verified" as const } : c));
-    expect(checks.find((c) => c.id === "c8")?.status).toBe("mismatch");
-    expect(computeStats(checks).mismatches).toBe(2);
+    const target = demoSession.checks.find((c) => c.status === "mismatch");
+    const checks = demoSession.checks.map((c) => (c.id === target?.id ? { ...c, reviewerStatus: "verified" as const } : c));
+    expect(checks.find((c) => c.id === target?.id)?.status).toBe("mismatch");
+    expect(computeStats(checks).mismatches).toBe(4);
   });
 
-  it("cost discrepancy highlights the 250 000 ₽ fragment in the act", () => {
-    const c = demoSession.checks.find((x) => x.id === "c8")!;
-    expect(c.sourceValue).toBe("250 000 ₽");
-    expect(c.evidenceReferences[0]?.locationInDocument).toBe("act-cost");
+  it("cost discrepancy points at the extracted act fragment", () => {
+    const c = demoSession.checks.find((x) => x.fieldName === "Стоимость поставки");
+    expect(c?.status).toBe("mismatch");
+    expect(c?.discrepancy).toBe("+322 000 ₽");
+    expect(c?.evidenceReferences[0]?.locationInDocument).toBeTruthy();
+    expect(c?.evidenceReferences.some((item) => item.documentId === "doc-act")).toBe(true);
   });
 
   it("recommends accept only when all blocking issues are verified and reviews done", () => {
