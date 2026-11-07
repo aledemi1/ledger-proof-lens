@@ -1,12 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutList, Plus, ScanSearch } from "lucide-react";
+import { FolderOpen, Plus, ScanSearch } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { to: "/", label: "Главная", Icon: ScanSearch, exact: true },
-  { to: "/audits", label: "Все проверки", Icon: LayoutList, exact: false },
-  { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
+  { to: "/audits", label: "Проекты", Icon: FolderOpen, exact: false },
+  { to: "/new", label: "Новый проект", Icon: Plus, exact: true },
 ] as const;
 
 function Logo() {
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Link to="/audits" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary"><LayoutList className="size-4" />Все проверки</Link></div></header><main>{children}</main></div>;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Link to="/audits" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary"><FolderOpen className="size-4" />Проекты</Link></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>
@@ -45,9 +45,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className={cn("mt-auto px-4 text-[11px] leading-relaxed text-muted-foreground", workspace && "hidden")}>
-          Фронтенд-версия. Обработка документов будет доступна после подключения сервера.
-        </div>
       </aside>
       <header className="no-print sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Logo />

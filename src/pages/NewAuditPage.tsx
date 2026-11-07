@@ -74,11 +74,11 @@ export function NewAuditPage() {
     <div className="mx-auto max-w-3xl px-4 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Новая проверка</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Загрузите отчёт и подтверждающие документы.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Новый проект</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Папка проекта: один отчёт и первичные документы, по которым он сверяется.</p>
         </div>
         <Button variant="outline" onClick={() => navigate({ to: "/audits/$id", params: { id: DEMO_SESSION_ID } })}>
-          <PlayCircle /> Открыть демо-проверку
+          <PlayCircle /> Открыть демо-проект
         </Button>
       </div>
 
@@ -106,7 +106,7 @@ export function NewAuditPage() {
         {step === 0 && (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="title">Название проверки</Label>
+              <Label htmlFor="title">Название проекта</Label>
               <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Отчёт по поставке — ноябрь 2026" autoFocus />
             </div>
             <div className="space-y-1.5">

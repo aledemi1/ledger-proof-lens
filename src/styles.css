@@ -59,6 +59,8 @@
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
   --color-orange: var(--orange);
   --color-orange-soft: var(--orange-soft);
   --color-highlight: var(--highlight);
@@ -106,6 +108,8 @@
   --danger-soft: oklch(0.955 0.03 25);
   --warning: oklch(0.62 0.15 65);
   --warning-soft: oklch(0.96 0.05 85);
+  --review: oklch(0.52 0.19 295);
+  --review-soft: oklch(0.955 0.035 295);
   --orange: oklch(0.62 0.17 45);
   --orange-soft: oklch(0.955 0.04 55);
   --highlight: oklch(0.9 0.13 95);
@@ -174,6 +178,43 @@
   pointer-events: none;
   animation: mark-pulse 1.2s ease-out 2;
 }
+
+/* Marks coloured by check category: report cells, source fragments and PDF boxes. */
+[data-status] { --mark: var(--primary); }
+[data-status="mismatch"] { --mark: var(--danger); }
+[data-status="not_found"] { --mark: var(--orange); }
+[data-status="needs_review"] { --mark: var(--review); }
+[data-status="match"] { --mark: var(--success); }
+.status-mark {
+  cursor: pointer;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--mark) 13%, transparent);
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, var(--mark) 70%, transparent);
+  transition: background 0.15s;
+}
+.status-mark:hover { background: color-mix(in oklab, var(--mark) 24%, transparent); }
+.status-mark[data-status="match"] { background: color-mix(in oklab, var(--mark) 7%, transparent); box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--mark) 45%, transparent); }
+.status-mark.is-active {
+  background: color-mix(in oklab, var(--mark) 26%, transparent);
+  outline: 2px solid var(--mark);
+  outline-offset: 1px;
+  animation: status-pulse 1.2s ease-out 2;
+}
+.status-box {
+  position: absolute;
+  cursor: pointer;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--mark) 18%, transparent);
+  outline: 1.5px solid color-mix(in oklab, var(--mark) 75%, transparent);
+}
+.status-box:hover { background: color-mix(in oklab, var(--mark) 30%, transparent); }
+.status-box.is-active { background: color-mix(in oklab, var(--mark) 30%, transparent); outline: 2.5px solid var(--mark); animation: status-pulse 1.2s ease-out 2; }
+@keyframes status-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--mark) 60%, transparent); }
+  100% { box-shadow: 0 0 0 8px transparent; }
+}
+.doc-carousel { scrollbar-width: thin; scroll-snap-type: x proximity; }
+.doc-carousel > * { scroll-snap-align: start; }
 @utility animate-in-up { animation: fade-in-up 0.25s ease-out; }
 
 @media print {
@@ -183,26 +224,10 @@
 
 body { font-size: 15px; letter-spacing: 0; }
 .landing-document [data-page] { min-height: 0; padding: 24px 24px 32px; }
-.results-table td { vertical-align: top; }
-.results-table .value-text { display: block; overflow-wrap: anywhere; }
-.results-table .value-text:not(:has(*)) { font-variant-numeric: tabular-nums; }
-.review-details { max-height: 46vh; }
+.review-details { max-height: 36vh; }
 @media (max-width: 1023px) {
-  .results-scroll { max-height: 320px; flex: none; }
-  .audit-workspace > .grid { display: flex; flex-direction: column; }
-  .workspace-results, .workspace-results > div:last-child, .review-details { display: contents; }
-  .workspace-results > div, .review-details > * { order: 0; }
-  .review-details > * { order: 1; margin-left: 16px; margin-right: 16px; }
-  .review-details > .review-actions { order: 3; margin-bottom: 20px; }
-  .workspace-source { order: 2; height: 620px; margin-top: 16px; margin-bottom: 16px; }
-  .results-table { font-size: 13px; }
-  .results-table th { font-size: 10px; }
-  .results-table th:first-child { width: 32%; }
-  .results-table th:nth-child(2), .results-table th:nth-child(3) { width: 23%; }
-  .results-table td { padding-left: 6px; padding-right: 6px; }
-  .results-table td:first-child { padding-left: 12px; }
-  .results-table td:last-child span { padding: 3px; font-size: 10px; }
-  .results-table td:last-child svg { display: none; }
+  .workspace-report, .workspace-source { height: 640px; }
+  .review-details { max-height: none; }
   .document-scroll [data-page] { padding: 16px; }
   .document-scroll table { font-size: 10px; }
   .document-scroll th, .document-scroll td { padding: 4px; overflow-wrap: anywhere; }

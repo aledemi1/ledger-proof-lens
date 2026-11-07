@@ -1,33 +1,37 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import type { DocBlock, DocPage, DocSegment } from "@/types/audit";
+import type { CheckStatus, DocBlock, DocPage, DocSegment } from "@/types/audit";
 
 interface MarkCtx {
   active?: string | undefined;
   /** Anchors that are linked to some check — clickable. */
   linked: Set<string>;
+  /** Category of the check behind an anchor; such marks are coloured by it. */
+  statuses?: Map<string, CheckStatus>;
   onMarkClick?: (anchor: string) => void;
 }
 const Ctx = createContext<MarkCtx>({ linked: new Set() });
 
 function Segments({ segs }: { segs: DocSegment[] }) {
-  const { active, linked, onMarkClick } = useContext(Ctx);
+  const { active, linked, statuses, onMarkClick } = useContext(Ctx);
   return (
     <>
       {segs.map((s, i) => {
         if (typeof s === "string") return <span key={i}>{s}</span>;
         const isActive = s.anchor === active;
-        const isLinked = linked.has(s.anchor);
+        const status = statuses?.get(s.anchor);
+        const isLinked = status != null || linked.has(s.anchor);
         const sig = s.variant === "signature";
         return (
           <mark
             key={i}
             data-anchor={s.anchor}
+            data-status={status}
             onClick={isLinked ? () => onMarkClick?.(s.anchor) : undefined}
             className={cn(
               "bg-transparent text-inherit",
-              isLinked && "doc-mark",
-              isActive && "doc-mark-active",
+              status ? "status-mark" : isLinked && "doc-mark",
+              isActive && (status ? "is-active" : "doc-mark-active"),
               sig && "inline-block -rotate-3 font-doc text-base italic tracking-widest opacity-50 blur-[0.6px]",
             )}
           >

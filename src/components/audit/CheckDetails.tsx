@@ -12,7 +12,7 @@ import type { CheckResult, ReviewerStatus } from "@/types/audit";
 const titles = {
   mismatch: { text: "Обнаружено расхождение", cls: "text-danger" },
   not_found: { text: "Подтверждение не найдено", cls: "text-orange" },
-  needs_review: { text: "Требует ручной проверки", cls: "text-warning" },
+  needs_review: { text: "Требует ручной проверки", cls: "text-review" },
   match: { text: "Значение подтверждено", cls: "text-success" },
 };
 
@@ -24,12 +24,15 @@ export function CheckDetails({
   docName,
   onShowEvidence,
   onShowReport,
+  showValues = true,
 }: {
   sessionId: string;
   check: CheckResult;
   docName: (id: string) => string;
   onShowEvidence: (i: number) => void;
   onShowReport?: (() => void) | undefined;
+  /** Off when the values are already shown next to the source document. */
+  showValues?: boolean;
 }) {
   const [comment, setComment] = useState(check.reviewerComment);
   const [expanded, setExpanded] = useState(true);
@@ -59,12 +62,16 @@ export function CheckDetails({
         <h2 className="text-base font-semibold">{check.fieldName}</h2>
         <Button variant="ghost" size="sm" className="h-6 text-muted-foreground" onClick={() => setExpanded((v) => !v)}>{expanded ? "Свернуть" : "Подробнее"}</Button>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-        <div><p className="text-xs text-muted-foreground">В отчёте</p><p className="mt-0.5 break-words font-semibold tabular">{check.reportValue}</p></div>
-        <div><p className="text-xs text-muted-foreground">{sourceLabel[check.status]}</p><p className="mt-0.5 break-words font-semibold tabular">{check.sourceValue ?? "Подтверждающий документ не найден"}</p></div>
-      </div>
-      {check.discrepancy && <p className="mt-1 text-sm font-semibold text-danger">В отчёте на {check.discrepancy.replace(/^[+−-]/, "")} {check.discrepancy.startsWith("+") ? "больше" : "меньше"}</p>}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Результат системы:</span><span className={cn("font-medium", t.cls)}>{t.text}</span>{issue && <span className={severityMeta[check.severity].cls}>· {severityMeta[check.severity].label}</span>}</div>
+      {showValues && (
+        <>
+          <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+            <div><p className="text-xs text-muted-foreground">В отчёте</p><p className="mt-0.5 break-words font-semibold tabular">{check.reportValue}</p></div>
+            <div><p className="text-xs text-muted-foreground">{sourceLabel[check.status]}</p><p className="mt-0.5 break-words font-semibold tabular">{check.sourceValue ?? "Подтверждающий документ не найден"}</p></div>
+          </div>
+          {check.discrepancy && <p className="mt-1 text-sm font-semibold text-danger">В отчёте на {check.discrepancy.replace(/^[+−-]/, "")} {check.discrepancy.startsWith("+") ? "больше" : "меньше"}</p>}
+        </>
+      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Результат системы:</span><span className={cn("font-medium", t.cls)}>{t.text}</span>{issue && <span className={severityMeta[check.severity].cls}>· {severityMeta[check.severity].label}</span>}</div>
 
       {expanded && (
         <>

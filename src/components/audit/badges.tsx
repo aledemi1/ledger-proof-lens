@@ -8,7 +8,7 @@ export const checkStatusMeta: Record<CheckStatus, { label: string; cls: string; 
   match: { label: "Совпадает", cls: "bg-success-soft text-success", dot: "bg-success", Icon: CheckCircle2 },
   mismatch: { label: "Расхождение", cls: "bg-danger-soft text-danger", dot: "bg-danger", Icon: XCircle },
   not_found: { label: "Не найдено подтверждение", cls: "bg-orange-soft text-orange", dot: "bg-orange", Icon: HelpCircle },
-  needs_review: { label: "Требует проверки", cls: "bg-warning-soft text-warning", dot: "bg-warning", Icon: AlertTriangle },
+  needs_review: { label: "Требует проверки", cls: "bg-review-soft text-review", dot: "bg-review", Icon: AlertTriangle },
 };
 
 export function CheckStatusBadge({ status, className }: { status: CheckStatus; className?: string }) {

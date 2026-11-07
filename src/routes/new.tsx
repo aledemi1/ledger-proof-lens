@@ -6,9 +6,9 @@ export const Route = createFileRoute("/new")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { title: "Новая проверка — Sverko" },
-      { name: "description", content: "Создайте проверку: загрузите отчёт и подтверждающие документы." },
-      { property: "og:title", content: "Новая проверка — Sverko" },
+      { title: "Новый проект — Sverko" },
+      { name: "description", content: "Создайте проект: загрузите отчёт и подтверждающие документы." },
+      { property: "og:title", content: "Новый проект — Sverko" },
       { property: "og:description", content: "Загрузка отчёта и первичных документов для сверки." },
     ],
   }),

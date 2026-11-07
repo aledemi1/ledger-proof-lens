@@ -20,7 +20,7 @@ export function LandingPage() {
           <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">Сравните суммы и количества из отчёта с актами и накладными. Откройте строку документа, чтобы проверить расхождение.</p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Button asChild size="lg" className="px-5"><Link to="/audits/$id" params={{ id: DEMO_SESSION_ID }}>Открыть демо-проверку <ArrowRight /></Link></Button>
-            <Button asChild size="lg" variant="outline" className="px-5"><Link to="/new">Новая проверка</Link></Button>
+            <Button asChild size="lg" variant="outline" className="px-5"><Link to="/new">Новый проект</Link></Button>
           </div>
         </div>
         <div className="min-w-0">
