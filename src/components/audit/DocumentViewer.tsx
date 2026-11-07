@@ -16,6 +16,8 @@ interface Props {
   onMarkClick?: (mark: DocMark) => void;
   /** Rendered between the toolbar and the page, e.g. the report-versus-source comparison. */
   banner?: ReactNode;
+  /** Replaces the file name in the toolbar, e.g. with a document switcher. */
+  title?: ReactNode;
   emptyText?: string;
 }
 
@@ -72,11 +74,15 @@ export function DocumentViewer(p: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-          {isSheet ? <FileSpreadsheet className="size-4" /> : <FileText className="size-4" />}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium" title={doc?.name}>{doc?.name ?? "Документ не выбран"}</span>
-        {doc && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docTypeLabel[doc.type]}</span>}
+        {p.title ?? (
+          <>
+            <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+              {isSheet ? <FileSpreadsheet className="size-4" /> : <FileText className="size-4" />}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={doc?.name}>{doc?.name ?? "Документ не выбран"}</span>
+          </>
+        )}
+        {doc && !p.title && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docTypeLabel[doc.type]}</span>}
         {scalable && (
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.2) * 10) / 10))} aria-label="Уменьшить">
@@ -87,7 +93,7 @@ export function DocumentViewer(p: Props) {
             </Button>
           </div>
         )}
-        {doc && (doc.preview.kind === "synthetic" || doc.preview.kind === "pdf") && doc.pageCount > 1 && (
+        {doc && !p.title && (doc.preview.kind === "synthetic" || doc.preview.kind === "pdf") && doc.pageCount > 1 && (
           <div className="flex items-center gap-0.5">
             {Array.from({ length: doc.pageCount }, (_, i) => (
               <button key={i} onClick={() => scrollToPage(i + 1)} className="h-6 min-w-6 rounded px-1 text-xs text-muted-foreground hover:bg-muted">
