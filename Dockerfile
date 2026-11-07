@@ -1,15 +1,12 @@
 # syntax=docker/dockerfile:1
 
 # Timeweb App Platform собирает этот Dockerfile в корне репозитория.
-# Сборка в production, иначе Vite оставляет dev-JSX и SSR падает.
-# Зависимости ставятся полностью: vite и плагины лежат в devDependencies,
-# а проверка документов выполняется тем же процессом, что и preview.
-FROM oven/bun:1.4.2 AS runner
+# Сборка идёт в production, иначе Vite оставляет dev-JSX и SSR падает.
+# Зависимости ставятся полностью: vite и плагины лежат в devDependencies.
+# Рантайм — Node 22: проверка документов использует встроенный node:sqlite.
+FROM oven/bun:1.4.2 AS builder
 WORKDIR /app
 ENV NODE_ENV=production
-ENV HOST=0.0.0.0
-ENV PORT=8080
-ENV SVERKO_DATA_DIR=/data
 
 COPY package.json bun.lock ./
 RUN set -eux; \
@@ -22,9 +19,23 @@ RUN set -eux; \
   test "$ok" -eq 1
 
 COPY . .
-RUN bun run build \
-  && mkdir -p /data
+RUN bun run build
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=8080
+ENV NITRO_HOST=0.0.0.0
+ENV NITRO_PORT=8080
+ENV SVERKO_DATA_DIR=/data
+
+RUN mkdir -p /data
+
+COPY --from=builder /app/.output ./.output
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "bun x vite preview --host 0.0.0.0 --port ${PORT:-8080} --strictPort"]
+CMD ["node", ".output/server/index.mjs"]

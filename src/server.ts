@@ -2,6 +2,8 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleApi } from "./server/http";
+import { resumePending } from "./server/process";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -44,8 +46,33 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+let resumed = false;
+
+function ensureResumed(): void {
+  if (resumed) return;
+  resumed = true;
+  try {
+    resumePending();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    ensureResumed();
+    const pathname = new URL(request.url).pathname;
+    if (pathname.startsWith("/api/")) {
+      try {
+        return await handleApi(request);
+      } catch (error) {
+        console.error(error);
+        return new Response(JSON.stringify({ error: "Внутренняя ошибка сервера" }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
