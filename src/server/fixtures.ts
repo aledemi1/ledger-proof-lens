@@ -88,19 +88,6 @@ function sheet(name: string, rows: (string | number | undefined)[][]): Buffer {
 }
 
 export async function actPdf(amount: string | null, onPage: 1 | 2): Promise<Buffer> {
-  const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const font = await pdf.embedFont(readFileSync(fontPath()));
-  const fixed = new Date("2026-01-01T00:00:00Z");
-  pdf.setCreationDate(fixed);
-  pdf.setModificationDate(fixed);
-  const paint = (page: ReturnType<PDFDocument["addPage"]>, lines: string[]) => {
-    let y = 780;
-    for (const line of lines) {
-      page.drawText(line, { x: 48, y, size: 14, font, color: rgb(0, 0, 0) });
-      y -= 32;
-    }
-  };
   const body = [
     "АКТ № 14",
     "Договор № 21-2026",
@@ -109,10 +96,50 @@ export async function actPdf(amount: string | null, onPage: 1 | 2): Promise<Buff
     ...(amount ? [`Стоимость поставки: ${amount}`] : []),
     "Дата передачи: 14.10.2026",
   ];
-  if (onPage === 1) paint(pdf.addPage([595.28, 841.89]), body);
-  else {
-    paint(pdf.addPage([595.28, 841.89]), ["АКТ № 14", "Сведения о сумме перенесены на следующую страницу."]);
-    paint(pdf.addPage([595.28, 841.89]), body);
+  return linesPdf(onPage === 1 ? [body] : [["АКТ № 14", "Сведения о сумме перенесены на следующую страницу."], body]);
+}
+
+/** Labels outside the rule dictionary on both sides, so only a model can tell what they mean. */
+export function laptopReport(): Buffer {
+  return sheet("Отчёт", [
+    ["Показатель", "Значение"],
+    ["Номер договора", "45-2026"],
+    ["Наименование оборудования", "Ноутбук Lenovo ThinkPad E14"],
+    ["Принято на склад", "20 шт"],
+    ["К оплате по акту", "1 450 000,00 ₽"],
+  ]);
+}
+
+export function laptopWaybill(): Buffer {
+  return sheet("Накладная", [
+    ["Товарная накладная № 52"],
+    ["Договор", "45-2026"],
+    [],
+    ["Наименование", "Отпущено", "Ед."],
+    ["Ноутбук Lenovo ThinkPad E14", 18, "шт"],
+  ]);
+}
+
+export async function laptopActPdf(): Promise<Buffer> {
+  return linesPdf([
+    ["АКТ № 21", "Договор № 45-2026", "Наименование: Ноутбук Lenovo ThinkPad E14", "Начислено к оплате: 1 400 000,00 руб."],
+  ]);
+}
+
+async function linesPdf(pages: string[][]): Promise<Buffer> {
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(readFileSync(fontPath()));
+  const fixed = new Date("2026-01-01T00:00:00Z");
+  pdf.setCreationDate(fixed);
+  pdf.setModificationDate(fixed);
+  for (const lines of pages) {
+    const page = pdf.addPage([595.28, 841.89]);
+    let y = 780;
+    for (const line of lines) {
+      page.drawText(line, { x: 48, y, size: 14, font, color: rgb(0, 0, 0) });
+      y -= 32;
+    }
   }
   return Buffer.from(await pdf.save());
 }
@@ -212,6 +239,9 @@ export async function writeAcceptanceFixtures(dir = path.resolve("fixtures/accep
     ["Счет_бумага.docx", await paperDocx()],
     ["Поврежденный.pdf", brokenPdf()],
     ["Отчет_формула.xlsx", await formulaReport()],
+    ["Отчет_ноутбуки.xlsx", laptopReport()],
+    ["Накладная_52.xlsx", laptopWaybill()],
+    ["Акт_21.pdf", await laptopActPdf()],
   ];
   for (const [name, buffer] of files) writeFileSync(path.join(dir, name), buffer);
 }

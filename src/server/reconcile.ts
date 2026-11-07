@@ -30,6 +30,14 @@ interface FileProblem {
   reason: string;
 }
 
+/** Roles a language model assigned to labels the rule dictionary does not know, keyed by normalized label. */
+export type RoleHints = Map<string, Role>;
+
+export interface UnknownLabel {
+  label: string;
+  sample: string;
+}
+
 type Parsed =
   | { kind: "money"; minor: bigint }
   | { kind: "quantity"; minor: bigint; unit: string }
@@ -54,6 +62,7 @@ interface Fact {
   docText: string;
   documentId: string;
   fragment: Fragment;
+  viaModel?: boolean;
 }
 
 const prefer: Record<Role, DocKind[]> = {
@@ -69,8 +78,8 @@ const prefer: Record<Role, DocKind[]> = {
   text: ["act", "waybill", "invoice", "contract", "payment", "other", "report"],
 };
 
-export function reconcile(report: PreparedDoc, supporting: PreparedDoc[], unreadable: FileProblem[]): CheckResult[] {
-  const reportFacts = buildFacts(report);
+export function reconcile(report: PreparedDoc, supporting: PreparedDoc[], unreadable: FileProblem[], hints: RoleHints = new Map()): CheckResult[] {
+  const reportFacts = buildFacts(report, hints);
   const usable: PreparedDoc[] = [];
   const seen = new Set<string>([report.sha256, fingerprint(report.read.fragments.map((fragment) => fragment.text))]);
   for (const doc of supporting) {
@@ -80,37 +89,85 @@ export function reconcile(report: PreparedDoc, supporting: PreparedDoc[], unread
     if (fp) seen.add(fp);
     usable.push(doc);
   }
-  const sources = usable.flatMap((doc) => buildFacts(doc));
+  const sources = usable.flatMap((doc) => buildFacts(doc, hints));
   const partial = usable.filter((doc) => doc.read.warnings.length);
-  return reportFacts.map((fact, index) => toCheck(fact, sources, index + 1, unreadable, partial));
+  return reportFacts.map((fact, index) => noteModel(toCheck(fact, sources, index + 1, unreadable, partial), fact, sources));
 }
 
-function buildFacts(doc: PreparedDoc): Fact[] {
+/** Labels with values that the rule dictionary cannot classify; only these are sent to a model. */
+export function unknownLabels(docs: PreparedDoc[]): UnknownLabel[] {
+  const out = new Map<string, UnknownLabel>();
+  const add = (label: string, sample: string) => {
+    const key = normText(label);
+    if (!key || detectRole(label) || out.has(key) || !sample.trim()) return;
+    out.set(key, { label: label.trim(), sample: sample.trim().slice(0, 80) });
+  };
+  for (const doc of docs) {
+    for (const fragment of doc.read.fragments) {
+      if (fragment.shape === "title") continue;
+      if (fragment.shape === "line") {
+        const colon = fragment.text.match(/^(.{2,80}?)[:]\s+(.+)$/);
+        if (colon?.[1] && colon[2]) add(colon[1], colon[2]);
+        continue;
+      }
+      const label = fragment.shape === "kv" ? fragment.label : fragment.label || fragment.columnHeader;
+      if (label) add(label, fragment.text);
+    }
+  }
+  return [...out.values()];
+}
+
+function resolveRole(label: string, raw: string, hints: RoleHints, unitHint?: string): { role: Role; viaModel: boolean } | null {
+  const known = detectRole(label);
+  if (known) return { role: known, viaModel: false };
+  const hinted = hints.get(normText(label));
+  if (!hinted || hinted === "text") return null;
+  const parsed = parseByRole(hinted, raw, unitHint);
+  const needsParse = hinted !== "counterparty" && hinted !== "item_name";
+  if (needsParse && parsed.kind === "text") return null;
+  return { role: hinted, viaModel: true };
+}
+
+function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
   const kind = doc.isReport ? "report" : detectKind(doc.name, doc.read.text);
   const docNumber = detectNumber(kind, doc.name, doc.read.text);
   const facts: Fact[] = [];
   for (const fragment of doc.read.fragments) {
     if (fragment.shape === "title") continue;
     const label = (fragment.label || fragment.columnHeader || "").trim();
-    const role = detectRole(label) ?? (fragment.shape === "line" ? null : null);
     if (fragment.shape === "line") {
-      const parsedLine = parseLine(fragment.text);
+      const parsedLine = parseLine(fragment.text, hints);
       if (!parsedLine) continue;
-      facts.push(makeFact(doc, kind, docNumber, parsedLine.role, parsedLine.label, parsedLine.value, fragment));
+      facts.push(makeFact(doc, kind, docNumber, parsedLine.role, parsedLine.label, parsedLine.value, fragment, undefined, parsedLine.viaModel));
       continue;
     }
     if (!label || fragment.shape === "kv" && !fragment.label) continue;
-    const resolved = detectRole(label);
+    const resolved = resolveRole(label, fragment.text, hints, fragment.unitHint);
     if (!resolved) {
       if (fragment.shape === "kv" && fragment.text.trim()) {
         facts.push(makeFact(doc, kind, docNumber, "text", label, fragment.text, fragment));
       }
       continue;
     }
-    if (resolved === "item_name" && fragment.shape === "table" && fragment.rowLabel && fragment.rowLabel !== fragment.text) continue;
-    facts.push(makeFact(doc, kind, docNumber, resolved, label, fragment.text, fragment, fragment.rowLabel));
+    if (resolved.role === "item_name" && fragment.shape === "table" && fragment.rowLabel && fragment.rowLabel !== fragment.text) continue;
+    facts.push(makeFact(doc, kind, docNumber, resolved.role, label, fragment.text, fragment, fragment.rowLabel, resolved.viaModel));
   }
   return inherit(facts, doc.read.text);
+}
+
+function noteModel(check: CheckResult, fact: Fact, sources: Fact[]): CheckResult {
+  const labels = new Set<string>();
+  if (fact.viaModel) labels.add(fact.label);
+  for (const ref of check.evidenceReferences) {
+    const source = sources.find((item) => item.documentId === ref.documentId && item.fragment.anchor === ref.locationInDocument);
+    if (source?.viaModel) labels.add(source.label);
+  }
+  if (!labels.size) return check;
+  const list = [...labels].map((label) => `«${label}»`).join(", ");
+  return {
+    ...check,
+    explanation: `${check.explanation} Языковая модель определила смысл подписи ${list}; значения разобраны и сравнены кодом.`,
+  };
 }
 
 function makeFact(
@@ -122,6 +179,7 @@ function makeFact(
   raw: string,
   fragment: Fragment,
   item?: string,
+  viaModel?: boolean,
 ): Fact {
   const fact: Fact = {
     role,
@@ -136,6 +194,7 @@ function makeFact(
   };
   if (docNumber) fact.docNumber = docNumber;
   if (item) fact.item = item;
+  if (viaModel) fact.viaModel = true;
   return fact;
 }
 
@@ -181,16 +240,16 @@ function parseByRole(role: Role, raw: string, unitHint?: string): Parsed {
   return { kind: "text", norm: normText(raw) };
 }
 
-function parseLine(text: string): { role: Role; label: string; value: string } | null {
+function parseLine(text: string, hints: RoleHints): { role: Role; label: string; value: string; viaModel: boolean } | null {
   const colon = text.match(/^(.{2,80}?)[:]\s+(.+)$/);
   if (colon?.[1] && colon[2]) {
-    const role = detectRole(colon[1]);
-    if (role) return { role, label: colon[1].trim(), value: colon[2].trim() };
+    const resolved = resolveRole(colon[1], colon[2], hints);
+    if (resolved) return { role: resolved.role, label: colon[1].trim(), value: colon[2].trim(), viaModel: resolved.viaModel };
   }
   const contract = text.match(/договор[^\d№]{0,24}№\s*([0-9A-Za-zА-Яа-я\-\/]+)/i);
-  if (contract?.[1]) return { role: "contract_number", label: "Номер договора", value: contract[1] };
+  if (contract?.[1]) return { role: "contract_number", label: "Номер договора", value: contract[1], viaModel: false };
   const inn = text.match(/инн\s*[:№]?\s*(\d{10}|\d{12})/i);
-  if (inn?.[1]) return { role: "inn", label: "ИНН", value: inn[1] };
+  if (inn?.[1]) return { role: "inn", label: "ИНН", value: inn[1], viaModel: false };
   return null;
 }
 
@@ -298,7 +357,7 @@ function toCheck(fact: Fact, sources: Fact[], index: number, unreadable: FilePro
     discrepancy: delta,
     status: "mismatch" as const,
     severity: (fact.role === "line_total" || fact.role === "quantity" || fact.role === "transport" || fact.role === "unit_price" ? "high" : "medium") as Severity,
-    explanation: `В отчёте ${fact.raw}, в «${primary.docName}» — ${primary.raw}${delta ? `. Разница ${delta} (отчёт минус первичный документ)` : ""}. Уточните «${fact.label}» и при необходимости запросите исправленный документ.`,
+    explanation: `В отчёте ${fact.raw}, в «${primary.docName}» — ${primary.raw.replace(/\.$/, "")}${delta ? `. Разница ${delta} (отчёт минус первичный документ)` : ""}. Уточните «${fact.label}» и при необходимости запросите исправленный документ.`,
     evidenceReferences: ordered.map((source) => reference(source.documentId, source.fragment, source.raw)),
   };
   const unit = unitOf(fact.parsed);

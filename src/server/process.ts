@@ -11,9 +11,10 @@ import {
 } from "./db";
 import { readFile } from "./extract/index";
 import { validateFile } from "./extract/index";
-import { refineWithModel } from "./llm";
-import type { PreparedDoc } from "./reconcile";
-import { duplicateNames, reconcile } from "./reconcile";
+import { aiConfig } from "./env";
+import { classifyLabels, refineWithModel } from "./llm";
+import type { PreparedDoc, RoleHints } from "./reconcile";
+import { duplicateNames, reconcile, unknownLabels } from "./reconcile";
 
 const jobs = new Map<string, Promise<void>>();
 
@@ -73,7 +74,19 @@ export async function processSession(sessionId: string): Promise<void> {
   }
 
   setStage(sessionId, "matching");
-  let checks = reconcile(reportDoc, supporting, fileErrors);
+  const modelNotices: string[] = [];
+  let hints: RoleHints = new Map();
+  const config = aiConfig();
+  const unknown = config ? unknownLabels([reportDoc, ...supporting]) : [];
+  if (config && unknown.length) {
+    try {
+      hints = await classifyLabels(config, unknown);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "нет ответа";
+      modelNotices.push(`Языковая модель не ответила (${reason}). Незнакомые подписи оставлены на ручную проверку.`);
+    }
+  }
+  let checks = reconcile(reportDoc, supporting, fileErrors, hints);
   if (!checks.length) {
     markFailed(
       sessionId,
@@ -87,7 +100,10 @@ export async function processSession(sessionId: string): Promise<void> {
   } catch {
     // Rules stay in place when the model is unavailable.
   }
-  const notices = duplicateNames(reportDoc, supporting).map((name) => `«${name}» повторяет уже учтённый файл и не увеличивает суммы.`);
+  const notices = [
+    ...modelNotices,
+    ...duplicateNames(reportDoc, supporting).map((name) => `«${name}» повторяет уже учтённый файл и не увеличивает суммы.`),
+  ];
   if (fileErrors.length) notices.unshift("Проверка неполная: часть подтверждающих файлов не прочитана. Найденные результаты сохранены.");
   if (checkCount(sessionId) > 0) return;
   saveOutcome({

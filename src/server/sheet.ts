@@ -1,4 +1,4 @@
-import { detectRole, parseContractToken, parseDate, parseDecimal } from "./values";
+import { detectRole, parseContractToken, parseDate, parseDecimal, parseMoney, parseQuantity } from "./values";
 import type { Fragment } from "./model";
 
 export interface SheetCell {
@@ -15,6 +15,10 @@ function isNumericish(text: string): boolean {
   return parseDecimal(stripped.replace(/\s/g, "")) != null;
 }
 
+function looksLikeValue(text: string): boolean {
+  return isNumericish(text) || parseDate(text) != null || parseQuantity(text) != null || parseMoney(text) != null;
+}
+
 function isKvRow(row: SheetCell[], next: SheetCell[] | undefined): boolean {
   if (row.length !== 2) return false;
   const left = row[0];
@@ -26,7 +30,7 @@ function isKvRow(row: SheetCell[], next: SheetCell[] | undefined): boolean {
   if (leftRole && rightRole && !isNumericish(right.text) && !parseDate(right.text) && !parseContractToken(right.text) && nextHasNumber) {
     return false;
   }
-  if (!leftRole && !isNumericish(right.text) && !parseDate(right.text) && !parseContractToken(right.text)) return false;
+  if (!leftRole && !looksLikeValue(right.text) && !parseContractToken(right.text)) return false;
   return true;
 }
 
@@ -108,10 +112,10 @@ export function readGrid(
       for (const cell of row) {
         const header = headers.get(cell.col) ?? "";
         const role = detectRole(header);
-        const shape = role && role !== "item_name" ? "table" : role === "item_name" ? "table" : "title";
+        const shape = role || (header && looksLikeValue(cell.text)) ? "table" : "title";
         const extra: Partial<Fragment> = { columnHeader: header };
         if (item && role !== "item_name") extra.rowLabel = item;
-        if (unit && role === "quantity") extra.unitHint = unit;
+        if (unit && (role === "quantity" || !role)) extra.unitHint = unit;
         preview.cells.push({ anchor: push(cell, shape, extra), text: cell.text, address: cell.address });
       }
     } else if (isKvRow(row, next)) {
