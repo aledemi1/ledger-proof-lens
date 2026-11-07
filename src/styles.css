@@ -213,6 +213,33 @@
   0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--mark) 60%, transparent); }
   100% { box-shadow: 0 0 0 8px transparent; }
 }
+.excel-grid { display: grid; width: max-content; }
+.excel-grid .excel-corner,
+.excel-grid .excel-col,
+.excel-grid .excel-row {
+  background: #f8f9fb;
+  color: #616161;
+  font-weight: 500;
+  font-size: 11px;
+  border-right: 1px solid #d6d6d6;
+  border-bottom: 1px solid #d6d6d6;
+}
+.excel-grid .excel-corner,
+.excel-grid .excel-col { position: sticky; top: 0; z-index: 2; height: 22px; display: grid; place-items: center; }
+.excel-grid .excel-corner { left: 0; z-index: 4; }
+.excel-grid .excel-row { position: sticky; left: 0; z-index: 1; display: flex; align-items: center; justify-content: flex-end; padding: 0 6px; }
+.excel-grid .excel-axis-active { background: #e7e7e7; color: #222; font-weight: 600; }
+.excel-grid .excel-cell {
+  height: 22px;
+  padding: 1px 6px;
+  border-right: 1px solid #e6e6e6;
+  border-bottom: 1px solid #e6e6e6;
+  background: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 20px;
+}
 .doc-carousel { scrollbar-width: thin; scroll-snap-type: x proximity; }
 .doc-carousel > * { scroll-snap-align: start; }
 @utility animate-in-up { animation: fade-in-up 0.25s ease-out; }

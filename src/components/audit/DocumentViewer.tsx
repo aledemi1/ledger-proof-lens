@@ -55,7 +55,17 @@ export function DocumentViewer(p: Props) {
       if (!target) return false;
       const r = target.getBoundingClientRect();
       const rr = root.getBoundingClientRect();
-      root.scrollTo({ top: root.scrollTop + r.top - rr.top - rr.height / 3, left: Math.max(0, root.scrollLeft + r.left - rr.left - rr.width / 3), behavior: "smooth" });
+      if (!target.classList.contains("excel-cell")) {
+        root.scrollTo({ top: root.scrollTop + r.top - rr.top - rr.height / 3, left: Math.max(0, root.scrollLeft + r.left - rr.left - rr.width / 3), behavior: "smooth" });
+        return true;
+      }
+      let top = root.scrollTop;
+      let left = root.scrollLeft;
+      if (r.top < rr.top + 28) top += r.top - rr.top - 28;
+      else if (r.bottom > rr.bottom - 8) top += r.bottom - (rr.bottom - 8);
+      if (r.left < rr.left + 56) left += r.left - rr.left - 56;
+      else if (r.right > rr.right - 8) left += r.right - (rr.right - 8);
+      root.scrollTo({ top: Math.max(0, top), left: Math.max(0, left), behavior: "smooth" });
       return true;
     };
     if (scroll()) return;
@@ -70,6 +80,7 @@ export function DocumentViewer(p: Props) {
     scrollRef.current?.querySelector(`[data-page="${n}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const isSheet = doc?.type === "report";
+  const isGrid = doc?.preview.kind === "grid";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -106,13 +117,13 @@ export function DocumentViewer(p: Props) {
 
       {p.banner}
 
-      <div ref={scrollRef} className="document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3">
+      <div ref={isGrid ? undefined : scrollRef} className={isGrid ? "relative min-h-0 flex-1 overflow-hidden" : "document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3"}>
         {!doc ? (
           <Empty text={p.emptyText ?? "Выберите документ для просмотра."} />
         ) : doc.preview.kind === "none" ? (
           <Empty text={doc.preview.reason} />
         ) : doc.preview.kind === "grid" ? (
-          <GridView sheets={doc.preview.sheets} layer={layer} />
+          <GridView sheets={doc.preview.sheets} layer={layer} scrollRef={scrollRef} />
         ) : doc.preview.kind === "flow" ? (
           <FlowView blocks={doc.preview.blocks} layer={layer} />
         ) : doc.preview.kind === "pdf" ? (
