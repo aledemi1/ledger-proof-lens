@@ -180,7 +180,8 @@ function identity(request: Request): { owner: string; cookie?: string } {
   const current = cookieValue(request.headers.get("cookie"), "sverko_sid");
   if (current && /^[a-f0-9]{32}$/.test(current)) return { owner: current };
   const owner = randomBytes(16).toString("hex");
-  return { owner, cookie: `sverko_sid=${owner}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000` };
+  const secure = request.headers.get("x-forwarded-proto") === "https" ? "; Secure" : "";
+  return { owner, cookie: `sverko_sid=${owner}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure}` };
 }
 
 function cookieValue(header: string | null, name: string): string | null {
