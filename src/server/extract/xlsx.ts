@@ -3,10 +3,26 @@ import * as XLSX from "xlsx";
 import { readGrid, type SheetCell } from "../sheet";
 import type { ReadDocument } from "../model";
 
+/** Excel's day count starts on 1899-12-30, including the historical leap-year bug. */
+function excelSerialDate(serial: number): string {
+  const date = new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000);
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${day}.${month}.${date.getUTCFullYear()}`;
+}
+
+function isDateFormat(format: string): boolean {
+  const body = format.replace(/\[[^\]]*]/g, "").replace(/"[^"]*"/g, "");
+  return /[dmy]/i.test(body) && !/#|0/.test(body);
+}
+
 function cellText(cell: XLSX.CellObject): { text: string; formulaMissing: boolean } {
   const formula = typeof cell.f === "string" ? cell.f : "";
   if (formula && (cell.v == null || cell.v === "")) return { text: "", formulaMissing: true };
   if (cell.v == null || cell.v === "") return { text: "", formulaMissing: false };
+  if (cell.t === "n" && typeof cell.z === "string" && isDateFormat(cell.z) && typeof cell.v === "number") {
+    return { text: excelSerialDate(cell.v), formulaMissing: false };
+  }
   const formatted = typeof cell.w === "string" && cell.w.trim() ? cell.w.trim() : String(cell.v).trim();
   return { text: formatted, formulaMissing: false };
 }

@@ -3,9 +3,14 @@ import { buildConclusion, computeRecommendation, computeStats } from "@/lib/conc
 import { demoDocuments, demoSession } from "@/mocks/demoAudit";
 
 describe("demo audit rules", () => {
-  it("has 10 checks: 5 match, 4 mismatch, 1 not found", () => {
-    const s = computeStats(demoSession.checks);
-    expect([s.total, s.matched, s.mismatches, s.notFound, s.needsReview]).toEqual([10, 5, 4, 1, 0]);
+  it("shows the laboratory pack, not a hand-written example", () => {
+    expect(demoDocuments.map((doc) => doc.name)).toContain("01_Отчет_октябрь_2025.xlsx");
+    expect(demoDocuments).toHaveLength(27);
+    const contract = demoSession.checks.find((check) => check.fieldName === "Номер договора");
+    expect(contract?.status).toBe("match");
+    expect(contract?.reportValue).toBe("СЛ-16/2025");
+    const stats = computeStats(demoSession.checks);
+    expect(stats.mismatches).toBeGreaterThan(0);
   });
 
   it("recommends returning the report for revision", () => {
@@ -14,17 +19,16 @@ describe("demo audit rules", () => {
 
   it("marking a mismatch as verified keeps its original automatic status", () => {
     const target = demoSession.checks.find((c) => c.status === "mismatch");
+    const mismatches = demoSession.checks.filter((c) => c.status === "mismatch").length;
     const checks = demoSession.checks.map((c) => (c.id === target?.id ? { ...c, reviewerStatus: "verified" as const } : c));
     expect(checks.find((c) => c.id === target?.id)?.status).toBe("mismatch");
-    expect(computeStats(checks).mismatches).toBe(4);
+    expect(computeStats(checks).mismatches).toBe(mismatches);
   });
 
-  it("cost discrepancy points at the extracted act fragment", () => {
-    const c = demoSession.checks.find((x) => x.fieldName === "Стоимость поставки");
-    expect(c?.status).toBe("mismatch");
-    expect(c?.discrepancy).toBe("+322 000 ₽");
-    expect(c?.evidenceReferences[0]?.locationInDocument).toBeTruthy();
-    expect(c?.evidenceReferences.some((item) => item.documentId === "doc-act")).toBe(true);
+  it("a discrepancy points at evidence from the pack", () => {
+    const c = demoSession.checks.find((x) => x.status === "mismatch" && x.discrepancy);
+    expect(c?.evidenceReferences.length).toBeGreaterThan(0);
+    expect(demoDocuments.some((doc) => doc.id === c?.evidenceReferences[0]?.documentId)).toBe(true);
   });
 
   it("recommends accept only when all blocking issues are verified and reviews done", () => {

@@ -1,6 +1,20 @@
 import type { CheckResult, CheckStatus, EvidenceReference, Severity } from "@/types/audit";
 import type { Box, Fragment, ReadDocument } from "./model";
 import {
+  blankSignature,
+  contractMentioned,
+  convertMoney,
+  documentDate,
+  kitFactors,
+  moneyBasis,
+  parseRestatedDeadline,
+  parseRestatedPrice,
+  parseQtyBeforeUnit,
+  parseShipmentRow,
+  periodEnd,
+  sameItem,
+} from "./measure";
+import {
   detectRole,
   fingerprint,
   formatScaled,
@@ -12,9 +26,11 @@ import {
   parseInn,
   parseMoney,
   parseQuantity,
+  productCodes,
   sameToken,
   similarText,
   type Role,
+  type VatBasis,
 } from "./values";
 
 export interface PreparedDoc {
@@ -63,6 +79,10 @@ interface Fact {
   documentId: string;
   fragment: Fragment;
   viaModel?: boolean;
+  basis?: VatBasis;
+  operationDate?: string;
+  cutoff?: string;
+  net?: boolean;
 }
 
 const prefer: Record<Role, DocKind[]> = {
@@ -117,9 +137,23 @@ export function unknownLabels(docs: PreparedDoc[]): UnknownLabel[] {
   return [...out.values()];
 }
 
+function roleFromUnit(label: string, raw: string, unitHint?: string): { role: Role; viaModel: boolean } | null {
+  if (unitHint && /^дат/i.test(unitHint) && parseDate(raw)) return { role: "date", viaModel: false };
+  if (unitHint && /шт|компл|час|месяц|чел|усл|мг/i.test(unitHint) && parseQuantity(raw, unitHint)) return { role: "quantity", viaModel: false };
+  if (unitHint && /руб|ндс|₽/i.test(unitHint) && parseMoney(raw) != null) return { role: /цена/i.test(label) ? "unit_price" : "line_total", viaModel: false };
+  return null;
+}
+
 function resolveRole(label: string, raw: string, hints: RoleHints, unitHint?: string): { role: Role; viaModel: boolean } | null {
+  if ((/дата/i.test(label) || /срок/i.test(label)) && parseDate(raw)) return { role: "date", viaModel: false };
   const known = detectRole(label);
-  if (known) return { role: known, viaModel: false };
+  if (known) {
+    const parsed = parseByRole(known, raw, unitHint);
+    const textual = known === "counterparty" || known === "item_name";
+    if (textual || parsed.kind !== "text") return { role: known, viaModel: false };
+  }
+  const fromUnit = roleFromUnit(label, raw, unitHint);
+  if (fromUnit) return fromUnit;
   const hinted = hints.get(normText(label));
   if (!hinted || hinted === "text") return null;
   const parsed = parseByRole(hinted, raw, unitHint);
@@ -142,6 +176,10 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
       continue;
     }
     if (!label || fragment.shape === "kv" && !fragment.label) continue;
+    if (fragment.formulaMissing) {
+      facts.push(makeFact(doc, kind, docNumber, detectRole(label) ?? "line_total", label, fragment.text, fragment, fragment.rowLabel));
+      continue;
+    }
     const resolved = resolveRole(label, fragment.text, hints, fragment.unitHint);
     if (!resolved) {
       if (fragment.shape === "kv" && fragment.text.trim()) {
@@ -151,6 +189,30 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
     }
     if (resolved.role === "item_name" && fragment.shape === "table" && fragment.rowLabel && fragment.rowLabel !== fragment.text) continue;
     facts.push(makeFact(doc, kind, docNumber, resolved.role, label, fragment.text, fragment, fragment.rowLabel, resolved.viaModel));
+  }
+  let previousLine = "";
+  for (const fragment of doc.read.fragments) {
+    if (fragment.shape === "title") continue;
+    const shipment = parseShipmentRow(fragment.text) ?? parseQtyBeforeUnit(fragment.text, previousLine);
+    previousLine = fragment.text;
+    if (shipment) {
+      facts.push(makeFact(doc, kind, docNumber, "quantity", "Количество", shipment.quantity, fragment, shipment.item));
+      facts.push(makeFact(doc, kind, docNumber, "line_total", "Сумма с НДС", shipment.gross, fragment, shipment.item));
+    }
+    const restated = parseRestatedPrice(fragment.text);
+    if (restated) facts.push(makeFact(doc, kind, docNumber, "unit_price", "Цена без НДС", restated.price, fragment, restated.item));
+    const deadline = parseRestatedDeadline(fragment.text);
+    if (deadline) facts.push(makeFact(doc, kind, docNumber, "date", "Срок поставки", deadline, fragment));
+    const months = fragment.text.match(/гаранти\w*[^.\n]{0,60}?(\d{1,3})\s+месяц/i);
+    if (months?.[1]) facts.push(makeFact(doc, kind, docNumber, "quantity", "Гарантийный срок", `${months[1]} месяцев`, fragment));
+    if ((doc.isReport ? false : kind === "contract") && !/допсоглашен/i.test(doc.name)) {
+      const signed = doc.read.text.match(/(?:договор\w*[^.\n]{0,40}|от)\s+(\d{2}\.\d{2}\.\d{4})/i);
+      if (signed?.[1] && !facts.some((item) => item.role === "date" && /дата\s+договор/i.test(item.label))) {
+        facts.push(makeFact(doc, kind, docNumber, "date", "Дата договора", signed[1], fragment));
+      }
+    }
+    const division = fragment.text.match(/цен[аы]\s+делени\w*[^.\n]{0,40}?(\d+[.,]\d+|\d+)\s*(мг|г)?/i);
+    if (division?.[1]) facts.push(makeFact(doc, kind, docNumber, "unit_price", "Цена деления", division[1], fragment));
   }
   return inherit(facts, doc.read.text);
 }
@@ -195,23 +257,32 @@ function makeFact(
   if (docNumber) fact.docNumber = docNumber;
   if (item) fact.item = item;
   if (viaModel) fact.viaModel = true;
+  if (fact.parsed.kind === "money") fact.basis = moneyBasis(`${label} ${fragment.unitHint ?? ""}`);
+  const inlineDate = raw.match(/(\d{2}\.\d{2}\.\d{4})/);
+  const dated = inlineDate?.[1] ? parseDate(inlineDate[1]) : documentDate(doc.read.text);
+  if (!doc.isReport && dated) fact.operationDate = dated;
   return fact;
 }
 
-function inherit(facts: Fact[], _text: string): Fact[] {
+function inherit(facts: Fact[], text: string): Fact[] {
   const contract = facts.find((fact) => fact.role === "contract_number" && fact.parsed.kind === "id");
   const contractToken = contract && contract.parsed.kind === "id" ? contract.parsed.token : facts.find((fact) => fact.docKind === "contract")?.docNumber;
   const party = facts.find((fact) => fact.role === "counterparty")?.raw;
-  const named = facts.find((fact) => fact.role === "item_name");
+  const named = facts.filter((fact) => fact.role === "item_name");
+  const singleNamed = named.length === 1 ? named[0] : undefined;
+  const netSheets = new Set(facts.filter((fact) => /за вычетом возврата/i.test(fact.fragment.columnHeader ?? "")).map((fact) => fact.fragment.sheet));
+  const cutoff = periodEnd(text);
   return facts.map((fact) => {
     const next: Fact = { ...fact };
     if (fact.role === "transport") {
       delete next.item;
-    } else if (!next.item && named && (fact.role === "quantity" || fact.role === "line_total" || fact.role === "unit_price" || fact.role === "date")) {
-      next.item = named.raw;
+    } else if (!next.item && singleNamed && (fact.role === "quantity" || fact.role === "line_total" || fact.role === "unit_price" || fact.role === "date")) {
+      next.item = singleNamed.raw;
     }
     if (!next.contract && contractToken && fact.role !== "contract_number") next.contract = contractToken;
     if (!next.counterparty && party && fact.role !== "counterparty") next.counterparty = party;
+    if (cutoff) next.cutoff = cutoff;
+    if (next.fragment.sheet && netSheets.has(next.fragment.sheet) && next.item && (next.role === "quantity" || next.role === "line_total")) next.net = true;
     return next;
   });
 }
@@ -246,10 +317,245 @@ function parseLine(text: string, hints: RoleHints): { role: Role; label: string;
     const resolved = resolveRole(colon[1], colon[2], hints);
     if (resolved) return { role: resolved.role, label: colon[1].trim(), value: colon[2].trim(), viaModel: resolved.viaModel };
   }
-  const contract = text.match(/договор[^\d№]{0,24}№\s*([0-9A-Za-zА-Яа-я\-\/]+)/i);
-  if (contract?.[1]) return { role: "contract_number", label: "Номер договора", value: contract[1], viaModel: false };
+  if (/договор/i.test(text)) {
+    const token = parseContractToken(text);
+    if (token && /[-/]/.test(token)) return { role: "contract_number", label: "Номер договора", value: token, viaModel: false };
+  }
   const inn = text.match(/инн\s*[:№]?\s*(\d{10}|\d{12})/i);
   if (inn?.[1]) return { role: "inn", label: "ИНН", value: inn[1], viaModel: false };
+  return null;
+}
+
+function partySide(text: string): "supplier" | "buyer" | "any" {
+  if (/поставщик|исполнител|продавец/i.test(text)) return "supplier";
+  if (/заказчик|покупател|плательщик/i.test(text)) return "buyer";
+  return "any";
+}
+
+function isReturnDoc(fact: Fact): boolean {
+  return /возврат/i.test(fact.docName) || /^\s*акт возврата/i.test(fact.docText.slice(0, 180));
+}
+
+function quantityFocus(label: string): "stock" | "received" | "contract" | "hours" | "any" {
+  if (/оприходован/i.test(label)) return "stock";
+  if (/за вычетом возврата|принят|получен/i.test(label)) return "received";
+  if (/по договору/i.test(label)) return "contract";
+  if (/час|продолжительн|^объем$|^объём$/i.test(label)) return "hours";
+  return "any";
+}
+
+function inPeriod(fact: Fact, source: Fact): boolean {
+  if (!fact.cutoff || !source.operationDate) return true;
+  const marker = `${fact.label} ${fact.fragment.rowLabel ?? ""}`;
+  if (/№\s*\d+/.test(marker) || /^\d{3,}$/.test(fact.fragment.rowLabel ?? "")) return true;
+  return source.operationDate <= fact.cutoff;
+}
+
+function scaleToUnit(minor: bigint, from: string, to: string, item: string, factors: Map<string, number>): bigint | null {
+  if (sameUnit(from, to)) return minor;
+  const pieces = productCodes(item).map((code) => factors.get(code)).find((value) => value != null) ?? (/набор|комплект/i.test(item) ? factors.get("*") : undefined);
+  if (!pieces || pieces < 2) return null;
+  const kit = (unit: string) => /компл|набор/i.test(unit);
+  if (!kit(from) && kit(to)) {
+    if (minor % (BigInt(pieces) * 10000n) !== 0n && minor % BigInt(pieces) !== 0n) return null;
+    return minor / BigInt(pieces);
+  }
+  if (kit(from) && !kit(to)) return minor * BigInt(pieces);
+  return null;
+}
+
+function assess(fact: Fact, found: Fact[], sources: Fact[]): {
+  sourceValue: string | null;
+  discrepancy: string | null;
+  status: CheckStatus;
+  severity: Severity;
+  explanation: string;
+  evidenceReferences: EvidenceReference[];
+  unit?: string;
+} | null {
+  if (/подпис/i.test(fact.label) && /имеет|есть|^да$/i.test(fact.raw.trim())) {
+    const number = fact.label.match(/№\s*([0-9A-Za-zА-Яа-я-]+)/)?.[1];
+    const docs = sources.filter((source) => (number ? source.docName.includes(number) || source.docText.includes(number) : false));
+    if (docs.some((source) => blankSignature(source.docText))) {
+      return {
+        sourceValue: "поле подписи пустое",
+        discrepancy: null,
+        status: "needs_review",
+        severity: "medium",
+        explanation: `В отчёте для «${fact.label}» указано «${fact.raw}», но в документе строка подписи не заполнена (оставлено место для подписи). Это не подтверждает и не опровергает подлинность.`,
+        evidenceReferences: docs.slice(0, 2).map((source) => reference(source.documentId, source.fragment, source.fragment.text.slice(0, 180))),
+      };
+    }
+  }
+  if (/отнес/i.test(fact.label) && fact.parsed.kind === "id") {
+    const number = fact.fragment.rowLabel ?? "";
+    const payment = sources.find((source) => number && (/плат/i.test(source.docName) || /платежн/i.test(source.docText.slice(0, 200))) && (source.docName.includes(number) || source.docText.includes(`№ ${number}`) || source.docText.includes(`№${number}`)));
+    if (payment && !contractMentioned(payment.docText, fact.parsed.token)) {
+      return {
+        sourceValue: "назначение не содержит номера договора",
+        discrepancy: null,
+        status: "needs_review",
+        severity: "medium",
+        explanation: `Сумма платежа № ${number} есть в комплекте, но его назначение не содержит договор ${fact.parsed.token}. Отнести платеж к этому договору по одному только отчету нельзя.`,
+        evidenceReferences: [reference(payment.documentId, payment.fragment, payment.fragment.text.slice(0, 180))],
+      };
+    }
+  }
+  if (/^(да|завершен|завершён|выполнено)$/i.test(fact.raw.trim()) && /выполнен|сертификац|ввод/i.test(fact.label)) {
+    const proving = sources.filter((source) => confirms(fact, source) && source.docKind !== "invoice" && !/письм|счет|счёт/i.test(source.docName));
+    const serial = fact.label.match(/[A-ZА-ЯЁ]{1,6}\d{0,4}-\d{3,}/i)?.[0];
+    const serialSeen = serial ? proving.some((source) => source.docText.includes(serial)) : proving.length > 0;
+    if (!serialSeen) {
+      const letterOnly = sources.some((source) => /письм/i.test(source.docName) && (!serial || source.docText.includes(serial) || /термостат/i.test(fact.label)));
+      if (letterOnly) {
+        return {
+          sourceValue: serial ? `нужен протокол для ${serial}` : "переписка не заменяет акт",
+          discrepancy: null,
+          status: "needs_review",
+          severity: "medium",
+          explanation: `«${fact.label}» отмечено как завершенное, но подтверждающий протокол или акт с этим идентификатором не найден. Письмо о готовности не заменяет итоговый документ.`,
+          evidenceReferences: [],
+        };
+      }
+      return {
+        sourceValue: null,
+        discrepancy: null,
+        status: "not_found",
+        severity: "high",
+        explanation: `Для «${fact.label}» в комплекте нет акта или протокола. Счет или переписка сами по себе не подтверждают выполнение.`,
+        evidenceReferences: [],
+      };
+    }
+  }
+
+  const focused = quantityFocus(fact.label);
+  let pool = found.filter((source) => inPeriod(fact, source));
+  if (focused === "stock") pool = pool.filter((source) => /склад|остат/i.test(`${source.docName} ${source.fragment.sheet ?? ""}`));
+  if (focused === "received") {
+    const deliveries = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
+    const detailed = deliveries.filter((source) => !/реестр/i.test(source.docName));
+    pool = detailed.length ? detailed : deliveries;
+  }
+  if (focused === "contract") pool = pool.filter((source) => source.docKind === "contract");
+  if (focused === "hours") {
+    const journal = pool.filter((source) => /журнал/i.test(`${source.docName} ${source.fragment.sheet ?? ""}`));
+    if (journal.length) pool = journal;
+  }
+  if (/выполнен/i.test(fact.label)) pool = pool.filter((source) => source.docKind !== "invoice" && !/письм|счет|счёт/i.test(source.docName));
+  if (fact.role === "unit_price") {
+    const amended = pool.filter((source) => /допсоглашен/i.test(source.docName));
+    const contractual = pool.filter((source) => source.docKind === "contract" || /спецификац|договор|допсоглашен/i.test(source.docName));
+    if (amended.length) pool = amended;
+    else if (contractual.length) pool = contractual;
+  }
+  if (fact.role === "date" && /срок/i.test(fact.label)) {
+    const amended = pool.filter((source) => /допсоглашен/i.test(source.docName));
+    if (amended.length) pool = amended;
+  }
+  if (fact.role === "line_total" && /с\s*ндс|принят|получ/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
+    const shipped = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
+    if (shipped.length) pool = shipped;
+  }
+  if (!pool.length || (fact.role !== "quantity" && fact.role !== "line_total" && fact.role !== "unit_price" && fact.role !== "date")) return null;
+  if (!fact.item && focused === "any" && fact.role !== "date") return null;
+
+  const factors = kitFactors(pool.map((source) => source.docText));
+  if (fact.parsed.kind === "quantity" && focused === "any") {
+    const values = new Map<string, Fact>();
+    for (const source of pool) if (source.parsed.kind === "quantity" && sameUnit(source.parsed.unit, fact.parsed.unit)) values.set(source.parsed.minor.toString(), source);
+    if (values.size !== 1) return null;
+    const only = [...values.values()][0];
+    if (!only || only.parsed.kind !== "quantity") return null;
+    const same = only.parsed.minor === fact.parsed.minor;
+    return {
+      sourceValue: only.raw,
+      discrepancy: same ? null : formatSigned(fact.parsed.minor - only.parsed.minor, fact.parsed.unit),
+      status: same ? "match" : "mismatch",
+      severity: same ? "low" : "medium",
+      explanation: `В отчёте ${fact.raw}, в «${only.docName}» — ${only.raw}.`,
+      evidenceReferences: [[...values.values()][0]].filter((item): item is Fact => item != null).map((source) => reference(source.documentId, source.fragment, source.raw)),
+      unit: fact.parsed.unit,
+    };
+  }
+  if (fact.parsed.kind === "quantity") {
+    let total = 0n;
+    const parts: Fact[] = [];
+    for (const source of pool) {
+      if (source.parsed.kind !== "quantity") continue;
+      if (!fact.net && isReturnDoc(source)) continue;
+      const scaled = scaleToUnit(source.parsed.minor, source.parsed.unit, fact.parsed.unit, `${fact.item ?? ""} ${source.item ?? ""}`, factors);
+      if (scaled == null) continue;
+      total += scaled * (isReturnDoc(source) ? -1n : 1n);
+      parts.push(source);
+    }
+    const unique = new Map<string, Fact>();
+    for (const part of parts) {
+      const code = productCodes(`${part.item ?? ""}`).join(",") || normText(part.item ?? "");
+      const minor = part.parsed.kind === "quantity" ? part.parsed.minor.toString() : "";
+      unique.set(`${part.documentId}|${code}|${minor}`, part);
+    }
+    const kept = [...unique.values()];
+    total = 0n;
+    for (const part of kept) {
+      if (part.parsed.kind !== "quantity") continue;
+      const scaled = scaleToUnit(part.parsed.minor, part.parsed.unit, fact.parsed.unit, `${fact.item ?? ""} ${part.item ?? ""}`, factors);
+      if (scaled == null) continue;
+      total += scaled * (isReturnDoc(part) ? -1n : 1n);
+    }
+    if (!kept.length) return null;
+    const same = total === fact.parsed.minor;
+    return {
+      sourceValue: formatScaled(total, fact.parsed.unit),
+      discrepancy: same ? null : formatSigned(fact.parsed.minor - total, fact.parsed.unit),
+      status: same ? "match" : "mismatch",
+      severity: same ? "low" : "high",
+      explanation: kept.length > 1
+        ? `Количество собрано по документам одной операции${fact.net ? " за вычетом возврата" : ""}: ${kept.map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, fact.parsed.unit)}.`
+        : `В отчёте ${fact.raw}, в «${kept[0]?.docName}» — ${kept[0]?.raw}.`,
+      evidenceReferences: kept.map((part) => reference(part.documentId, part.fragment, part.raw)),
+      unit: fact.parsed.unit,
+    };
+  }
+  if (fact.parsed.kind === "money" && (fact.role === "line_total" || fact.role === "unit_price")) {
+    let total = 0n;
+    const parts: Fact[] = [];
+    for (const source of pool) {
+      if (source.parsed.kind !== "money" || source.basis === "tax") continue;
+      if (!fact.net && isReturnDoc(source)) continue;
+      const converted = convertMoney(source.parsed.minor, source.basis ?? "unknown", fact.basis ?? "unknown");
+      if (converted == null) continue;
+      total += converted * (fact.net && isReturnDoc(source) ? -1n : 1n);
+      parts.push(source);
+    }
+    if (!parts.length) return null;
+    if (fact.role === "unit_price" && parts.length > 1) total = parts[0] && parts[0].parsed.kind === "money" ? convertMoney(parts[0].parsed.minor, parts[0].basis ?? "unknown", fact.basis ?? "unknown") ?? total : total;
+    const same = total === fact.parsed.minor;
+    return {
+      sourceValue: formatScaled(total, "₽"),
+      discrepancy: same ? null : formatSigned(fact.parsed.minor - total, "₽"),
+      status: same ? "match" : "mismatch",
+      severity: same ? "low" : "high",
+      explanation: `Сумма приведена к той же базе НДС, что и в отчёте${fact.net ? ", за вычетом возврата" : ""}. Итого ${formatScaled(total, "₽")}.`,
+      evidenceReferences: parts.map((part) => reference(part.documentId, part.fragment, part.raw)),
+      unit: "₽",
+    };
+  }
+  if (fact.role === "date" && pool.length) {
+    const dates = pool.filter((source) => source.parsed.kind === "date");
+    const unique = [...new Set(dates.map((source) => (source.parsed.kind === "date" ? source.parsed.iso : "")))];
+    if (unique.length > 1) return null;
+    const primary = dates[0];
+    if (!primary || primary.parsed.kind !== "date" || fact.parsed.kind !== "date") return null;
+    const same = primary.parsed.iso === fact.parsed.iso;
+    return {
+      sourceValue: primary.raw,
+      discrepancy: null,
+      status: same ? "match" : "mismatch",
+      severity: same ? "low" : "medium",
+      explanation: `В отчёте ${fact.raw}, в «${primary.docName}» — ${primary.raw}.`,
+      evidenceReferences: dates.map((source) => reference(source.documentId, source.fragment, source.raw)),
+    };
+  }
   return null;
 }
 
@@ -273,7 +579,13 @@ function toCheck(fact: Fact, sources: Fact[], index: number, unreadable: FilePro
       evidenceReferences: [],
     });
   }
-  const found = sources.filter((source) => confirms(fact, source));
+  let found = sources.filter((source) => confirms(fact, source));
+  if (fact.role === "inn") {
+    const contractual = found.filter((source) => source.docKind === "contract" && !/допсоглашен/i.test(source.docName));
+    if (contractual.length) found = contractual;
+  }
+  const assessed = assess(fact, found, sources);
+  if (assessed) return finish(base, assessed);
   if (!found.length) {
     const blocked = unreadable.length > 0 || partial.some((doc) => doc.read.warnings.length);
     if (fact.role === "text") {
@@ -401,16 +713,30 @@ function confirms(report: Fact, source: Fact): boolean {
   if (source.parsed.kind === "missing" || report.parsed.kind === "missing") return false;
   if (!sameRole(report, source)) return false;
   if (report.contract && source.contract && !sameToken(report.contract, source.contract)) return false;
+  if (report.role === "contract_number" && report.parsed.kind === "id" && source.parsed.kind === "id" && !sameToken(report.parsed.token, source.parsed.token) && source.docKind !== "contract") return false;
+  if ((report.role === "counterparty" || report.role === "inn") && /ооо|ао|пао|зао|ип\b/i.test(report.raw) && !/ооо|ао|пао|зао|ип\b/i.test(source.raw) && source.role === "counterparty") return false;
   if (report.role === "line_total" || report.role === "unit_price") {
     if (source.docKind === "contract" && !/договор/i.test(report.label)) return false;
   }
+  if ((report.role === "inn" || report.role === "counterparty") && partySide(report.label) !== "any") {
+    const got = partySide(`${source.label} ${source.fragment.text}`);
+    if (got === "any" && !/договор/i.test(source.docName)) return false;
+    if (got !== "any" && got !== partySide(report.label)) return false;
+  }
+  if (report.role === "date" && /дата\s+договор/i.test(report.label)) {
+    if (/срок/i.test(source.label) || source.docKind !== "contract" || /допсоглашен/i.test(source.docName)) return false;
+  }
   if (needsItem(report.role) && report.item) {
     if (source.item) {
-      if (!similarText(report.item, source.item)) return false;
-    } else if (!similarText(report.item, source.docText)) return false;
+      if (!sameItem(report.item, source.item)) return false;
+    } else if (!sameItem(report.item, source.docText)) return false;
+  }
+  if (!report.item && (report.role === "quantity" || report.role === "unit_price")) {
+    const words = normText(report.label).split(" ").filter((word) => word.length > 5 && !/договор|поставк|оборудован|количеств|стоимост/.test(word));
+    if (words.length && !words.some((word) => normText(`${source.label} ${source.fragment.text}`).includes(word))) return false;
   }
   if (report.role === "quantity" && report.parsed.kind === "quantity" && source.parsed.kind === "quantity") {
-    if (!sameUnit(report.parsed.unit, source.parsed.unit)) return false;
+    if (!sameUnit(report.parsed.unit, source.parsed.unit) && scaleToUnit(source.parsed.minor, source.parsed.unit, report.parsed.unit, `${report.item ?? ""} ${source.item ?? ""}`, kitFactors([source.docText, report.docText])) == null) return false;
   }
   return true;
 }
@@ -573,9 +899,10 @@ function detectKind(name: string, text: string): DocKind {
   if (/наклад/.test(filename)) return "waybill";
   if (/акт/.test(filename)) return "act";
   if (/сч[её]т/.test(filename)) return "invoice";
-  if (/договор/.test(filename)) return "contract";
+  if (/допсоглашен|договор|спецификац/.test(filename)) return "contract";
   if (/плат/.test(filename)) return "payment";
-  const head = text.slice(0, 600).toLowerCase();
+  if (/реестр|склад|журнал|расчет|расчёт/.test(filename)) return "other";
+  const head = text.slice(0, 120).toLowerCase();
   if (/наклад/.test(head)) return "waybill";
   if (/(^|[^\p{L}])акт(?=[^\p{L}]|$)/iu.test(head)) return "act";
   if (/сч[её]т/.test(head)) return "invoice";

@@ -34,8 +34,18 @@ function isKvRow(row: SheetCell[], next: SheetCell[] | undefined): boolean {
   return true;
 }
 
+function indicatorColumns(row: SheetCell[]): { label: number; value: number; unit?: number } | null {
+  const label = row.find((cell) => /показател/i.test(cell.text) && !/значен/i.test(cell.text));
+  const value = row.find((cell) => /значен/i.test(cell.text));
+  if (!label || !value) return null;
+  const unit = row.find((cell) => /^(ед\.?|единица)\b/i.test(cell.text.trim()));
+  return unit ? { label: label.col, value: value.col, unit: unit.col } : { label: label.col, value: value.col };
+}
+
 function isHeaderRow(row: SheetCell[]): boolean {
   if (row.length < 2) return false;
+  if (row.some((cell) => isNumericish(cell.text) || parseDate(cell.text) != null)) return false;
+  if (indicatorColumns(row)) return true;
   if (row.length === 2 && isKvRow(row, undefined)) return false;
   const labels = row.filter((cell) => !isNumericish(cell.text));
   if (labels.length < 2) return false;
@@ -53,8 +63,11 @@ function unitOf(row: SheetCell[], headers: Map<number, string>): string | undefi
 function itemOf(row: SheetCell[], headers: Map<number, string>): string | undefined {
   for (const cell of row) {
     const header = headers.get(cell.col) ?? "";
+    if (/наименован|вид\s+работ|показател/i.test(header) && cell.text.trim()) return cell.text.trim();
     if (detectRole(header) === "item_name" && cell.text.trim()) return cell.text.trim();
   }
+  const numberCell = row.find((cell) => /№|номер/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
+  if (numberCell && !row.some((cell) => /наименован/i.test(headers.get(cell.col) ?? ""))) return `№ ${numberCell.text.trim()}`;
   const first = row.find((cell) => !isNumericish(cell.text) && detectRole(headers.get(cell.col) ?? "") == null);
   return first?.text.trim() || undefined;
 }
@@ -76,6 +89,7 @@ export function readGrid(
   const previewRows: { index: number; cells: { anchor: string; text: string; address: string }[] }[] = [];
   let headers = new Map<number, string>();
   let inTable = false;
+  let indicator: { label: number; value: number; unit?: number } | null = null;
 
   const push = (cell: SheetCell, shape: Fragment["shape"], extra: Partial<Fragment> = {}) => {
     const anchor = `s${sheetIndex}r${cell.row}c${cell.col}`;
@@ -102,7 +116,27 @@ export function readGrid(
     const next = nextNum == null ? undefined : (byRow.get(nextNum) ?? []).slice().sort((a, b) => a.col - b.col);
     const preview = { index: rowNum, cells: [] as { anchor: string; text: string; address: string }[] };
 
-    if (isHeaderRow(row) && !(inTable && headers.size > 0 && row.every((cell) => headers.has(cell.col)))) {
+    const indicatorHeader = indicatorColumns(row);
+    const columns = indicator;
+    if (indicatorHeader && isHeaderRow(row)) {
+      indicator = indicatorHeader;
+      inTable = false;
+      headers = new Map();
+      for (const cell of row) preview.cells.push({ anchor: push(cell, "title"), text: cell.text, address: cell.address });
+    } else if (columns && row.some((cell) => cell.col === columns.label) && row.some((cell) => cell.col === columns.value)) {
+      const labelCell = row.find((cell) => cell.col === columns.label);
+      const valueCell = row.find((cell) => cell.col === columns.value);
+      const unitCell = columns.unit == null ? undefined : row.find((cell) => cell.col === columns.unit);
+      for (const cell of row) {
+        const extra: Partial<Fragment> = {};
+        if (cell === valueCell && labelCell) {
+          extra.label = labelCell.text.trim();
+          if (unitCell?.text.trim()) extra.unitHint = unitCell.text.trim();
+        }
+        preview.cells.push({ anchor: push(cell, cell === valueCell ? "kv" : "title", extra), text: cell.text, address: cell.address });
+      }
+    } else if (isHeaderRow(row) && !(inTable && headers.size > 0 && row.every((cell) => headers.has(cell.col)))) {
+      indicator = null;
       headers = new Map(row.map((cell) => [cell.col, cell.text.trim()]));
       inTable = true;
       for (const cell of row) preview.cells.push({ anchor: push(cell, "title"), text: cell.text, address: cell.address });
@@ -115,7 +149,8 @@ export function readGrid(
         const shape = role || (header && looksLikeValue(cell.text)) ? "table" : "title";
         const extra: Partial<Fragment> = { columnHeader: header };
         if (item && role !== "item_name") extra.rowLabel = item;
-        if (unit && (role === "quantity" || !role)) extra.unitHint = unit;
+        const quantityColumn = role === "quantity" || /кол-?во|количество|объем|объём|принято|получено/i.test(header);
+        if (unit && quantityColumn) extra.unitHint = unit;
         preview.cells.push({ anchor: push(cell, shape, extra), text: cell.text, address: cell.address });
       }
     } else if (isKvRow(row, next)) {

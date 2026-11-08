@@ -1,7 +1,7 @@
 import type { AuditDocument, AuditSession } from "@/types/audit";
 import { realisticDocuments, realisticSession } from "./realisticDemo";
 
-/** Учебный комплект. Организации вымышлены, тексты договора и акта написаны моделью. */
+/** Учебный комплект лаборатории. Организации и операции вымышлены, результат посчитан общим алгоритмом сверки. */
 
 export const DEMO_SESSION_ID = realisticSession.id;
 export const demoDocuments: AuditDocument[] = realisticDocuments;

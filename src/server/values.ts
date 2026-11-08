@@ -21,7 +21,7 @@ const ROLE_RULES: { role: Role; re: RegExp }[] = [
   { role: "transport", re: /транспорт|доставк|перевоз/i },
   { role: "unit_price", re: /цена|тариф|стоимость\s+единиц|за\s+единиц/i },
   { role: "quantity", re: /кол-?во|количество|поставлено|число\s+единиц|объ[её]м/i },
-  { role: "line_total", re: /стоимость|сумма|итого|всего/i },
+  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс/iu },
   { role: "date", re: /(^|[^\p{L}])дата(?=[^\p{L}]|$)/iu },
   { role: "item_name", re: /наименование|номенклатур|товар|оборудован|услуг/i },
 ];
@@ -46,7 +46,8 @@ export function similarText(a: string, b: string): boolean {
   const x = normText(a);
   const y = normText(b);
   if (!x || !y) return false;
-  if (x === y || x.includes(y) || y.includes(x)) return true;
+  if (x === y) return true;
+  if (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x))) return true;
   const ta = new Set(x.split(" ").filter((w) => w.length > 2));
   const tb = new Set(y.split(" ").filter((w) => w.length > 2));
   if (!ta.size || !tb.size) return false;
@@ -55,8 +56,19 @@ export function similarText(a: string, b: string): boolean {
   return inter / Math.min(ta.size, tb.size) >= 0.6;
 }
 
+/** Accepts both 1 842 960,00 and 1,842,960.00 without rounding. */
 export function parseDecimal(raw: string): bigint | null {
-  let s = raw.replace(/[\s\u00A0]/g, "").replace(",", ".");
+  let s = raw.replace(/[\s\u00A0]/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    s = lastComma > lastDot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    const parts = s.split(",");
+    const thousands = parts.length > 2 || (parts.length === 2 && (parts[1]?.length ?? 0) === 3 && (parts[0]?.replace("-", "").length ?? 0) >= 1 && !parts[0]?.includes("."));
+    const grouped = parts.slice(1).every((part) => part.length === 3);
+    s = thousands && grouped ? parts.join("") : s.replace(",", ".");
+  }
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
   const neg = s.startsWith("-");
   if (neg) s = s.slice(1);
@@ -87,7 +99,7 @@ export function parseQuantity(raw: string, unitHint?: string): { minor: bigint; 
   if (!token) return null;
   const minor = parseDecimal(token.num);
   if (minor == null) return null;
-  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|м2|м3|м|л|уп\.?)/i);
+  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|м2|м3|м|л|уп\.?|компл\.?|набор\w*|час\.?|месяц\w*|чел\w*|усл\.?|мг)/i);
   const unit = cleanupUnit(unitMatch?.[1] ?? unitHint ?? "шт.");
   return { minor, unit };
 }
@@ -97,6 +109,12 @@ function cleanupUnit(unit: string): string {
   if (u.startsWith("шт")) return "шт.";
   if (u.startsWith("ед")) return "ед.";
   if (u.startsWith("уп")) return "уп.";
+  if (u.startsWith("компл") || u.startsWith("набор")) return "компл.";
+  if (u.startsWith("час")) return "час";
+  if (u.startsWith("месяц")) return "месяц";
+  if (u.startsWith("чел")) return "чел.";
+  if (u.startsWith("усл")) return "усл.";
+  if (u.startsWith("мг")) return "мг";
   return unit.trim();
 }
 
@@ -114,10 +132,31 @@ export function parseInn(raw: string): string | null {
 /** Contract numbers keep their digits and separators; comparison ignores spaces and a leading №. */
 export function parseContractToken(raw: string): string | null {
   const cleaned = raw.replace(/№/g, " ").replace(/\s+/g, " ").trim();
+  const prefixed = cleaned.match(/([A-Za-zА-Яа-яЁё]{1,12}-\d{1,8}\/\d{2,8})/);
+  if (/\d{2}\.\d{2}\.\d{4}/.test(cleaned) && !prefixed) {
+    const beside = cleaned.match(/(\d{1,8}\s*[-/]\s*\d{2,8})/);
+    return beside?.[1] ? beside[1].replace(/\s+/g, "") : null;
+  }
+  if (prefixed?.[1]) return prefixed[1].replace(/\s+/g, "");
   const m = cleaned.match(/(\d{1,8}\s*[-/]\s*\d{2,8})/);
   if (m?.[1]) return m[1].replace(/\s+/g, "");
-  const digits = cleaned.match(/(\d{4,})/);
-  return digits?.[1] ?? null;
+  return null;
+}
+
+export type VatBasis = "net" | "gross" | "tax" | "unknown";
+
+/** Whether a money label is the net amount, the gross amount, or the tax itself. */
+export function vatBasis(label: string): VatBasis {
+  const text = label.toLowerCase().replace(/ё/g, "е");
+  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс/.test(text) && !/без\s*ндс|с\s*ндс/.test(text)) return "tax";
+  if (/без\s*ндс|без\s+налога/.test(text)) return "net";
+  if (/с\s*ндс|включая\s+ндс|включая\s+ндс/.test(text)) return "gross";
+  return "unknown";
+}
+
+export function productCodes(value: string): string[] {
+  const found = value.toUpperCase().match(/[A-ZА-ЯЁ]{1,6}-\d{1,4}/g) ?? [];
+  return [...new Set(found)];
 }
 
 export function sameToken(a: string, b: string): boolean {
