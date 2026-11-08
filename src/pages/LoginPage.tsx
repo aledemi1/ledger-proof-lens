@@ -3,10 +3,12 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCopy } from "@/i18n/messages";
 import { loadAccount } from "@/lib/account";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const t = useCopy();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,7 +26,7 @@ export function LoginPage() {
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
-      setError(payload.error || "Не удалось войти");
+      setError(payload.error || t.auth.badLogin);
       setBusy(false);
       return;
     }
@@ -34,22 +36,22 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Вход</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Проверки привязаны к аккаунту. Демонстрационный комплект открывается без входа.</p>
+      <h1 className="text-2xl font-semibold tracking-tight">{t.auth.loginTitle}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{t.auth.loginLead}</p>
       <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="email">Почта</Label>
+          <Label htmlFor="email">{t.auth.email}</Label>
           <Input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">Пароль</Label>
+          <Label htmlFor="password">{t.auth.password}</Label>
           <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={busy} className="w-full">{busy ? "Входим…" : "Войти"}</Button>
+        <Button type="submit" disabled={busy} className="w-full">{busy ? t.auth.signingIn : t.auth.signIn}</Button>
       </form>
       <p className="mt-4 text-sm text-muted-foreground">
-        Нет аккаунта? <Link to="/register" className="text-primary underline-offset-4 hover:underline">Создать</Link>
+        {t.auth.noAccount} <Link to="/register" className="text-primary underline-offset-4 hover:underline">{t.auth.create}</Link>
       </p>
     </div>
   );

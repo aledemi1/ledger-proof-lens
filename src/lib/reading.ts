@@ -49,10 +49,10 @@ export function readingAgainst(reportValue: string, source: EvidenceReference): 
   const reportDate = date(reportValue);
   const sourceDate = date(quote);
   if (reportDate && sourceDate) {
-    return { sourceValue: quote, discrepancy: null, note: reportDate === sourceDate ? "Даты совпадают." : "Даты различаются." };
+    return { sourceValue: quote, discrepancy: null, note: reportDate === sourceDate ? "datesSame" : "datesDiffer" };
   }
   if (/\d{2}\.\d{2}\.\d{4}/.test(reportValue) || /\d{2}\.\d{2}\.\d{4}/.test(quote)) {
-    return { sourceValue: quote, discrepancy: null, note: "Фрагмент сохранён как выбранный источник." };
+    return { sourceValue: quote, discrepancy: null, note: "saved" };
   }
   const left = decimal(reportValue);
   const right = decimal(quote);
@@ -62,8 +62,8 @@ export function readingAgainst(reportValue: string, source: EvidenceReference): 
     return {
       sourceValue: quote,
       discrepancy: same ? null : signed(left - right, money ? "₽" : ""),
-      note: same ? "Выбранный фрагмент содержит то же значение." : "Значение в отчёте и в выбранном фрагменте различается.",
+      note: same ? "same" : "differ",
     };
   }
-  return { sourceValue: quote, discrepancy: null, note: "Фрагмент сохранён как выбранный источник. Число из него автоматически не извлечено." };
+  return { sourceValue: quote, discrepancy: null, note: "noNumber" };
 }

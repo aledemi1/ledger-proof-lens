@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, FlaskConical, HelpCircle, Clock, XCircle, Loader } from "lucide-react";
+import { useCopy } from "@/i18n/messages";
 import { cn } from "@/lib/utils";
 import type { CheckStatus, Recommendation, ReviewerStatus, SessionStatus, Severity } from "@/types/audit";
 
@@ -13,10 +14,11 @@ export const checkStatusMeta: Record<CheckStatus, { label: string; cls: string; 
 
 export function CheckStatusBadge({ status, className }: { status: CheckStatus; className?: string }) {
   const m = checkStatusMeta[status];
+  const t = useCopy();
   return (
     <span className={cn(pill, m.cls, className)}>
       <m.Icon className="size-3.5" />
-      {m.label}
+      {t.status[status === "not_found" ? "notFound" : status === "needs_review" ? "needsReview" : status]}
     </span>
   );
 }
@@ -29,19 +31,21 @@ export const reviewerMeta: Record<ReviewerStatus, { label: string; cls: string }
 
 export function ReviewerBadge({ status }: { status: ReviewerStatus }) {
   const m = reviewerMeta[status];
+  const t = useCopy();
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs font-medium", m.cls)}>
       {status === "pending" ? <CircleDashed className="size-3.5" /> : <CheckCircle2 className="size-3.5" />}
-      {m.label}
+      {t.reviewer[status]}
     </span>
   );
 }
 
 export function SessionStatusBadge({ status }: { status: SessionStatus }) {
+  const t = useCopy();
   const map: Record<SessionStatus, { label: string; cls: string; Icon: typeof Clock }> = {
-    awaiting_processing: { label: "Ожидает обработки", cls: "bg-muted text-muted-foreground", Icon: Loader },
-    in_review: { label: "На рассмотрении", cls: "bg-primary-soft text-primary", Icon: Clock },
-    completed: { label: "Завершена", cls: "bg-secondary text-secondary-foreground", Icon: CheckCircle2 },
+    awaiting_processing: { label: t.session.awaiting, cls: "bg-muted text-muted-foreground", Icon: Loader },
+    in_review: { label: t.session.review, cls: "bg-primary-soft text-primary", Icon: Clock },
+    completed: { label: t.session.completed, cls: "bg-secondary text-secondary-foreground", Icon: CheckCircle2 },
   };
   const m = map[status];
   return (
@@ -60,10 +64,12 @@ export const recommendationMeta: Record<Recommendation, { label: string; short: 
 
 export function RecommendationBadge({ rec }: { rec: Recommendation }) {
   const m = recommendationMeta[rec];
+  const t = useCopy();
+  const short = rec === "revise" ? t.recommendation.reviseShort : rec === "manual_review" ? t.recommendation.manualShort : t.recommendation.acceptShort;
   return (
     <span className={cn(pill, m.cls)}>
       <span className={cn("size-1.5 rounded-full", m.dot)} />
-      {m.short}
+      {short}
     </span>
   );
 }
@@ -75,16 +81,17 @@ export const severityMeta: Record<Severity, { label: string; cls: string }> = {
 };
 
 export function DemoBadge({ className }: { className?: string }) {
+  const t = useCopy();
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning-soft px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning",
         className,
       )}
-      title="Все данные синтетические и не относятся к реальным организациям"
+      title={t.common.demoTitle}
     >
       <FlaskConical className="size-3" />
-      Демонстрационные данные
+      {t.landing.demoData}
     </span>
   );
 }

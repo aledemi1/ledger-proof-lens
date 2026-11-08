@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAccount } from "@/hooks/useAccount";
+import { useCopy } from "@/i18n/messages";
 import type { Account } from "@/lib/account";
 
 export function AdminPage() {
   const account = useAccount();
+  const t = useCopy();
   const [users, setUsers] = useState<Account[]>([]);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
@@ -19,7 +21,7 @@ export function AdminPage() {
     const response = await fetch("/api/admin/users", { credentials: "same-origin" });
     const payload = (await response.json().catch(() => ({}))) as Account[] | { error?: string };
     if (!response.ok) {
-      setError("error" in payload && payload.error ? payload.error : "Не удалось загрузить пользователей");
+      setError("error" in payload && payload.error ? payload.error : t.admin.loadFailed);
       return;
     }
     setUsers(Array.isArray(payload) ? payload : []);
@@ -40,7 +42,7 @@ export function AdminPage() {
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
-      setError(payload.error || "Не удалось создать пользователя");
+      setError(payload.error || t.admin.createFailed);
       return;
     }
     setEmail("");
@@ -58,7 +60,7 @@ export function AdminPage() {
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
-      setError(payload.error || "Не удалось сменить роль");
+      setError(payload.error || t.admin.roleFailed);
       return;
     }
     await load();
@@ -74,7 +76,7 @@ export function AdminPage() {
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
-      setError(payload.error || "Не удалось сменить пароль");
+      setError(payload.error || t.admin.passwordFailed);
       return;
     }
     setCurrentPassword("");
@@ -84,46 +86,46 @@ export function AdminPage() {
 
   if (account === undefined) return null;
   if (!account || account.role !== "admin") {
-    return <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-muted-foreground">Эта страница доступна администратору.</div>;
+    return <div className="mx-auto max-w-3xl px-4 py-10 text-sm text-muted-foreground">{t.admin.forbidden}</div>;
   }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Пользователи</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Администратор видит все проверки. Пользователь видит только свои.</p>
+      <h1 className="text-2xl font-semibold tracking-tight">{t.admin.title}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{t.admin.lead}</p>
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
       <ul className="mt-6 divide-y divide-border border-y border-border">
         {users.map((user) => (
           <li key={user.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div>
               <div className="text-sm font-medium">{user.email}</div>
-              <div className="text-xs text-muted-foreground">{user.role === "admin" ? "Администратор" : "Пользователь"}</div>
+              <div className="text-xs text-muted-foreground">{user.role === "admin" ? t.admin.admin : t.admin.user}</div>
             </div>
             <Button variant="outline" size="sm" onClick={() => void changeRole(user.id, user.role === "admin" ? "user" : "admin")}>
-              {user.role === "admin" ? "Сделать пользователем" : "Сделать администратором"}
+              {user.role === "admin" ? t.admin.makeUser : t.admin.makeAdmin}
             </Button>
           </li>
         ))}
       </ul>
       <form onSubmit={(event) => void create(event)} className="mt-8 grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="new-email">Новый аккаунт</Label>
+          <Label htmlFor="new-email">{t.admin.newAccount}</Label>
           <Input id="new-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </div>
-        <Input type="password" minLength={8} placeholder="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        <Input type="password" minLength={8} placeholder={t.admin.password} value={password} onChange={(event) => setPassword(event.target.value)} required />
         <select className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={role} onChange={(event) => setRole(event.target.value === "admin" ? "admin" : "user")}>
-          <option value="user">Пользователь</option>
-          <option value="admin">Администратор</option>
+          <option value="user">{t.admin.user}</option>
+          <option value="admin">{t.admin.admin}</option>
         </select>
-        <Button type="submit" className="sm:col-span-2">Создать</Button>
+        <Button type="submit" className="sm:col-span-2">{t.admin.create}</Button>
       </form>
       <form onSubmit={(event) => void changeOwnPassword(event)} className="mt-8 grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="current-password">Сменить свой пароль</Label>
-          <Input id="current-password" type="password" placeholder="Текущий пароль" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+          <Label htmlFor="current-password">{t.admin.changePassword}</Label>
+          <Input id="current-password" type="password" placeholder={t.admin.current} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
         </div>
-        <Input type="password" minLength={8} placeholder="Новый пароль" value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} required />
-        <Button type="submit" variant="outline">Сохранить пароль</Button>
+        <Input type="password" minLength={8} placeholder={t.admin.next} value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} required />
+        <Button type="submit" variant="outline">{t.admin.savePassword}</Button>
       </form>
     </div>
   );

@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/hooks/useAccount";
+import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import { useCopy } from "@/i18n/messages";
 import { loadAccount } from "@/lib/account";
 import sverkoIcon from "@/assets/sverko-icon.jpg";
 
@@ -24,6 +26,7 @@ function Logo() {
 
 function AccountLinks({ compact = false }: { compact?: boolean }) {
   const account = useAccount();
+  const t = useCopy();
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     await loadAccount();
@@ -32,7 +35,7 @@ function AccountLinks({ compact = false }: { compact?: boolean }) {
   if (!account) {
     return (
       <Button asChild variant="ghost" size="sm">
-        <Link to="/login"><LogIn className="size-4" />{compact ? null : "Войти"}</Link>
+        <Link to="/login"><LogIn className="size-4" />{compact ? null : t.nav.login}</Link>
       </Button>
     );
   }
@@ -40,11 +43,11 @@ function AccountLinks({ compact = false }: { compact?: boolean }) {
     <div className="flex items-center gap-1">
       {account.role === "admin" && (
         <Button asChild variant="ghost" size="sm">
-          <Link to="/admin"><Users className="size-4" />{compact ? null : "Пользователи"}</Link>
+          <Link to="/admin"><Users className="size-4" />{compact ? null : t.nav.users}</Link>
         </Button>
       )}
       {!compact && <span className="max-w-40 truncate px-2 text-xs text-muted-foreground">{account.email}</span>}
-      <Button variant="ghost" size="sm" onClick={() => void logout()}>{compact ? "Выход" : "Выйти"}</Button>
+      <Button variant="ghost" size="sm" onClick={() => void logout()}>{compact ? t.nav.exit : t.nav.logout}</Button>
     </div>
   );
 }
@@ -52,10 +55,11 @@ function AccountLinks({ compact = false }: { compact?: boolean }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const account = useAccount();
+  const t = useCopy();
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  const items = account?.role === "admin" ? [...nav, { to: "/admin" as const, label: "Пользователи", Icon: Users, exact: true }] : nav;
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Проверки</Link></Button><AccountLinks /></div></div></header><main>{children}</main></div>;
+  const items = account?.role === "admin" ? [...nav, { to: "/admin" as const, label: t.nav.users, Icon: Users, exact: true }] : nav;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />{t.nav.audits}</Link></Button><AccountLinks /><LocaleSwitcher /></div></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>
@@ -66,13 +70,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={to}
               to={to}
               activeOptions={{ exact }}
-              aria-label={label}
+              aria-label={to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users}
               title={workspace ? label : undefined}
               className={cn("group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent", workspace && "h-10 justify-center")}
               activeProps={{ className: "bg-sidebar-accent font-medium text-sidebar-accent-foreground" }}
             >
               <Icon className="size-4" />
-              {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{label}</span> : label}
+              {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : label}</span> : (to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users)}
             </Link>
           ))}
         </nav>
@@ -86,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={to}
               to={to}
               activeOptions={{ exact }}
-              aria-label={label}
+              aria-label={to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users}
               className={cn("grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent")}
               activeProps={{ className: "bg-accent text-accent-foreground" }}
             >
@@ -94,8 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
           <AccountLinks compact />
+          <LocaleSwitcher />
         </nav>
       </header>
+      {!home && <div className="no-print fixed right-3 top-2 z-50 hidden md:block"><LocaleSwitcher /></div>}
       <main className="min-w-0 flex-1">{children}</main>
     </div>
   );

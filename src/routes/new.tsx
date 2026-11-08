@@ -1,16 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { copy } from "@/i18n/messages";
+import { localeFromMatches } from "@/i18n/use-locale";
 import { NewAuditPage } from "@/pages/NewAuditPage";
 
 export const Route = createFileRoute("/new")({
-  head: () => ({
+  head: ({ matches }) => {
+    const meta = copy[localeFromMatches(matches)].meta;
+    return {
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { title: "Новая проверка — Sverko" },
-      { name: "description", content: "Начните с отчёта: название подставится из имени файла." },
-      { property: "og:title", content: "Новая проверка — Sverko" },
-      { property: "og:description", content: "Загрузка отчёта и первичных документов для сверки." },
+      { title: meta.newTitle },
+      { name: "description", content: meta.newDescription },
+      { property: "og:title", content: meta.newTitle },
+      { property: "og:description", content: meta.newDescription },
     ],
-  }),
+    };
+  },
   component: NewAuditPage,
 });

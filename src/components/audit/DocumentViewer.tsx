@@ -3,7 +3,8 @@ import { FileSpreadsheet, FileText, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkProvider, SyntheticPage } from "./SyntheticDocument";
 import { FlowView, GridView, ImageView, PdfView, type MarkLayer } from "./RealDocument";
-import { docTypeLabel } from "@/lib/documentTypes";
+import { docText } from "@/i18n/labels";
+import { useCopy } from "@/i18n/messages";
 import type { DocMark } from "@/lib/marks";
 import type { AuditDocument, CheckStatus, EvidenceReference } from "@/types/audit";
 
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function DocumentViewer(p: Props) {
+  const t = useCopy();
   const doc = p.doc;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -90,16 +92,16 @@ export function DocumentViewer(p: Props) {
             <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
               {isSheet ? <FileSpreadsheet className="size-4" /> : <FileText className="size-4" />}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={doc?.name}>{doc?.name ?? "Документ не выбран"}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={doc?.name}>{doc?.name ?? t.work.noDocument}</span>
           </>
         )}
-        {doc && !p.title && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docTypeLabel[doc.type]}</span>}
+        {doc && !p.title && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docText(t, doc.type)}</span>}
         {scalable && (
           <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.2) * 10) / 10))} aria-label="Уменьшить">
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.2) * 10) / 10))} aria-label={t.work.zoomOut}>
               <ZoomOut />
             </Button>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.min(2.4, Math.round((value + 0.2) * 10) / 10))} aria-label="Увеличить">
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.min(2.4, Math.round((value + 0.2) * 10) / 10))} aria-label={t.work.zoomIn}>
               <ZoomIn />
             </Button>
           </div>
@@ -119,7 +121,7 @@ export function DocumentViewer(p: Props) {
 
       <div ref={isGrid ? undefined : scrollRef} className={isGrid ? "relative min-h-0 flex-1 overflow-hidden" : "document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3"}>
         {!doc ? (
-          <Empty text={p.emptyText ?? "Выберите документ для просмотра."} />
+          <Empty text={p.emptyText ?? t.work.pickDocument} />
         ) : doc.preview.kind === "none" ? (
           <Empty text={doc.preview.reason} />
         ) : doc.preview.kind === "grid" ? (

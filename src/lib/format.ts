@@ -1,6 +1,9 @@
-export function formatDate(iso: string, withTime = false) {
+import type { Locale } from "@/i18n/locales";
+import { LOCALE_INTL } from "@/i18n/locales";
+
+export function formatDate(iso: string, withTime = false, locale: Locale = "ru") {
   const d = new Date(iso);
-  return d.toLocaleDateString("ru-RU", {
+  return d.toLocaleDateString(LOCALE_INTL[locale], {
     day: "2-digit",
     month: "short",
     year: "numeric",

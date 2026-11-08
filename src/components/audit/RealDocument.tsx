@@ -1,6 +1,8 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { EvidenceReference, FlowBlock, GridCell, GridSheet } from "@/types/audit";
 import type { DocMark } from "@/lib/marks";
+import { fill } from "@/i18n/fill";
+import { useCopy } from "@/i18n/messages";
 import { cn } from "@/lib/utils";
 
 export interface MarkLayer {
@@ -60,6 +62,7 @@ function sheetMatrix(sheet: GridSheet): { cells: Map<string, GridCell>; columns:
 }
 
 export function GridView({ sheets, layer, scrollRef }: { sheets: GridSheet[]; layer: MarkLayer; scrollRef: RefObject<HTMLDivElement | null> }) {
+  const t = useCopy();
   const activeKey = layer.active ?? "";
   const marked = sheets.findIndex((sheet) => sheet.rows.some((row) => row.cells.some((cell) => cell.anchor === activeKey)));
   const [seen, setSeen] = useState(activeKey);
@@ -77,7 +80,7 @@ export function GridView({ sheets, layer, scrollRef }: { sheets: GridSheet[]; la
         {sheet ? <ExcelSheet sheet={sheet} layer={layer} /> : null}
       </div>
       {sheets.length > 0 && (
-        <div className="flex items-end gap-px overflow-x-auto border-t border-[#b4b4b4] bg-[#f3f3f3] px-1 pt-1" role="tablist" aria-label="Листы книги">
+        <div className="flex items-end gap-px overflow-x-auto border-t border-[#b4b4b4] bg-[#f3f3f3] px-1 pt-1" role="tablist" aria-label={t.work.sheets}>
           {sheets.map((item, itemIndex) => (
             <button
               key={item.name}
@@ -116,6 +119,7 @@ function columnWidths(sheet: GridSheet, columns: number, cells: Map<string, Grid
 }
 
 function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
+  const t = useCopy();
   const { cells, columns, rows } = sheetMatrix(sheet);
   const [widths, setWidths] = useState(() => columnWidths(sheet, columns, cells));
   const [sheetName, setSheetName] = useState(sheet.name);
@@ -159,7 +163,7 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
       {letters.map((letter, index) => (
         <div key={letter} className={cn("excel-col", index + 1 === activeColumn && "excel-axis-active")}>
           {letter}
-          <span className="excel-resize" role="separator" aria-orientation="vertical" aria-label={`Ширина столбца ${letter}`} onPointerDown={(event) => startResize(index, event)} />
+          <span className="excel-resize" role="separator" aria-orientation="vertical" aria-label={fill(t.work.columnWidth, { letter })} onPointerDown={(event) => startResize(index, event)} />
         </div>
       ))}
       {Array.from({ length: rows }, (_, offset) => {
@@ -258,6 +262,7 @@ export function ImageView({ url, layer, focus, zoom }: { url: string; layer: Mar
 }
 
 export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkLayer; focus: EvidenceReference | null; zoom: number }) {
+  const t = useCopy();
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<{ page: number; src: string; width: number; height: number }[]>([]);
 
@@ -271,7 +276,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
         const worker = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
         pdfjs.GlobalWorkerOptions.workerSrc = worker.toString();
         const response = await fetch(url, { credentials: "same-origin" });
-        if (!response.ok) throw new Error("Не удалось открыть файл");
+        if (!response.ok) throw new Error(t.work.fileOpenFailed);
         const data = new Uint8Array(await response.arrayBuffer());
         const pdf = await pdfjs.getDocument({ data }).promise;
         const rendered: { page: number; src: string; width: number; height: number }[] = [];
@@ -289,7 +294,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
         }
         if (!cancelled) setPages(rendered);
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось показать PDF");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : t.work.pdfFailed);
       }
     })();
     return () => {
@@ -298,7 +303,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
   }, [url]);
 
   if (error) return <p className="p-6 text-center text-sm text-muted-foreground">{error}</p>;
-  if (!pages.length) return <p className="p-6 text-center text-sm text-muted-foreground">Открываю документ…</p>;
+  if (!pages.length) return <p className="p-6 text-center text-sm text-muted-foreground">{t.work.opening}</p>;
   return (
     <div className="mx-auto flex flex-col gap-4" style={{ width: `${zoom * 100}%`, maxWidth: Math.round((pages[0]?.width ?? 600) * zoom) }}>
       {pages.map((page) => (
