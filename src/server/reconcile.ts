@@ -720,6 +720,10 @@ function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: { id: s
     });
   }
 
+  if (fact.role === "item_name") {
+    const listed = found.filter((source) => sameItem(fact.raw, source.raw));
+    if (listed.length) return matched(base, fact, listed, `«${fact.raw}» есть в перечне наименований первичных документов. Остальные строки этого перечня — другие позиции.`);
+  }
   if (canSum(fact.role, found)) {
     return summed(base, fact, found);
   }
@@ -808,6 +812,7 @@ function confirms(report: Fact, source: Fact): boolean {
   if (report.role === "contract_number" && report.parsed.kind === "id" && source.parsed.kind === "id" && !sameToken(report.parsed.token, source.parsed.token) && source.docKind !== "contract") return false;
   if ((report.role === "counterparty" || report.role === "inn") && /ооо|ао|пао|зао|ип\b/i.test(report.raw) && !/ооо|ао|пао|зао|ип\b/i.test(source.raw) && source.role === "counterparty") return false;
   if ((report.role === "line_total" || report.role === "unit_price") && source.docKind === "contract" && !source.item && !/договор/i.test(report.label)) return false;
+  if (report.role === "item_name" && !sameItem(report.raw, source.raw)) return false;
   if (report.role === "text" && !similarText(report.label, source.label)) return false;
   if ((report.role === "inn" || report.role === "counterparty") && partySide(report.label) !== "any") {
     const got = partySide(`${source.label} ${source.fragment.text}`);

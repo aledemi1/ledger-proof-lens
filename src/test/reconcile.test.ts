@@ -76,6 +76,34 @@ describe("document reconciliation", () => {
     expect(cost?.evidenceReferences[0]?.pageNumber).toBe(2);
   });
 
+  it("matches one report name against the same row in a catalog", async () => {
+    const report = await prepare(
+      "Отчет_имена.xlsx",
+      tableFile("Оборудование", [
+        ["Наименование", "Ед.", "Количество"],
+        ["Дозатор ДЭ-100", "шт.", "1"],
+        ["Весы ВА-220", "шт.", "1"],
+      ]),
+      true,
+    );
+    const spec = await prepare(
+      "Спецификация.xlsx",
+      tableFile("Оборудование", [
+        ["Наименование", "Ед.", "Количество"],
+        ["Дозатор ДЭ-100", "шт.", "1"],
+        ["Весы ВА-220", "шт.", "1"],
+        ["Центрифуга ЦЛ-6", "шт.", "1"],
+      ]),
+      false,
+    );
+    const names = reconcile(report, [spec], []).filter((check) => /наименован/i.test(check.fieldName));
+    expect(names.map((check) => `${check.fieldName}=${check.status}:${check.reportValue}`).join(" | ")).toContain("ДЭ-100");
+    expect(names.every((check) => check.status === "match")).toBe(true);
+    const dispenser = names.find((check) => check.reportValue.includes("ДЭ-100"));
+    expect(dispenser?.sourceValue).toContain("ДЭ-100");
+    expect(dispenser?.sourceValue).not.toContain("ВА-220");
+  });
+
   it("sums partial waybills and ignores a duplicate file", async () => {
     const report = await prepare(
       "Отчет_части.xlsx",
