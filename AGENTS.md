@@ -38,3 +38,4 @@ use the editor.
 
 - Keep route-aware navigation in AppShell: homepage uses a compact top bar and review workspaces use an icon rail to reserve space for evidence.
 - Landing evidence previews are filtered views of synthetic pages obtained through auditService, with existing evidence anchors; do not duplicate document values.
+- Use the generated Sverko document-check icon for the homepage identity and derive the public favicon from the same source so browser and page branding stay consistent.

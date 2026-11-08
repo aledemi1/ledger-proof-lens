@@ -2,6 +2,8 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { FolderOpen, Plus, ScanSearch } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import sverkoIcon from "@/assets/sverko-icon.jpg";
 
 const nav = [
   { to: "/", label: "Главная", Icon: ScanSearch, exact: true },
@@ -12,10 +14,8 @@ const nav = [
 function Logo() {
   return (
     <Link to="/" className="flex items-center gap-2 px-2">
-      <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
-        <ScanSearch className="size-4" />
-      </span>
-      <span className="text-[15px] font-semibold tracking-tight">Sverko</span>
+      <img src={sverkoIcon} width={32} height={32} alt="" className="size-8 rounded-md" />
+      <span className="text-xl font-semibold">Sverko</span>
     </Link>
   );
 }
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Link to="/audits" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary"><FolderOpen className="size-4" />Проекты</Link></div></header><main>{children}</main></div>;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Мои проверки</Link></Button></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>
