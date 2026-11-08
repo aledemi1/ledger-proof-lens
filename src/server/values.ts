@@ -20,8 +20,8 @@ const ROLE_RULES: { role: Role; re: RegExp }[] = [
   { role: "counterparty", re: /поставщик|контрагент|исполнитель|покупатель|заказчик|грузоотправитель|грузополучатель|supplier|vendor|customer|buyer|lieferant|kunde|fournisseur|acheteur|fornitore|cliente|proveedor|comprador|fornecedor|dostawca|odbiorca|leverancier|koper|tedarikçi|alıcı|供应商|买方/i },
   { role: "transport", re: /транспорт|доставк|перевоз|transport|delivery|shipping|fracht|lieferung|livraison|trasporto|transporte|przewóz|przewoz|vervoer|nakliye|运输/i },
   { role: "unit_price", re: /цена|тариф|стоимость\s+единиц|за\s+единиц|unit\s*price|\bprice\b|\brate\b|\bprijs\b|\btarif|\btariff|\btarief\b|preis|prix|precio|prezzo|preço|preco|cena jedn|\bcena\b|stukprijs|taryfa|birim fiyat|\bfiyat\b|\bpre[cç]o\b|费率|单价/i },
-  { role: "quantity", re: /кол-?во|количество|поставлено|число\s+единиц|объ[её]м|quantity|qty|volume|volumen|umfang|omvang|hacim|accepted|received|geaccepteerd|angenommen|akzeptiert|abzüglich|abzuglich|accept[eé]|d[eé]duction|aceptado|aceito|aceite|accettato|przyj[eę]t|ontvangen|kabul|\breceipt\b|\bbalance\b|\bhours\b|\bkm\b|menge|cantidad|quantité|quantite|quantità|quantita|quantidade|ilość|ilosc|hoeveelheid|miktar|数量|体积|验收|已收|приход|остаток/i },
-  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*(?:ндс|vat\b)|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
+  { role: "quantity", re: /кол-?во|количество|поставлено|число\s+единиц|объ[её]м|quantity|qty|volume|volumen|umfang|omvang|hacim|accepted|received|geaccepteerd|angenommen|akzeptiert|abzüglich|abzuglich|accept[eé]|d[eé]duction|aceptado|aceito|aceite|accettato|przyj[eę]t|ontvangen|kabul|wareneingang|eingang|entrada|entr[eé]e|przych[oó]d|przychod|\breceipt\b|\bbalance\b|\bhours\b|\bkm\b|menge|cantidad|quantité|quantite|quantità|quantita|quantidade|ilość|ilosc|hoeveelheid|miktar|数量|体积|验收|已收|приход|остаток/i },
+  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|insgesamt|gesamt|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*(?:ндс|vat\b)|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
   { role: "date", re: /(^|[^\p{L}])(дата|date|datum|fecha|data|tarih\w*|日期)(?=[^\p{L}]|$)/iu },
   { role: "item_name", re: /наименование|номенклатур|товар|оборудован|услуг|description|bezeichnung|désignation|designation|denominazione|denomina|descrizione|descrição|descricao|nazwa|benaming|omschrijving|açıklama|aciklama|名称|品名|(?<![\p{L}])item(?!\s*code)/iu },
 ];
@@ -129,7 +129,7 @@ function cleanupUnit(unit: string): string {
   if (u.startsWith("компл") || u.startsWith("набор") || /^set$|^kit$/.test(u)) return "компл.";
   if (u.startsWith("час") || /^hours?|^hrs|^std|^uur|^saat/.test(u)) return "час";
   if (u.startsWith("месяц") || u.startsWith("мес") || /^months?|^monat|^mois|^mesi|^mes(?:es)?|^ay\b|^miesi|^maand/.test(u)) return "месяц";
-  if (u.startsWith("чел") || /^people|^persons?|^kişi|^kisi/.test(u)) return "чел.";
+  if (u.startsWith("чел") || /^people|^persons?|^personas|^persone|^personnes|^os[oó]b|^osoby|^personne|^personen|^menschen|^kişi|^kisi|^人/.test(u)) return "чел.";
   if (u.startsWith("усл") || /^service|^dienst|^hizmet|^服务/.test(u)) return "усл.";
   if (u.startsWith("мг") || u === "mg") return "мг";
   return unit.trim();
@@ -151,7 +151,7 @@ const MONTHS: Record<string, string> = {
 };
 
 export function isQuantityUnit(unit: string): boolean {
-  return /шт|компл|набор|час|месяц|^мес\.?$|чел|усл|мг|^mg$|pcs|piece|stk|st(?:ü|ue)ck|szt|pi[eè]ce|unid|adet|pz\b|stuk|hours?|hrs|std|uur|saat|months?|monat|mois|mesi|meses|ay\b|miesi|maand|service|dienst|hizmet|服务|件|个|^km$|^км$/i.test(unit.trim());
+  return /шт|компл|набор|час|месяц|^мес\.?$|чел|усл|мг|^mg$|pcs|piece|stk|st(?:ü|ue)ck|szt|pi[eè]ce|unid|adet|pz\b|stuk|hours?|hrs|std|uur|saat|months?|monat|mois|mesi|meses|ay\b|miesi|maand|service|dienst|hizmet|people|person|os[oó]b|menschen|kişi|kisi|服务|件|个|^km$|^км$/i.test(unit.trim());
 }
 
 export function isMoneyUnit(unit: string): boolean {
@@ -199,9 +199,9 @@ export type VatBasis = "net" | "gross" | "tax" | "unknown";
 /** Whether a money label is the net amount, the gross amount, or the tax itself. */
 export function vatBasis(label: string): VatBasis {
   const text = label.toLowerCase().replace(/ё/g, "е");
-  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|^vat\b|mwst|tva|\biva\b|\bbtw\b|\bkdv\b|增值税|税额/.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|\bbez\b|mit\s|met\s|avec\s|\bcon\s|\bcom\s|不含|含/.test(text)) return "tax";
+  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|^vat\b|^nds\b|mwst|tva|\biva\b|\bbtw\b|\bkdv\b|增值税|税额/.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|\bbez\b|mit\s|met\s|avec\s|\bcon\s|\bcom\s|不含|含/.test(text)) return "tax";
   if (/без\s*ндс|без\s+налога|excl\.?\s*vat|without|excluding|ohne|zonder|\bbez\b|netto|sin\s|hors\s|senza|sem\s|excl\.?\s*btw|hari[cç]|haric|不含/.test(text)) return "net";
-  if (/с\s*ндс|включая\s+ндс|incl\.?\s*vat|including|avec\s|\bcom\s|con\s|brutto|\bmet\s|mit\s+(?:mwst|ндс|vat)|z\s*(?:ндс|vat\b)|ttc|dahil|含/.test(text) && !/不含|zonder|without|ohne|sin\s|sem\s|hors\s|excl|hari[cç]|haric|senza|\bbez\b/.test(text)) return "gross";
+  if (/с\s*ндс|включая\s+ндс|incl\.?\s*vat|including|avec\s|\bcom\s|con\s|brutto|\bmet\s|mit\s+(?:mwst|ндс|nds|vat)|z\s*(?:ндс|nds|vat\b)|ttc|dahil|含/.test(text) && !/不含|zonder|without|ohne|sin\s|sem\s|hors\s|excl|hari[cç]|haric|senza|\bbez\b/.test(text)) return "gross";
   return "unknown";
 }
 

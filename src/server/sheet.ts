@@ -166,7 +166,7 @@ export function readGrid(
         const extra: Partial<Fragment> = { columnHeader: header };
         if (item && role !== "item_name") extra.rowLabel = item;
         const quantityColumn = role === "quantity" || headerWord.qty.test(header);
-        const bareUnit = row.find((cell) => /^(шт\.?|компл\.?|набор\w*|час\.?|месяц\w*|человек|чел\.?|усл\.?|мг|pcs\.?|pieces?|hours?|months?|service|stk\.?|件|个)$/i.test(cell.text.trim()));
+        const bareUnit = row.find((cell) => /^(шт\.?|компл\.?|набор\w*|час\.?|месяц\w*|человек|чел\.?|persons?|personas|persone|personnes|os[oó]b\w*|personen|menschen|personne|kişi|усл\.?|мг|pcs\.?|pieces?|hours?|months?|service|stk\.?|szt\.?|件|个)$/i.test(cell.text.trim()));
         if (quantityColumn && unit) extra.unitHint = unit;
         else if (quantityColumn && /^часы?$|^hours?$/i.test(header)) extra.unitHint = "час";
         else if (quantityColumn && bareUnit) extra.unitHint = bareUnit.text.trim();

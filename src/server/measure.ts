@@ -82,8 +82,11 @@ export function parseRestatedPrice(text: string): { item: string; price: string 
 }
 
 export function parseRestatedDeadline(text: string): string | null {
-  if (!/срок\s+поставк|delivery\s+(?:period|deadline)|lieferfrist|délai\s+de\s+livraison|delai\s+de\s+livraison|termine\s+di\s+consegna|plazo\s+de\s+entrega|termin\s+dostawy|levertermijn|teslim\s+süresi|teslim\s+suresi|交货期/i.test(text)) return null;
-  return text.match(/(\d{2}\.\d{2}\.\d{4})/)?.[1] ?? null;
+  if (!/срок[\s\S]{0,40}?поставк|delivery[\s\S]{0,40}?(?:period|deadline)|lieferfrist|d[eé]lai[\s\S]{0,40}?livraison|termine[\s\S]{0,40}?consegna|plazo[\s\S]{0,40}?entrega|termin[\s\S]{0,40}?dostaw|levertermijn|teslim[\s\S]{0,40}?s[uü]resi|交货期/i.test(text)) return null;
+  const numeric = text.match(/(\d{2}\.\d{2}\.\d{4})/)?.[1];
+  if (numeric) return numeric;
+  const named = text.match(/(\d{1,2}\s+\p{L}+\s+\d{4})/u)?.[1];
+  return named && parseDate(named) ? named : null;
 }
 
 /** Pieces that make one kit, taken from a sentence in any document, keyed by product code. */

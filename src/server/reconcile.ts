@@ -234,7 +234,7 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
       if (stated && service) facts.push(makeFact(doc, kind, docNumber, "line_total", "Сумма с НДС", stated, fragment, service));
     }
   }
-  const people = doc.read.fragments.filter((fragment) => fragment.shape === "table" && /участник|фио|слушател|participant|attendee|teilnehmer|partecipant|uczestnik|deelnemer|katılımcı|katilimci|姓名/i.test(fragment.columnHeader ?? "") && /[A-Za-zА-Яа-яЁё]{2,}/.test(fragment.text));
+  const people = doc.read.fragments.filter((fragment) => fragment.shape === "table" && /участник|фио|слушател|participant|attendee|teilnehmer|partecipant|uczestnik|deelnemer|katılımcı|katilimci|姓名/i.test(fragment.columnHeader ?? "") && /\p{L}{2,}/u.test(fragment.text));
   const firstPerson = people[0];
   if (people.length >= 2 && firstPerson) facts.push(makeFact(doc, kind, docNumber, "quantity", "Число участников", `${people.length} чел.`, firstPerson));
   return inherit(facts, doc.read.text);
@@ -369,7 +369,7 @@ function isService(fact: Fact): boolean {
 }
 
 function isTotalRow(fact: Fact): boolean {
-  return /^(итого|всего|total|summe|suma|totale|toplam|totaal|gesamt|合计|总计)/i.test(`${fact.item ?? ""} ${fact.fragment.rowLabel ?? ""} ${fact.fragment.text}`);
+  return /^(итого|всего|total|summe|insgesamt|suma|totale|toplam|totaal|gesamt|合计|总计)/i.test(`${fact.item ?? ""} ${fact.fragment.rowLabel ?? ""} ${fact.fragment.text}`);
 }
 
 function orgTokens(name: string): string[] {
@@ -386,8 +386,9 @@ function innBeside(text: string, inn: string, token: string): boolean {
 }
 
 function mentionsItem(item: string, source: Fact): boolean {
+  const generic = /^(?:итого|всего|total|summe|insgesamt|gesamt|suma|totale|toplam|totaal|razem|zusammen|合计|总计)$/i;
+  if (generic.test(item.trim()) && source.item && generic.test(source.item.trim())) return true;
   if (source.item && sameItem(item, source.item)) {
-    const generic = /^(?:итого|всего|total|summe|suma|totale|toplam|totaal|gesamt|razem|zusammen|合计|总计)$/i;
     if (generic.test(item.trim()) !== generic.test(source.item.trim())) return false;
     return true;
   }
@@ -401,7 +402,7 @@ function mentionsItem(item: string, source: Fact): boolean {
     { report: /сертификац|certificat|zertifiz|认证/, doc: /сертификац/ },
     { report: /пусконалад|commission|inbetrieb|调试/, doc: /пусконалад/ },
     { report: /перевоз|transport|fracht|vervoer|nakliye|运输/, doc: /перевоз/ },
-    { report: /обучен|train|schulung|formation|formazione|formación|szkol|eğitim|egitim|培训/, doc: /обучен|протокол/ },
+    { report: /обучен|train|schulung|formation|formazione|formación|szkol|capacita|participant|uczestnik|teilnehmer|deelnemer|katılımcı|katilimci|eğitim|egitim|培训/, doc: /обучен|протокол/ },
     { report: /монтаж|install|montage|安装/, doc: /монтаж/ },
   ];
   const name = normText(item);
@@ -510,7 +511,11 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
   let pool = found.filter((source) => inPeriod(fact, source));
   if (focused === "stock") {
     pool = pool.filter((source) => /склад|остат/i.test(`${source.docName} ${source.fragment.sheet ?? ""}`));
-    const affinity = /оприходован|приход|поступил/i.test(fact.label) ? /приход|поступ|оприход/i : /остат/i.test(fact.label) ? /остат/i : /возврат/i.test(fact.label) ? /возврат/i : null;
+    const affinity = /оприходован|приход|поступил|eingebucht|gebucht|registrad|registrat|enregistr|recorded|przyj[eę]t|posted/i.test(fact.label)
+      ? /приход|поступ|оприход|wareneingang|eingang|entrada|entr[eé]e|przych[oó]d|przychod|receipt|入库/i
+      : /остат|bestand|saldo|\bstan\b|balance/i.test(fact.label) ? /остат|bestand|saldo|\bstan\b|balance/i
+      : /возврат|rückgabe|devoluci|zwrot/i.test(fact.label) ? /возврат|rückgabe|ruckgabe|devoluci|zwrot/i
+      : null;
     if (affinity) {
       const narrowed = pool.filter((source) => affinity.test(`${source.fragment.columnHeader ?? ""} ${source.label}`));
       if (narrowed.length) pool = narrowed;
@@ -538,8 +543,10 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     else if (contractual.length) pool = contractual;
   }
   if (fact.role === "date" && /срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(fact.label)) {
-    const amended = pool.filter((source) => /допсоглашен/i.test(source.docName));
+    const stated = pool.filter((source) => source.label === "Срок поставки");
+    const amended = (stated.length ? stated : pool).filter((source) => /допсоглашен/i.test(source.docName));
     if (amended.length) pool = amended;
+    else if (stated.length) pool = stated;
   }
   if (fact.role === "line_total" && isService(fact)) {
     const journal = pool.filter((source) => /журнал/i.test(source.docName));
@@ -841,7 +848,12 @@ function confirms(report: Fact, source: Fact): boolean {
   if (!report.item && (report.role === "quantity" || report.role === "unit_price")) {
     const words = normText(report.label).split(" ").filter((word) => word.length > 5 && !/договор|поставк|оборудован|количеств|стоимост|учетом|изменен/.test(word));
     const blob = normText(`${source.label} ${source.item ?? ""} ${source.fragment.text}`);
-    if (words.length && !words.some((word) => blob.includes(word)) && !similarText(report.label, source.label)) return false;
+    const mentioned = (word: string) => {
+      if (blob.includes(word)) return true;
+      const stem = word.slice(0, 5);
+      return stem.length >= 5 && blob.split(" ").some((part) => part.length >= 5 && (part.includes(stem) || word.includes(part.slice(0, 5))));
+    };
+    if (words.length && !words.some(mentioned) && !similarText(report.label, source.label)) return false;
   }
   if (report.role === "quantity" && report.parsed.kind === "quantity" && source.parsed.kind === "quantity") {
     if (!sameUnit(report.parsed.unit, source.parsed.unit) && scaleToUnit(source.parsed.minor, source.parsed.unit, report.parsed.unit, `${report.item ?? ""} ${source.item ?? ""}`, kitFactors([source.docText, report.docText])) == null) return false;
