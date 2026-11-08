@@ -4,6 +4,8 @@ import { ArrowRight, Clock, Wallet, ShieldCheck, Search, FileStack, Highlighter,
 import { Button } from "@/components/ui/button";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
 
+// Median time reduction in published DataSnipper/Trullion case studies (~50%).
+const SPEEDUP = 2;
 const rub = (n: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Math.round(n)) + " ₽";
 const num = (n: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Math.round(n));
 
@@ -19,9 +21,9 @@ function Field({ label, value, min, max, step, suffix, onChange }: { label: stri
 function SavingsCalculator() {
   const [reports, setReports] = useState(40);
   const [hoursManual, setHoursManual] = useState(3);
-  const [hoursWith, setHoursWith] = useState(1);
   const [rate, setRate] = useState(900);
-  const savedHours = Math.max(0, hoursManual - hoursWith) * reports;
+  const hoursWith = hoursManual / SPEEDUP;
+  const savedHours = (hoursManual - hoursWith) * reports;
   const savedMonth = savedHours * rate;
   return (
     <section id="savings" className="border-b border-border py-12">
@@ -30,13 +32,13 @@ function SavingsCalculator() {
           <p className="text-sm font-medium text-primary">Для руководителя</p>
           <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Сколько стоит ручная сверка в вашей компании</h2>
           <p className="mt-3 leading-relaxed text-muted-foreground">Ручная проверка — это часы сотрудников на поиск значений в актах, счетах и накладных. Укажите свои параметры: расчёт показывает время, которое высвобождается, если поиск источников и сопоставление берёт на себя Sverko, а за человеком остаётся решение.</p>
-          <p className="mt-3 text-xs text-muted-foreground">Значения по умолчанию — пример для иллюстрации, а не результаты измерений. Подставьте данные своей команды.</p>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Время со Sverko считается как ручное, делённое на {SPEEDUP}. Это медиана опубликованных кейсов аналогичных сервисов сверки (DataSnipper, Trullion): сокращение времени на проверку первичных документов на 40–90%, чаще всего — около 50%. Это ориентир по рынку, а не замер Sverko.</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-5 shadow-panel sm:p-6">
           <div className="space-y-5">
             <Field label="Отчётов на проверку в месяц" value={reports} min={5} max={300} step={5} suffix="шт." onChange={setReports} />
-            <Field label="Часов на один отчёт вручную" value={hoursManual} min={0.5} max={16} step={0.5} suffix="ч" onChange={(v) => { setHoursManual(v); if (hoursWith > v) setHoursWith(v); }} />
-            <Field label="Часов на отчёт с Sverko" value={hoursWith} min={0} max={hoursManual} step={0.25} suffix="ч" onChange={setHoursWith} />
+            <Field label="Часов на один отчёт вручную" value={hoursManual} min={0.5} max={16} step={0.5} suffix="ч" onChange={setHoursManual} />
+            <div className="flex items-baseline justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-sm"><span className="text-muted-foreground">Часов на отчёт с Sverko <span className="text-xs">(в {SPEEDUP} раза меньше)</span></span><span className="font-semibold tabular">{hoursWith.toFixed(2).replace(".", ",").replace(/,?0+$/, "")} ч</span></div>
             <Field label="Стоимость часа сотрудника" value={rate} min={300} max={5000} step={50} suffix="₽" onChange={setRate} />
           </div>
           <div className="mt-6 grid grid-cols-1 gap-3 border-t border-border pt-5 sm:grid-cols-3">
