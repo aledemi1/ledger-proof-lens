@@ -81,21 +81,9 @@ export function buildConclusionText(session: AuditSession, stats: ConclusionStat
   const mism = findings.filter((f) => f.status === "mismatch");
   const nf = findings.filter((f) => f.status === "not_found");
   const nr = findings.filter((f) => f.status === "needs_review");
-  if (mism.length) {
-    parts.push(
-      `Выявлены расхождения между представленными показателями и первичными отчётными документами по следующим позициям: ${mism
-        .map((f) => `«${lower(f.fieldName)}» (в отчёте ${f.reportValue}, в первичном документе ${f.sourceValue})`)
-        .join("; ")}.`,
-    );
-  }
-  if (nf.length) {
-    parts.push(
-      `Не найдено документальное подтверждение показателей: ${nf.map((f) => `«${lower(f.fieldName)}» (${f.reportValue})`).join(", ")}. Отсутствие подтверждения не означает ошибочность показателя, но требует представления подтверждающих документов.`,
-    );
-  }
-  if (nr.length) {
-    parts.push(`Требуют ручной проверки: ${nr.map((f) => `«${lower(f.fieldName)}»`).join(", ")}.`);
-  }
+  if (mism.length) parts.push(`Расхождений: ${mism.length}. Перечень и доказательства приведены в таблице и приложении.`);
+  if (nf.length) parts.push(`Без подтверждения: ${nf.length}. Отсутствие подтверждения не означает ошибочность показателя.`);
+  if (nr.length) parts.push(`Требуют ручной проверки: ${nr.length}.`);
   if (stats.unreviewed > 0) parts.push(`Не рассмотрено проверяющим замечаний: ${stats.unreviewed}.`);
   const recText: Record<Recommendation, string> = {
     revise: "Рекомендуется вернуть отчёт на доработку с устранением перечисленных замечаний.",

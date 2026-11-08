@@ -44,6 +44,8 @@ export interface GridCell {
 export interface GridSheet {
   name: string;
   rows: { index: number; cells: GridCell[] }[];
+  /** Column widths in pixels, taken from the workbook when it stored them. */
+  widths?: number[];
 }
 
 export interface FlowBlock {
@@ -109,6 +111,8 @@ export interface CheckResult {
   reviewerStatus: ReviewerStatus;
   reviewerComment: string;
   reviewedAt?: string;
+  /** A source the reviewer chose instead of the automatic one. Does not replace status. */
+  reviewerSource?: EvidenceReference;
 }
 
 export interface ReviewerDecision {
@@ -134,6 +138,16 @@ export interface AuditSession {
   fileErrors?: { fileName: string; reason: string }[];
   notices?: string[];
   incomplete?: boolean;
+  /** How this run differs from an earlier check of the same subject. */
+  recheck?: RecheckSummary;
+}
+
+export interface RecheckSummary {
+  previousSessionId: string;
+  previousTitle: string;
+  closed: number;
+  remaining: number;
+  appeared: number;
 }
 
 export interface Finding {
@@ -182,6 +196,8 @@ export interface NewDraftInput {
   description?: string | undefined;
   /** Stable across a double click so the server returns the same audit. */
   idempotencyKey?: string;
+  /** Earlier check this upload is meant to replace. */
+  previousSessionId?: string;
   report: NewDraftFile;
   supporting: NewDraftFile[];
 }
@@ -189,4 +205,6 @@ export interface NewDraftInput {
 export interface ReviewUpdate {
   reviewerStatus?: ReviewerStatus | undefined;
   reviewerComment?: string | undefined;
+  /** Pass null to clear a reviewer-chosen source. Omit to leave it unchanged. */
+  reviewerSource?: EvidenceReference | null | undefined;
 }

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { AuditDocument, AuditSession, CheckResult, Decision, DocumentType, ProcessingStage, ReviewerDecision, ReviewerStatus } from "@/types/audit";
+import type { AuditDocument, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import { withUrls, type PreviewDraft } from "./model";
 import { dataDir } from "./paths";
 
@@ -63,8 +63,16 @@ export function db(): DatabaseSync {
     );
   `);
   scopeCheckIdsToSession(next);
+  ensureColumn(next, "sessions", "previous_id", "TEXT");
+  ensureColumn(next, "sessions", "recheck", "TEXT");
+  ensureColumn(next, "reviews", "source_json", "TEXT");
   database = next;
   return next;
+}
+
+function ensureColumn(connection: DatabaseSync, table: string, name: string, definition: string): void {
+  const columns = connection.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((column) => column.name === name)) connection.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
 }
 
 function scopeCheckIdsToSession(connection: DatabaseSync): void {
@@ -107,6 +115,8 @@ interface SessionRow {
   file_errors: string | null;
   notices: string | null;
   decision: string | null;
+  previous_id: string | null;
+  recheck: string | null;
 }
 
 interface DocumentRow {
@@ -135,13 +145,14 @@ export function insertSession(input: {
   idempotencyKey: string;
   title: string;
   description?: string;
+  previousSessionId?: string;
 }): void {
   db()
     .prepare(
-      `INSERT INTO sessions (id, owner, idempotency_key, title, description, created_at, status, stage)
-       VALUES (?, ?, ?, ?, ?, ?, 'awaiting_processing', 'queued')`,
+      `INSERT INTO sessions (id, owner, idempotency_key, title, description, created_at, status, stage, previous_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'awaiting_processing', 'queued', ?)`,
     )
-    .run(input.id, input.owner, input.idempotencyKey, input.title, input.description ?? null, new Date().toISOString());
+    .run(input.id, input.owner, input.idempotencyKey, input.title, input.description ?? null, new Date().toISOString(), input.previousSessionId ?? null);
 }
 
 export function insertDocument(input: {
@@ -212,6 +223,10 @@ export function readSession(id: string): AuditSession | null {
   if (row.incomplete) session.incomplete = true;
   if (row.file_errors) session.fileErrors = JSON.parse(row.file_errors) as { fileName: string; reason: string }[];
   if (row.notices) session.notices = JSON.parse(row.notices) as string[];
+  if (row.recheck) {
+    const summary = JSON.parse(row.recheck) as RecheckSummary;
+    session.recheck = summary;
+  }
   return session;
 }
 
@@ -256,6 +271,7 @@ function readChecks(sessionId: string): CheckResult[] {
     reviewer_status: string;
     reviewer_comment: string;
     reviewed_at: string | null;
+    source_json: string | null;
   }[];
   const byId = new Map(reviews.map((review) => [review.check_id, review]));
   return rows.map((row) => {
@@ -268,6 +284,7 @@ function readChecks(sessionId: string): CheckResult[] {
       reviewerComment: review.reviewer_comment,
     };
     if (review.reviewed_at) next.reviewedAt = review.reviewed_at;
+    if (review.source_json) next.reviewerSource = JSON.parse(review.source_json) as EvidenceReference;
     return next;
   });
 }
@@ -329,6 +346,23 @@ export function saveOutcome(input: {
         JSON.stringify(input.notices),
         input.sessionId,
       );
+    const previousId = (connection.prepare("SELECT previous_id FROM sessions WHERE id = ?").get(input.sessionId) as { previous_id: string | null } | undefined)?.previous_id;
+    if (previousId && sessionOwner(previousId) === (connection.prepare("SELECT owner FROM sessions WHERE id = ?").get(input.sessionId) as { owner: string }).owner) {
+      const previous = readChecks(previousId);
+      const before = new Set(previous.filter((check) => check.status !== "match").map((check) => check.fieldName));
+      const after = new Set(input.checks.filter((check) => check.status !== "match").map((check) => check.fieldName));
+      let closed = 0;
+      let remaining = 0;
+      let appeared = 0;
+      for (const name of before) {
+        if (after.has(name)) remaining += 1;
+        else closed += 1;
+      }
+      for (const name of after) if (!before.has(name)) appeared += 1;
+      const title = (connection.prepare("SELECT title FROM sessions WHERE id = ?").get(previousId) as { title: string }).title;
+      const summary: RecheckSummary = { previousSessionId: previousId, previousTitle: title, closed, remaining, appeared };
+      connection.prepare("UPDATE sessions SET recheck = ? WHERE id = ?").run(JSON.stringify(summary), input.sessionId);
+    }
     connection.exec("COMMIT");
   } catch (error) {
     connection.exec("ROLLBACK");
@@ -336,19 +370,22 @@ export function saveOutcome(input: {
   }
 }
 
-export function saveReview(sessionId: string, checkId: string, status: ReviewerStatus, comment: string): void {
+export function saveReview(sessionId: string, checkId: string, status: ReviewerStatus, comment: string, source?: EvidenceReference | null): void {
   const exists = db().prepare("SELECT id FROM checks WHERE id = ? AND session_id = ?").get(checkId, sessionId);
   if (!exists) throw new Error("Показатель не найден");
+  const current = db().prepare("SELECT source_json FROM reviews WHERE session_id = ? AND check_id = ?").get(sessionId, checkId) as { source_json: string | null } | undefined;
+  const sourceJson = source === undefined ? (current?.source_json ?? null) : source ? JSON.stringify(source) : null;
   db()
     .prepare(
-      `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id, check_id) DO UPDATE SET
          reviewer_status = excluded.reviewer_status,
          reviewer_comment = excluded.reviewer_comment,
-         reviewed_at = excluded.reviewed_at`,
+         reviewed_at = excluded.reviewed_at,
+         source_json = excluded.source_json`,
     )
-    .run(sessionId, checkId, status, comment, new Date().toISOString());
+    .run(sessionId, checkId, status, comment, new Date().toISOString(), sourceJson);
 }
 
 export function clearReviews(sessionId: string): void {

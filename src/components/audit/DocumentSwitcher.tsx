@@ -15,6 +15,7 @@ export function DocumentSwitcher({
   counts,
   sourceIds,
   page,
+  duplicates,
 }: {
   documents: AuditDocument[];
   activeId: string | null;
@@ -22,6 +23,7 @@ export function DocumentSwitcher({
   counts: Map<string, Record<CheckStatus, number>>;
   sourceIds: Set<string>;
   page?: number | undefined;
+  duplicates?: Set<string>;
 }) {
   const active = documents.find((d) => d.id === activeId);
   return (
@@ -30,6 +32,7 @@ export function DocumentSwitcher({
         <Button variant="ghost" size="sm" className="h-8 min-w-0 flex-1 justify-start gap-2 px-2" aria-label="Выбрать документ">
           <FileText className="shrink-0 text-muted-foreground" />
           <span className="truncate font-medium">{active?.name ?? "Документ не выбран"}</span>
+          {active && duplicates?.has(active.name) ? <span className="shrink-0 rounded bg-warning-soft px-1 text-[10px] font-semibold text-warning" title="Этот файл повторяет уже учтённый документ и не увеличивает суммы">копия</span> : null}
           {page ? <span className="shrink-0 text-xs text-muted-foreground">· стр. {page}</span> : null}
           <span className="shrink-0 text-xs text-muted-foreground">{documents.length > 1 ? `· ещё ${documents.length - 1}` : ""}</span>
           <ChevronDown className="ml-auto shrink-0 opacity-60" />
@@ -43,6 +46,7 @@ export function DocumentSwitcher({
             <DropdownMenuItem key={doc.id} onSelect={() => onSelect(doc.id)} className={cn("flex-col items-start gap-0.5", doc.id === activeId && "bg-accent")}>
               <span className="flex w-full items-center gap-2 text-sm">
                 <span className="truncate">{doc.name}</span>
+                {duplicates?.has(doc.name) ? <span className="shrink-0 rounded bg-warning-soft px-1 text-[10px] font-semibold text-warning">копия</span> : null}
                 {sourceIds.has(doc.id) && <span className="ml-auto shrink-0 rounded bg-primary px-1 text-[9px] font-semibold uppercase text-primary-foreground">источник</span>}
               </span>
               <span className="flex w-full items-center gap-2 text-[11px] text-muted-foreground">
@@ -54,7 +58,7 @@ export function DocumentSwitcher({
             </DropdownMenuItem>
           );
         })}
-        {documents.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">В проекте нет первичных документов.</p>}
+        {documents.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">В проверке нет первичных документов.</p>}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -115,6 +115,7 @@ export const apiAuditService: AuditService = {
     form.set("title", input.title);
     if (input.description) form.set("description", input.description);
     form.set("idempotencyKey", input.idempotencyKey || crypto.randomUUID());
+    if (input.previousSessionId) form.set("previousSessionId", input.previousSessionId);
     form.set("report", input.report.file, input.report.name);
     for (const file of input.supporting) {
       if (!file.file) throw new AuditApiError(`Файл «${file.name}» не приложен`, 400);

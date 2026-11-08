@@ -6,9 +6,9 @@ export const Route = createFileRoute("/audits/")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { title: "Проекты — Sverko" },
-      { name: "description", content: "Проекты сверки: в каждом отчёт и его первичные документы, статусы и расхождения." },
-      { property: "og:title", content: "Проекты — Sverko" },
+      { title: "Проверки — Sverko" },
+      { name: "description", content: "Проверки сверки: в каждой отчёт и его первичные документы, статусы и расхождения." },
+      { property: "og:title", content: "Проверки — Sverko" },
       { property: "og:description", content: "Сверка отчётов с первичными документами и поиск расхождений." },
     ],
   }),

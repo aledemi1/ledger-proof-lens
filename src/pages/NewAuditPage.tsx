@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, FileText, PlayCircle, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { AuditApiError } from "@/services/apiAuditService";
 import { auditService } from "@/services/auditService";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
-import type { DocumentType } from "@/types/audit";
+import type { AuditSession, DocumentType } from "@/types/audit";
 
 interface Picked {
   key: string;
@@ -21,20 +21,32 @@ interface Picked {
   type: DocumentType;
 }
 
-const steps = ["Информация", "Основной отчёт", "Подтверждающие документы", "Проверка состава"];
+const steps = ["Отчёт", "Документы", "Состав"];
 
 export function NewAuditPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
   const [description, setDescription] = useState("");
   const [report, setReport] = useState<File | null>(null);
   const [supporting, setSupporting] = useState<Picked[]>([]);
+  const [previousId, setPreviousId] = useState("");
+  const [earlier, setEarlier] = useState<AuditSession[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploadErrors, setUploadErrors] = useState<{ fileName: string; reason: string }[]>([]);
   const idempotencyKey = useRef(crypto.randomUUID());
 
-  const canNext = [title.trim().length > 0, !!report, supporting.length > 0, true][step];
+  useEffect(() => {
+    auditService.listSessions().then((sessions) => setEarlier(sessions.filter((session) => !session.isDemo))).catch(() => setEarlier([]));
+  }, []);
+
+  const canNext = [!!report, supporting.length > 0, title.trim().length > 0][step];
+
+  const chooseReport = (file: File) => {
+    setReport(file);
+    if (!titleTouched) setTitle(file.name.replace(/\.[^.]+$/, ""));
+  };
 
   const addSupporting = (files: File[]) => {
     const ok = files.filter((f) => SUPPORTING_EXTENSIONS.includes(fileExt(f.name)));
@@ -57,6 +69,7 @@ export function NewAuditPage() {
         title: title.trim(),
         description: description.trim() || undefined,
         idempotencyKey: idempotencyKey.current,
+        ...(previousId ? { previousSessionId: previousId } : {}),
         report: { name: report.name, size: report.size, mimeType: report.type, type: "report", file: report },
         supporting: supporting.map((p) => ({ name: p.file.name, size: p.file.size, mimeType: p.file.type, type: p.type, file: p.file })),
       });
@@ -74,16 +87,16 @@ export function NewAuditPage() {
     <div className="mx-auto max-w-3xl px-4 py-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Новый проект</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Папка проекта: один отчёт и первичные документы, по которым он сверяется.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Новая проверка</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Начните с отчёта. Название подставится из имени файла, его можно поправить перед запуском.</p>
         </div>
         <Button variant="outline" onClick={() => navigate({ to: "/audits/$id", params: { id: DEMO_SESSION_ID } })}>
-          <PlayCircle /> Открыть демо-проект
+          <PlayCircle /> Открыть демо-проверку
         </Button>
       </div>
 
       {/* Stepper */}
-      <ol className="mt-6 grid grid-cols-4 gap-2">
+      <ol className="mt-6 grid grid-cols-3 gap-2">
         {steps.map((s, i) => (
           <li key={s}>
             <Button variant="ghost" className="h-auto w-full flex-col items-stretch px-0 hover:bg-transparent"
@@ -104,21 +117,13 @@ export function NewAuditPage() {
 
       <div className="mt-6 border-y border-border bg-card p-5 sm:p-6">
         {step === 0 && (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="title">Название проекта</Label>
-              <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Например: Отчёт по поставке — ноябрь 2026" autoFocus />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="desc">Описание <span className="font-normal text-muted-foreground">(необязательно)</span></Label>
-              <Textarea id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Что проверяем и зачем" />
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
           <div>
             <h2 className="text-sm font-semibold">Основной отчёт</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Файлы сохраняются на сервере Sverko и привязаны к этому браузеру. В браузере остаются только название проверки и решения проверяющего, содержимое файлов туда не записывается.
+              Файлы удаляются, когда вы удаляете проверку; автоматического срока хранения нет.
+              Если на сервере включена языковая модель, ей уходят только незнакомые подписи с коротким образцом и, для неразобранных формулировок, короткие фрагменты. Суммы и статус сверки считает сервер. Демонстрационная проверка модель не вызывает.
+            </p>
             {report ? (
               <div className="mt-3"><FileRow file={report} onRemove={() => setReport(null)} /></div>
             ) : (
@@ -134,14 +139,14 @@ export function NewAuditPage() {
                     toast.error("Неподдерживаемый формат. Допустимы PDF, XLSX, XLS, CSV, DOCX");
                     return;
                   }
-                  setReport(f);
+                  chooseReport(f);
                 }}
               />
             )}
           </div>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <div>
             <h2 className="text-sm font-semibold">Подтверждающие документы</h2>
             <p className="mt-1 text-xs text-muted-foreground">Акты, счета, накладные, договоры, платёжные документы. Тип можно уточнить, но это необязательно.</p>
@@ -169,14 +174,35 @@ export function NewAuditPage() {
           </div>
         )}
 
-        {(step === 1 || step === 2) && (
+        {(step === 0 || step === 1) && (
           <p className="mt-4 text-sm text-muted-foreground">
             Файлы уйдут на сервер только после «Начать проверку». Демонстрационную проверку можно открыть без загрузки.
           </p>
         )}
 
-        {step === 3 && report && (
+        {step === 2 && report && (
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="title">Название проверки</Label>
+              <Input id="title" value={title} onChange={(event) => { setTitleTouched(true); setTitle(event.target.value); }} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="desc">Описание <span className="font-normal text-muted-foreground">(необязательно)</span></Label>
+              <Textarea id="desc" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Что проверяем и зачем" />
+            </div>
+            {earlier.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Повтор после исправлений</Label>
+                <Select value={previousId || "none"} onValueChange={(value) => setPreviousId(value === "none" ? "" : value)}>
+                  <SelectTrigger><SelectValue placeholder="Новая проверка" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Это новая проверка</SelectItem>
+                    {earlier.map((session) => <SelectItem key={session.id} value={session.id}>{session.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">После расчёта будет видно, какие замечания закрылись, какие остались и какие появились.</p>
+              </div>
+            )}
             <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
               <dt className="text-muted-foreground">Название</dt><dd className="font-medium">{title}</dd>
               <dt className="text-muted-foreground">Основной отчёт</dt><dd>{report.name}</dd>
@@ -211,7 +237,7 @@ export function NewAuditPage() {
         ) : (
           <Button variant="ghost" onClick={() => setStep(step - 1)}><ArrowLeft /> Назад</Button>
         )}
-        {step < 3 ? (
+        {step < 2 ? (
           <Button disabled={!canNext} onClick={() => setStep(step + 1)}>Далее <ArrowRight /></Button>
         ) : (
           <Button disabled={busy} onClick={create}><PlayCircle /> Начать проверку</Button>

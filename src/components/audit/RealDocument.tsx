@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { EvidenceReference, FlowBlock, GridCell, GridSheet } from "@/types/audit";
 import type { DocMark } from "@/lib/marks";
 import { cn } from "@/lib/utils";
@@ -102,8 +102,27 @@ export function GridView({ sheets, layer, scrollRef }: { sheets: GridSheet[]; la
   );
 }
 
+function columnWidths(sheet: GridSheet, columns: number, cells: Map<string, GridCell>): number[] {
+  return Array.from({ length: columns }, (_, index) => {
+    const stored = sheet.widths?.[index] ?? 0;
+    if (stored >= 48) return Math.min(stored, 480);
+    let longest = 8;
+    for (const [key, cell] of cells) {
+      if (Number(key.split(":")[0]) !== index + 1) continue;
+      longest = Math.max(longest, Math.min(cell.text.length, 48));
+    }
+    return Math.min(420, Math.max(96, longest * 8 + 18));
+  });
+}
+
 function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
   const { cells, columns, rows } = sheetMatrix(sheet);
+  const [widths, setWidths] = useState(() => columnWidths(sheet, columns, cells));
+  const [sheetName, setSheetName] = useState(sheet.name);
+  if (sheetName !== sheet.name) {
+    setSheetName(sheet.name);
+    setWidths(columnWidths(sheet, columns, cells));
+  }
   let activeColumn = 0;
   let activeRow = 0;
   if (layer.active) {
@@ -116,12 +135,32 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
     }
   }
   const letters = Array.from({ length: columns }, (_, index) => columnName(index + 1));
+  const template = `46px ${widths.map((width) => `${width}px`).join(" ")}`;
+
+  const startResize = (index: number, event: ReactPointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const start = widths[index] ?? 120;
+    const move = (pointer: PointerEvent) => {
+      const next = Math.max(64, Math.min(560, start + pointer.clientX - startX));
+      setWidths((current) => current.map((width, column) => (column === index ? next : width)));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
 
   return (
-    <div className="excel-grid text-[13px] leading-5" style={{ gridTemplateColumns: `46px repeat(${columns}, 132px)` }}>
+    <div className="excel-grid text-[13px] leading-5" style={{ gridTemplateColumns: template }}>
       <div className="excel-corner" />
       {letters.map((letter, index) => (
-        <div key={letter} className={cn("excel-col", index + 1 === activeColumn && "excel-axis-active")}>{letter}</div>
+        <div key={letter} className={cn("excel-col", index + 1 === activeColumn && "excel-axis-active")}>
+          {letter}
+          <span className="excel-resize" role="separator" aria-orientation="vertical" aria-label={`Ширина столбца ${letter}`} onPointerDown={(event) => startResize(index, event)} />
+        </div>
       ))}
       {Array.from({ length: rows }, (_, offset) => {
         const rowNumber = offset + 1;

@@ -37,21 +37,21 @@ export function AuditsListPage() {
       <div className="flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">Проекты</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Проверки</h1>
             {allDemo && <DemoBadge />}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            В каждой папке — отчёт и первичные документы, по которым он сверяется
+            В каждой проверке — отчёт и первичные документы, по которым он сверяется
           </p>
         </div>
         <Button asChild>
-          <Link to="/new"><Plus /> Новый проект</Link>
+          <Link to="/new"><Plus /> Новая проверка</Link>
         </Button>
       </div>
 
       {error && (
         <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error}. Демонстрационные проекты по-прежнему доступны, подменять ими загруженные комплекты приложение не будет.
+          {error}. Демонстрационные проверки по-прежнему доступны, подменять ими загруженные комплекты приложение не будет.
         </div>
       )}
 
@@ -83,10 +83,10 @@ export function AuditsListPage() {
           to="/new"
           className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
         >
-          <Plus className="size-5" /> Новый проект
+          <Plus className="size-5" /> Новая проверка
         </Link>
       </div>
-      {sessions && list.length === 0 && <p className="mt-4 text-sm text-muted-foreground">Проекты не найдены.</p>}
+      {sessions && list.length === 0 && <p className="mt-4 text-sm text-muted-foreground">Проверки не найдены.</p>}
       {!sessions && !error && <p className="mt-4 text-sm text-muted-foreground">Загрузка…</p>}
     </div>
   );

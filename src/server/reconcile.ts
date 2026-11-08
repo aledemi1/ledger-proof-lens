@@ -622,7 +622,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
       discrepancy: same ? null : formatSigned(fact.parsed.minor - total, "₽"),
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "high",
-      explanation: `Сумма приведена к той же базе НДС, что и в отчёте${fact.net ? ", за вычетом возврата" : ""}. Итого ${formatScaled(total, "₽")}.`,
+      explanation: `Сумма собрана из строк одной операции${fact.net ? " за вычетом возврата" : ""}: ${parts.slice(0, 8).map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, "₽")}.`,
       evidenceReferences: parts.map((part) => reference(part.documentId, part.fragment, part.raw)),
       unit: "₽",
     };

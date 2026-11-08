@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DocumentViewer } from "@/components/audit/DocumentViewer";
 import { DocumentSwitcher } from "@/components/audit/DocumentSwitcher";
 import { ReviewBar } from "@/components/audit/ReviewBar";
@@ -12,6 +13,8 @@ import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { checkStatusMeta, DemoBadge, SessionStatusBadge, severityMeta } from "@/components/audit/badges";
 import { useAuditSession } from "@/hooks/useAudit";
 import { isIssue } from "@/lib/conclusion";
+import { checkTitle, groupIssues, groupMatches } from "@/lib/findings";
+import { readingAgainst } from "@/lib/reading";
 import { evidencePlace } from "@/lib/format";
 import { countByStatus, marksFor, statusOrder, type DocMark } from "@/lib/marks";
 import { cn } from "@/lib/utils";
@@ -30,20 +33,20 @@ const isNarrow = () => typeof window !== "undefined" && window.innerWidth < 1024
 export function WorkspacePage({ id }: { id: string }) {
   const { session, documents, loading, error } = useAuditSession(id);
 
-  if (loading) return <div className="p-8 text-sm text-muted-foreground">Загрузка проекта…</div>;
+  if (loading) return <div className="p-8 text-sm text-muted-foreground">Загрузка проверки…</div>;
   if (error)
     return (
       <div className="mx-auto max-w-xl p-8">
-        <p className="text-sm font-medium">Не удалось открыть проект</p>
+        <p className="text-sm font-medium">Не удалось открыть проверку</p>
         <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К проектам</Link></Button>
+        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К проверкам</Link></Button>
       </div>
     );
   if (!session)
     return (
       <div className="p-8">
-        <p className="text-sm text-muted-foreground">Проект не найден.</p>
-        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К проектам</Link></Button>
+        <p className="text-sm text-muted-foreground">Проверка не найдена.</p>
+        <Button asChild variant="outline" className="mt-4"><Link to="/audits">К проверкам</Link></Button>
       </div>
     );
   if (session.status === "awaiting_processing" || session.checks.length === 0)
@@ -56,10 +59,26 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
   const checks = session.checks;
   const report = documents.find((d) => d.id === session.reportDocumentId) ?? documents.find((d) => d.type === "report") ?? null;
   const sources = useMemo(() => documents.filter((d) => d.id !== report?.id), [documents, report?.id]);
-  const notices = [...(session.notices ?? []), ...(session.fileErrors?.map((file) => `«${file.fileName}»: ${file.reason}`) ?? [])];
+  const duplicateNames = useMemo(() => new Set((session.notices ?? []).filter((notice) => /повторяет/.test(notice)).flatMap((notice) => [...notice.matchAll(/«([^»]+)»/g)].map((match) => match[1] ?? ""))), [session.notices]);
+  const quietNotices = (session.notices ?? []).filter((notice) => !/повторяет/.test(notice));
+  const fileProblems = session.fileErrors ?? [];
 
   const [hidden, setHidden] = useState<Set<CheckStatus>>(() => new Set());
-  const issues = useMemo(() => checks.filter((c) => isIssue(c) && !hidden.has(c.status)), [checks, hidden]);
+  const [query, setQuery] = useState("");
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const groups = useMemo(() => groupIssues(checks.filter(isIssue)), [checks]);
+  const visibleGroups = useMemo(
+    () => groups.filter((group) => {
+      const members = [group.primary, ...group.related];
+      if (members.every((check) => hidden.has(check.status))) return false;
+      if (onlyOpen && members.every((check) => check.reviewerStatus !== "pending")) return false;
+      if (query.trim() && !groupMatches(group, query)) return false;
+      return true;
+    }),
+    [groups, hidden, onlyOpen, query],
+  );
+  const issues = visibleGroups.map((group) => group.primary);
   const firstIssue = checks.find(isIssue) ?? checks[0];
   const [selectedId, setSelectedId] = useState<string>(firstIssue?.id ?? "");
   const [sourceId, setSourceId] = useState<string | null>(firstIssue?.evidenceReferences[0]?.documentId ?? sources[0]?.id ?? null);
@@ -100,15 +119,15 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
     if (ref) setSourceId(ref.documentId);
   };
 
-  const issuePos = selected ? issues.findIndex((c) => c.id === selected.id) : -1;
+  const issuePos = selected ? visibleGroups.findIndex((group) => group.primary.id === selected.id || group.related.some((check) => check.id === selected.id)) : -1;
   const stepIssue = useCallback(
     (dir: -1 | 1) => {
-      if (!issues.length) return;
-      const next = issuePos < 0 ? (dir === 1 ? 0 : issues.length - 1) : (issuePos + dir + issues.length) % issues.length;
-      const n = issues[next];
-      if (n) select(n.id);
+      if (!visibleGroups.length) return;
+      const next = issuePos < 0 ? (dir === 1 ? 0 : visibleGroups.length - 1) : (issuePos + dir + visibleGroups.length) % visibleGroups.length;
+      const group = visibleGroups[next];
+      if (group) select(group.primary.id);
     },
-    [issues, issuePos, select],
+    [visibleGroups, issuePos, select],
   );
 
   // Keyboard: J/K or ↓/↑ move through problems.
@@ -166,7 +185,7 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
     <div className="audit-workspace flex flex-col lg:h-screen">
       <header className="border-b border-border bg-card px-3 py-2 lg:px-4">
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="icon" className="size-8 shrink-0" aria-label="К проектам">
+          <Button asChild variant="ghost" size="icon" className="size-8 shrink-0" aria-label="К проверкам">
             <Link to="/audits"><ArrowLeft /></Link>
           </Button>
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={session.title}>{session.title}</h1>
@@ -192,7 +211,7 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
                   );
                 })}
               </div>
-              <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">Статус проекта: <SessionStatusBadge status={session.status} /></div>
+              <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">Статус проверки: <SessionStatusBadge status={session.status} /></div>
             </PopoverContent>
           </Popover>
           <DropdownMenu>
@@ -216,12 +235,12 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
             </Link>
           </Button>
         </div>
-        {notices.length > 0 && (
-          <div className="mt-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-1.5 text-xs text-foreground">
-            {notices.map((notice) => (
-              <p key={notice}>{notice}</p>
-            ))}
-          </div>
+        {(quietNotices.length > 0 || fileProblems.length > 0 || session.recheck) && (
+          <p className="mt-1 truncate text-[11px] text-muted-foreground" title={[...quietNotices, ...fileProblems.map((file) => `${file.fileName}: ${file.reason}`)].join(" ")}>
+            {fileProblems.length > 0 ? `Непрочитано файлов: ${fileProblems.length}. ` : ""}
+            {quietNotices[0] ?? ""}
+            {session.recheck ? ` Повтор «${session.recheck.previousTitle}»: закрылось ${session.recheck.closed}, осталось ${session.recheck.remaining}, появилось ${session.recheck.appeared}.` : ""}
+          </p>
         )}
       </header>
 
@@ -232,7 +251,7 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
             {selected && issuePos >= 0 ? (
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 <span className={cn("size-2 shrink-0 rounded-full", checkStatusMeta[selected.status].dot)} />
-                <span className="truncate font-medium">{selected.fieldName}</span>
+                <span className="truncate font-medium" title={checkTitle(selected)}>{checkTitle(selected)}</span>
                 <span className="shrink-0 text-muted-foreground tabular">· {issuePos + 1} из {issues.length}</span>
               </span>
             ) : (
@@ -245,16 +264,31 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" disabled={!issues.length}><List /> Все</Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-80 p-1">
-                {issues.map((c, i) => (
-                  <button key={c.id} onClick={() => select(c.id)} className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted", c.id === selectedId && "bg-accent font-medium")}>
-                    <span className="w-4 shrink-0 text-xs text-muted-foreground tabular">{i + 1}</span>
-                    <span className={cn("size-2 shrink-0 rounded-full", checkStatusMeta[c.status].dot)} />
-                    <span className="min-w-0 flex-1 truncate">{c.fieldName}</span>
-                    {c.discrepancy && <span className="shrink-0 text-xs font-semibold text-danger">{c.discrepancy}</span>}
-                    {c.reviewerStatus !== "pending" && <span className="shrink-0 text-xs text-muted-foreground">✓</span>}
-                  </button>
-                ))}
+              <PopoverContent align="end" className="w-[28rem] p-2">
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по позиции или показателю" className="h-8 text-sm" />
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={onlyOpen} onChange={(event) => setOnlyOpen(event.target.checked)} />
+                  Только нерассмотренные
+                </label>
+                <div className="mt-2 max-h-96 space-y-1 overflow-auto">
+                  {visibleGroups.map((group, index) => (
+                    <div key={group.key}>
+                      <button onClick={() => { select(group.primary.id); setExpanded(expanded === group.key ? null : group.key); }} className={cn("flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted", (group.primary.id === selectedId || group.related.some((check) => check.id === selectedId)) && "bg-accent")}>
+                        <span className="w-5 shrink-0 text-xs text-muted-foreground tabular">{index + 1}</span>
+                        <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", checkStatusMeta[group.primary.status].dot)} />
+                        <span className="min-w-0 flex-1 whitespace-normal">{group.title}{group.related.length ? ` · ещё ${group.related.length}` : ""}</span>
+                        {group.primary.discrepancy && <span className="shrink-0 text-xs font-semibold text-danger">{group.primary.discrepancy}</span>}
+                      </button>
+                      {expanded === group.key && group.related.map((check) => (
+                        <button key={check.id} onClick={() => select(check.id)} className={cn("ml-7 flex w-[calc(100%-1.75rem)] items-start gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-muted", check.id === selectedId && "bg-accent")}>
+                          <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", checkStatusMeta[check.status].dot)} />
+                          <span className="min-w-0 flex-1 whitespace-normal">{checkTitle(check)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                  {visibleGroups.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">Нет замечаний по этому фильтру.</p>}
+                </div>
               </PopoverContent>
             </Popover>
           </div>
@@ -271,7 +305,7 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
               focus={sourceFocus}
               onMarkClick={onSourceMark}
               emptyText="Выберите первичный документ в списке."
-              title={<DocumentSwitcher documents={sources} activeId={sourceId} onSelect={showSource} counts={counts} sourceIds={sourceIds} page={sourceFocus?.pageNumber || undefined} />}
+              title={<DocumentSwitcher documents={sources} activeId={sourceId} onSelect={showSource} counts={counts} sourceIds={sourceIds} page={sourceFocus?.pageNumber || undefined} duplicates={duplicateNames} />}
               banner={
                 selected && (
                   <Comparison
@@ -283,6 +317,8 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
                     docName={docName}
                     onStep={stepEvidence}
                     onBack={() => evidence && setSourceId(evidence.documentId)}
+                    sourceDoc={sources.find((doc) => doc.id === sourceId) ?? null}
+                    sessionId={session.id}
                   />
                 )
               }
@@ -300,6 +336,55 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
 }
 
 /** The single comparison: report value, source value, difference; explanation on demand. */
+function previewFragments(doc: AuditDocument): { anchor: string; text: string; label: string }[] {
+  if (doc.preview.kind === "grid") {
+    return doc.preview.sheets.flatMap((sheet) => sheet.rows.flatMap((row) => row.cells.filter((cell) => cell.text.trim()).map((cell) => ({
+      anchor: cell.anchor,
+      text: cell.text,
+      label: `Лист «${sheet.name}», ${cell.address}`,
+    }))));
+  }
+  if (doc.preview.kind === "flow") {
+    return doc.preview.blocks.flatMap((block) => {
+      if (block.kind === "paragraph" && block.anchor && block.text?.trim()) return [{ anchor: block.anchor, text: block.text, label: "Абзац" }];
+      if (block.kind === "table" && block.rows) {
+        return block.rows.flatMap((row) => row.cells.filter((cell) => cell.text.trim()).map((cell) => ({ anchor: cell.anchor, text: cell.text, label: "Таблица" })));
+      }
+      return [];
+    });
+  }
+  return [];
+}
+
+function FragmentPicker({
+  doc,
+  query,
+  onQuery,
+  onPick,
+}: {
+  doc: AuditDocument | null;
+  query: string;
+  onQuery: (value: string) => void;
+  onPick: (fragment: { anchor: string; text: string; label: string }) => void;
+}) {
+  const fragments = doc ? previewFragments(doc) : [];
+  const shown = fragments.filter((fragment) => `${fragment.label} ${fragment.text}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 40);
+  if (!doc) return <p className="text-muted-foreground">Сначала откройте первичный документ.</p>;
+  if (!fragments.length) return <p className="text-muted-foreground">В этом предпросмотре нет отдельных строк, которые можно выбрать.</p>;
+  return (
+    <div className="rounded-md border border-border p-2">
+      <Input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Найти строку или фрагмент" className="h-7 text-xs" />
+      <div className="mt-1 max-h-40 overflow-auto">
+        {shown.map((fragment) => (
+          <button key={fragment.anchor} type="button" className="block w-full truncate rounded px-1 py-1 text-left hover:bg-muted" onClick={() => onPick(fragment)}>
+            <span className="text-muted-foreground">{fragment.label}: </span>{fragment.text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Comparison({
   check,
   evidenceIndex,
@@ -308,6 +393,8 @@ function Comparison({
   docName,
   onStep,
   onBack,
+  sourceDoc,
+  sessionId,
 }: {
   check: CheckResult;
   evidenceIndex: number;
@@ -316,8 +403,12 @@ function Comparison({
   docName: (id: string) => string;
   onStep: (dir: -1 | 1) => void;
   onBack: () => void;
+  sourceDoc: AuditDocument | null;
+  sessionId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [fragmentQuery, setFragmentQuery] = useState("");
   const refs = check.evidenceReferences;
   const ref = refs[evidenceIndex];
   const meta = checkStatusMeta[check.status];
@@ -358,6 +449,49 @@ function Comparison({
       {open && (
         <div className="mt-1.5 space-y-1.5 pb-1">
           <p className="rounded-md bg-muted px-2.5 py-1.5 text-[13px] leading-relaxed text-foreground/85">{check.explanation}</p>
+          {refs.length > 1 && (
+            <div>
+              <p className="font-medium text-muted-foreground">Состав расчёта</p>
+              <ul className="mt-1 space-y-0.5">
+                {refs.map((item) => (
+                  <li key={`${item.documentId}-${item.locationInDocument ?? item.sourceText}`}>{docName(item.documentId)} · {evidencePlace(item)}: {item.sourceText}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {check.reviewerSource && (
+            <p className="rounded-md bg-muted px-2.5 py-1.5">
+              Выбранный фрагмент: {check.reviewerSource.sourceText}. {readingAgainst(check.reportValue, check.reviewerSource).note}
+              {readingAgainst(check.reportValue, check.reviewerSource).discrepancy ? ` Разница ${readingAgainst(check.reportValue, check.reviewerSource).discrepancy}.` : ""}
+              {" "}Автоматический статус «{meta.label}» не изменён.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setPicking((value) => !value)}>Выбран неверный документ</Button>
+            {check.reviewerSource && (
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => auditService.updateReview(sessionId, check.id, { reviewerSource: null })}>Сбросить выбор</Button>
+            )}
+          </div>
+          {picking && (
+            <FragmentPicker
+              doc={sourceDoc}
+              query={fragmentQuery}
+              onQuery={setFragmentQuery}
+              onPick={(fragment) => {
+                if (!sourceDoc) return;
+                void auditService.updateReview(sessionId, check.id, {
+                  reviewerSource: {
+                    documentId: sourceDoc.id,
+                    pageNumber: 1,
+                    sourceText: fragment.text,
+                    locationInDocument: fragment.anchor,
+                    locationLabel: fragment.label,
+                  },
+                });
+                setPicking(false);
+              }}
+            />
+          )}
           <p className="text-muted-foreground">Значимость: <span className={severityMeta[check.severity].cls}>{severityMeta[check.severity].label}</span></p>
           {ref && (
             <p className="flex items-start gap-1.5 text-muted-foreground">

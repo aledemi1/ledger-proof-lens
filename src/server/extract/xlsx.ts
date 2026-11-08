@@ -27,6 +27,17 @@ function cellText(cell: XLSX.CellObject): { text: string; formulaMissing: boolea
   return { text: formatted, formulaMissing: false };
 }
 
+function columnWidths(sheet: XLSX.WorkSheet, columns: number): number[] {
+  const stored = sheet["!cols"] as { wpx?: number; wch?: number; width?: number }[] | undefined;
+  const widths: number[] = [];
+  for (let index = 0; index < columns; index += 1) {
+    const column = stored?.[index];
+    const pixels = column?.wpx ?? (column?.wch != null ? Math.round(column.wch * 8) : column?.width != null ? Math.round(column.width * 8) : 0);
+    widths.push(pixels >= 24 ? Math.min(Math.round(pixels), 480) : 0);
+  }
+  return widths;
+}
+
 export async function extractSpreadsheet(buffer: Buffer): Promise<ReadDocument> {
   let book: XLSX.WorkBook;
   try {
@@ -66,7 +77,8 @@ export async function extractSpreadsheet(buffer: Buffer): Promise<ReadDocument> 
     }
     const grid = readGrid(name, cells, s);
     fragments.push(...grid.fragments);
-    sheets.push({ name, rows: grid.rows });
+    const maxCol = cells.reduce((max, cell) => Math.max(max, cell.col), 0);
+    sheets.push({ name, rows: grid.rows, widths: columnWidths(sheet, maxCol) });
   }
 
   return {

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Decision, DocumentType, ReviewerStatus } from "@/types/audit";
+import type { Decision, DocumentType, EvidenceReference, ReviewerStatus } from "@/types/audit";
 import {
   clearReviews,
   deleteSession,
@@ -71,6 +71,8 @@ async function createAudit(request: Request, owner: string, cookie?: string): Pr
   const title = String(form.get("title") ?? "").trim();
   const description = String(form.get("description") ?? "").trim();
   const idempotencyKey = String(form.get("idempotencyKey") ?? "").trim();
+  const requestedPrevious = String(form.get("previousSessionId") ?? "").trim();
+  const previousSessionId = requestedPrevious && sessionOwner(requestedPrevious) === owner ? requestedPrevious : undefined;
   if (!title) return json({ error: "Укажите название проверки" }, 400, cookie);
   if (!idempotencyKey) return json({ error: "Не передан ключ запроса" }, 400, cookie);
   const existing = findByIdempotency(owner, idempotencyKey);
@@ -105,7 +107,7 @@ async function createAudit(request: Request, owner: string, cookie?: string): Pr
   if (errors.length) return json({ error: "Файлы не приняты", files: errors }, 400, cookie);
 
   const sessionId = `aud_${randomBytes(8).toString("hex")}`;
-  insertSession({ id: sessionId, owner, idempotencyKey, title, ...(description ? { description } : {}) });
+  insertSession({ id: sessionId, owner, idempotencyKey, title, ...(description ? { description } : {}), ...(previousSessionId ? { previousSessionId } : {}) });
   const folder = path.join(dataDir(), "files", sessionId);
   fs.mkdirSync(folder, { recursive: true });
   let reportId = "";
@@ -133,7 +135,7 @@ async function createAudit(request: Request, owner: string, cookie?: string): Pr
 }
 
 async function review(request: Request, sessionId: string, checkId: string, cookie?: string): Promise<Response> {
-  const body = (await request.json().catch(() => null)) as { reviewerStatus?: ReviewerStatus; reviewerComment?: string } | null;
+  const body = (await request.json().catch(() => null)) as { reviewerStatus?: ReviewerStatus; reviewerComment?: string; reviewerSource?: EvidenceReference | null } | null;
   if (!body) return json({ error: "Некорректный запрос" }, 400, cookie);
   const session = readSession(sessionId);
   const current = session?.checks.find((check) => check.id === checkId);
@@ -143,7 +145,8 @@ async function review(request: Request, sessionId: string, checkId: string, cook
   if (status === "verified" && current.status !== "match" && !comment) {
     return json({ error: "Чтобы снять замечание, укажите причину" }, 400, cookie);
   }
-  saveReview(sessionId, checkId, status, comment);
+  const source = Object.prototype.hasOwnProperty.call(body, "reviewerSource") ? (body.reviewerSource ?? null) : undefined;
+  saveReview(sessionId, checkId, status, comment, source);
   const updated = readSession(sessionId)?.checks.find((check) => check.id === checkId);
   return json(updated, 200, cookie);
 }

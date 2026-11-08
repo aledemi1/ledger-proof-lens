@@ -14,7 +14,7 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 lg:px-8">
       <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4">
-        <Link to="/audits"><ArrowLeft /> Проекты</Link>
+        <Link to="/audits"><ArrowLeft /> Проверки</Link>
       </Button>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold tracking-tight">{session.title}</h1>

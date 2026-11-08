@@ -7,8 +7,8 @@ import sverkoIcon from "@/assets/sverko-icon.jpg";
 
 const nav = [
   { to: "/", label: "Главная", Icon: ScanSearch, exact: true },
-  { to: "/audits", label: "Проекты", Icon: FolderOpen, exact: false },
-  { to: "/new", label: "Новый проект", Icon: Plus, exact: true },
+  { to: "/audits", label: "Проверки", Icon: FolderOpen, exact: false },
+  { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
 ] as const;
 
 function Logo() {
@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Мои проверки</Link></Button></div></header><main>{children}</main></div>;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Проверки</Link></Button></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>

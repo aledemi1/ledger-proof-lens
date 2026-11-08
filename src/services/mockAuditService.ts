@@ -1,6 +1,6 @@
 import { buildConclusion } from "@/lib/conclusion";
 import { sampleDocuments, sampleSessions } from "@/mocks/demoAudit";
-import type { AuditDocument, AuditSession, ReviewerDecision, ReviewerStatus } from "@/types/audit";
+import type { AuditDocument, AuditSession, EvidenceReference, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import type { AuditService } from "./auditService";
 
 /**
@@ -13,6 +13,7 @@ interface StoredReview {
   reviewerStatus: ReviewerStatus;
   reviewerComment: string;
   reviewedAt?: string;
+  reviewerSource?: EvidenceReference;
 }
 interface Store {
   reviews: Record<string, Record<string, StoredReview>>;
@@ -82,6 +83,8 @@ export const mockAuditService: AuditService = {
       reviewerComment: update.reviewerComment ?? check.reviewerComment,
       reviewedAt: new Date().toISOString(),
     };
+    if (update.reviewerSource) next.reviewerSource = update.reviewerSource;
+    else if (update.reviewerSource === undefined && check.reviewerSource) next.reviewerSource = check.reviewerSource;
     store.reviews[sessionId] = { ...(store.reviews[sessionId] ?? {}), [checkId]: next };
     write(store);
     return { ...check, ...next };
