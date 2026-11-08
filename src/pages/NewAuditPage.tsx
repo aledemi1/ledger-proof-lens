@@ -11,6 +11,7 @@ import { docTypeLabel, REPORT_EXTENSIONS, selectableDocTypes, SUPPORTING_EXTENSI
 import { fileExt, formatSize, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AuditApiError } from "@/services/apiAuditService";
+import { useAccount } from "@/hooks/useAccount";
 import { auditService } from "@/services/auditService";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
 import type { AuditSession, DocumentType } from "@/types/audit";
@@ -25,6 +26,7 @@ const steps = ["Отчёт", "Документы", "Состав"];
 
 export function NewAuditPage() {
   const navigate = useNavigate();
+  const account = useAccount();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
@@ -95,6 +97,16 @@ export function NewAuditPage() {
         </Button>
       </div>
 
+      {account === null ? (
+        <div className="mt-6 border-y border-border bg-card p-5 text-sm">
+          <p>Загрузка документов доступна после входа. Демонстрационную проверку можно открыть без аккаунта.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild><Link to="/login">Войти</Link></Button>
+            <Button asChild variant="outline"><Link to="/register">Создать аккаунт</Link></Button>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Stepper */}
       <ol className="mt-6 grid grid-cols-3 gap-2">
         {steps.map((s, i) => (
@@ -120,9 +132,10 @@ export function NewAuditPage() {
           <div>
             <h2 className="text-sm font-semibold">Основной отчёт</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Файлы сохраняются на сервере Sverko и привязаны к этому браузеру. В браузере остаются только название проверки и решения проверяющего, содержимое файлов туда не записывается.
-              Файлы удаляются, когда вы удаляете проверку; автоматического срока хранения нет.
-              Если на сервере включена языковая модель, ей уходят только незнакомые подписи с коротким образцом и, для неразобранных формулировок, короткие фрагменты. Суммы и статус сверки считает сервер. Демонстрационная проверка модель не вызывает.
+              Файлы и результаты сверки хранятся на сервере Sverko и привязаны к аккаунту. Содержимое файлов в браузер не записывается.
+              Файлы удаляются вместе с проверкой; автоматического срока хранения нет. Учётные записи и карточки проверок лежат в базе данных.
+              Если включена языковая модель, ей уходят незнакомые подписи с коротким образцом и короткие фрагменты неразобранных формулировок. Если основной OCR занят или не запускается, изображение скана уходит в запасное распознавание через тот же API.
+              Суммы и статус сверки считает сервер. Демонстрационная проверка модель не вызывает и открывается без входа.
             </p>
             {report ? (
               <div className="mt-3"><FileRow file={report} onRemove={() => setReport(null)} /></div>
@@ -243,6 +256,8 @@ export function NewAuditPage() {
           <Button disabled={busy} onClick={create}><PlayCircle /> Начать проверку</Button>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

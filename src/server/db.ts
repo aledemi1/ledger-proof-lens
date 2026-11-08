@@ -1,104 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { AuditDocument, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import { withUrls, type PreviewDraft } from "./model";
 import { dataDir } from "./paths";
+import { all, get, run, transaction, type Query, closeDb } from "./store";
 
-let database: DatabaseSync | undefined;
-
-export function db(): DatabaseSync {
-  if (database) return database;
-  const root = dataDir();
-  fs.mkdirSync(root, { recursive: true });
-  const file = path.join(root, "sverko.sqlite");
-  const next = new DatabaseSync(file);
-  next.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      owner TEXT NOT NULL,
-      idempotency_key TEXT,
-      title TEXT NOT NULL,
-      description TEXT,
-      created_at TEXT NOT NULL,
-      status TEXT NOT NULL,
-      report_document_id TEXT,
-      stage TEXT,
-      error TEXT,
-      incomplete INTEGER NOT NULL DEFAULT 0,
-      file_errors TEXT,
-      notices TEXT,
-      decision TEXT
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS sessions_owner_key ON sessions(owner, idempotency_key) WHERE idempotency_key IS NOT NULL;
-    CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      role TEXT NOT NULL,
-      name TEXT NOT NULL,
-      doc_type TEXT NOT NULL,
-      mime_type TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      sha256 TEXT NOT NULL,
-      storage_path TEXT NOT NULL,
-      page_count INTEGER NOT NULL DEFAULT 0,
-      read_error TEXT,
-      preview_json TEXT
-    );
-    CREATE TABLE IF NOT EXISTS checks (
-      id TEXT NOT NULL,
-      session_id TEXT NOT NULL,
-      position INTEGER NOT NULL,
-      payload TEXT NOT NULL,
-      PRIMARY KEY (session_id, id)
-    );
-    CREATE TABLE IF NOT EXISTS reviews (
-      session_id TEXT NOT NULL,
-      check_id TEXT NOT NULL,
-      reviewer_status TEXT NOT NULL,
-      reviewer_comment TEXT NOT NULL,
-      reviewed_at TEXT,
-      PRIMARY KEY (session_id, check_id)
-    );
-  `);
-  scopeCheckIdsToSession(next);
-  ensureColumn(next, "sessions", "previous_id", "TEXT");
-  ensureColumn(next, "sessions", "recheck", "TEXT");
-  ensureColumn(next, "reviews", "source_json", "TEXT");
-  database = next;
-  return next;
-}
-
-function ensureColumn(connection: DatabaseSync, table: string, name: string, definition: string): void {
-  const columns = connection.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!columns.some((column) => column.name === name)) connection.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
-}
-
-function scopeCheckIdsToSession(connection: DatabaseSync): void {
-  const columns = connection.prepare("PRAGMA table_info(checks)").all() as { name: string; pk: number }[];
-  if (columns.filter((column) => column.pk > 0).length > 1) return;
-  connection.exec(`
-    BEGIN;
-    ALTER TABLE checks RENAME TO checks_global_ids;
-    CREATE TABLE checks (
-      id TEXT NOT NULL,
-      session_id TEXT NOT NULL,
-      position INTEGER NOT NULL,
-      payload TEXT NOT NULL,
-      PRIMARY KEY (session_id, id)
-    );
-    INSERT INTO checks (id, session_id, position, payload)
-      SELECT id, session_id, position, payload FROM checks_global_ids;
-    DROP TABLE checks_global_ids;
-    COMMIT;
-  `);
-}
-
-export function closeDb(): void {
-  database?.close();
-  database = undefined;
-}
+export { closeDb };
 
 interface SessionRow {
   id: string;
@@ -111,7 +18,7 @@ interface SessionRow {
   report_document_id: string | null;
   stage: string | null;
   error: string | null;
-  incomplete: number;
+  incomplete: number | string;
   file_errors: string | null;
   notices: string | null;
   decision: string | null;
@@ -134,28 +41,35 @@ interface DocumentRow {
   preview_json: string | null;
 }
 
-export function findByIdempotency(owner: string, key: string): string | null {
-  const row = db().prepare("SELECT id FROM sessions WHERE owner = ? AND idempotency_key = ?").get(owner, key) as { id: string } | undefined;
+interface ReviewRow {
+  check_id: string;
+  reviewer_status: string;
+  reviewer_comment: string;
+  reviewed_at: string | null;
+  source_json: string | null;
+}
+
+export async function findByIdempotency(owner: string, key: string): Promise<string | null> {
+  const row = await get<{ id: string }>("SELECT id FROM sessions WHERE owner = ? AND idempotency_key = ?", [owner, key]);
   return row?.id ?? null;
 }
 
-export function insertSession(input: {
+export async function insertSession(input: {
   id: string;
   owner: string;
   idempotencyKey: string;
   title: string;
   description?: string;
   previousSessionId?: string;
-}): void {
-  db()
-    .prepare(
-      `INSERT INTO sessions (id, owner, idempotency_key, title, description, created_at, status, stage, previous_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'awaiting_processing', 'queued', ?)`,
-    )
-    .run(input.id, input.owner, input.idempotencyKey, input.title, input.description ?? null, new Date().toISOString(), input.previousSessionId ?? null);
+}): Promise<void> {
+  await run(
+    `INSERT INTO sessions (id, owner, idempotency_key, title, description, created_at, status, stage, previous_id)
+     VALUES (?, ?, ?, ?, ?, ?, 'awaiting_processing', 'queued', ?)`,
+    [input.id, input.owner, input.idempotencyKey, input.title, input.description ?? null, new Date().toISOString(), input.previousSessionId ?? null],
+  );
 }
 
-export function insertDocument(input: {
+export async function insertDocument(input: {
   id: string;
   sessionId: string;
   role: "report" | "supporting";
@@ -165,13 +79,11 @@ export function insertDocument(input: {
   size: number;
   sha256: string;
   storagePath: string;
-}): void {
-  db()
-    .prepare(
-      `INSERT INTO documents (id, session_id, role, name, doc_type, mime_type, size, sha256, storage_path, page_count, preview_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-    )
-    .run(
+}): Promise<void> {
+  await run(
+    `INSERT INTO documents (id, session_id, role, name, doc_type, mime_type, size, sha256, storage_path, page_count, preview_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    [
       input.id,
       input.sessionId,
       input.role,
@@ -182,28 +94,34 @@ export function insertDocument(input: {
       input.sha256,
       input.storagePath,
       JSON.stringify({ kind: "none", reason: "Документ в очереди на чтение." }),
-    );
+    ],
+  );
 }
 
-export function setReportDocument(sessionId: string, documentId: string): void {
-  db().prepare("UPDATE sessions SET report_document_id = ? WHERE id = ?").run(documentId, sessionId);
+export async function setReportDocument(sessionId: string, documentId: string): Promise<void> {
+  await run("UPDATE sessions SET report_document_id = ? WHERE id = ?", [documentId, sessionId]);
 }
 
-export function listOwnedIds(owner: string): string[] {
-  const rows = db().prepare("SELECT id FROM sessions WHERE owner = ? ORDER BY created_at DESC").all(owner) as { id: string }[];
+export async function listOwnedIds(owner: string): Promise<string[]> {
+  const rows = await all<{ id: string }>("SELECT id FROM sessions WHERE owner = ? ORDER BY created_at DESC", [owner]);
   return rows.map((row) => row.id);
 }
 
-export function sessionOwner(id: string): string | null {
-  const row = db().prepare("SELECT owner FROM sessions WHERE id = ?").get(id) as { owner: string } | undefined;
+export async function listAllIds(): Promise<string[]> {
+  const rows = await all<{ id: string }>("SELECT id FROM sessions ORDER BY created_at DESC");
+  return rows.map((row) => row.id);
+}
+
+export async function sessionOwner(id: string): Promise<string | null> {
+  const row = await get<{ owner: string }>("SELECT owner FROM sessions WHERE id = ?", [id]);
   return row?.owner ?? null;
 }
 
-export function readSession(id: string): AuditSession | null {
-  const row = db().prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRow | undefined;
+export async function readSession(id: string): Promise<AuditSession | null> {
+  const row = await get<SessionRow>("SELECT * FROM sessions WHERE id = ?", [id]);
   if (!row) return null;
-  const documents = documentRows(id);
-  const checks = readChecks(id);
+  const documents = await documentRows(id);
+  const checks = await readChecks(id);
   const decision = row.decision ? (JSON.parse(row.decision) as ReviewerDecision) : null;
   const session: AuditSession = {
     id: row.id,
@@ -220,34 +138,34 @@ export function readSession(id: string): AuditSession | null {
   if (row.description) session.description = row.description;
   if (row.stage) session.processingStage = row.stage as ProcessingStage;
   if (row.error) session.processingError = row.error;
-  if (row.incomplete) session.incomplete = true;
+  if (Number(row.incomplete)) session.incomplete = true;
   if (row.file_errors) session.fileErrors = JSON.parse(row.file_errors) as { fileName: string; reason: string }[];
   if (row.notices) session.notices = JSON.parse(row.notices) as string[];
-  if (row.recheck) {
-    const summary = JSON.parse(row.recheck) as RecheckSummary;
-    session.recheck = summary;
-  }
+  if (row.recheck) session.recheck = JSON.parse(row.recheck) as RecheckSummary;
+  const owner = await get<{ email: string }>("SELECT email FROM users WHERE id = ?", [row.owner]);
+  if (owner?.email) session.ownerEmail = owner.email;
   return session;
 }
 
-export function readDocuments(sessionId: string): AuditDocument[] {
-  return documentRows(sessionId).map((row) => toDocument(sessionId, row));
+export async function readDocuments(sessionId: string): Promise<AuditDocument[]> {
+  const rows = await documentRows(sessionId);
+  return rows.map((row) => toDocument(sessionId, row));
 }
 
-export function readDocumentFile(sessionId: string, documentId: string): { path: string; mimeType: string; name: string } | null {
-  const row = db().prepare("SELECT * FROM documents WHERE id = ? AND session_id = ?").get(documentId, sessionId) as DocumentRow | undefined;
+export async function readDocumentFile(sessionId: string, documentId: string): Promise<{ path: string; mimeType: string; name: string } | null> {
+  const row = await get<DocumentRow>("SELECT * FROM documents WHERE id = ? AND session_id = ?", [documentId, sessionId]);
   if (!row) return null;
   return { path: row.storage_path, mimeType: row.mime_type, name: row.name };
 }
 
-export function documentBuffers(sessionId: string): { row: DocumentRow; buffer: Buffer }[] {
-  return documentRows(sessionId).map((row) => ({ row, buffer: fs.readFileSync(row.storage_path) }));
+export async function documentBuffers(sessionId: string): Promise<{ row: DocumentRow; buffer: Buffer }[]> {
+  const rows = await documentRows(sessionId);
+  return rows.map((row) => ({ row, buffer: fs.readFileSync(row.storage_path) }));
 }
 
-function documentRows(sessionId: string): DocumentRow[] {
-  return db()
-    .prepare("SELECT * FROM documents WHERE session_id = ? ORDER BY CASE role WHEN 'report' THEN 0 ELSE 1 END, name")
-    .all(sessionId) as unknown as DocumentRow[];
+async function documentRows(sessionId: string, query?: Query): Promise<DocumentRow[]> {
+  const read = query?.all<DocumentRow> ?? ((sql: string, params?: unknown[]) => all<DocumentRow>(sql, params));
+  return read("SELECT * FROM documents WHERE session_id = ? ORDER BY CASE role WHEN 'report' THEN 0 ELSE 1 END, name", [sessionId]);
 }
 
 function toDocument(sessionId: string, row: DocumentRow): AuditDocument {
@@ -264,15 +182,12 @@ function toDocument(sessionId: string, row: DocumentRow): AuditDocument {
   };
 }
 
-function readChecks(sessionId: string): CheckResult[] {
-  const rows = db().prepare("SELECT id, payload FROM checks WHERE session_id = ? ORDER BY position").all(sessionId) as { id: string; payload: string }[];
-  const reviews = db().prepare("SELECT * FROM reviews WHERE session_id = ?").all(sessionId) as {
-    check_id: string;
-    reviewer_status: string;
-    reviewer_comment: string;
-    reviewed_at: string | null;
-    source_json: string | null;
-  }[];
+async function readChecks(sessionId: string, query?: Query): Promise<CheckResult[]> {
+  const rows = await (query?.all<{ id: string; payload: string }> ?? all<{ id: string; payload: string }>)(
+    "SELECT id, payload FROM checks WHERE session_id = ? ORDER BY position",
+    [sessionId],
+  );
+  const reviews = await (query?.all<ReviewRow> ?? all<ReviewRow>)("SELECT * FROM reviews WHERE session_id = ?", [sessionId]);
   const byId = new Map(reviews.map((review) => [review.check_id, review]));
   return rows.map((row) => {
     const check = JSON.parse(row.payload) as CheckResult;
@@ -289,175 +204,168 @@ function readChecks(sessionId: string): CheckResult[] {
   });
 }
 
-export function checkCount(sessionId: string): number {
-  const row = db().prepare("SELECT COUNT(*) AS n FROM checks WHERE session_id = ?").get(sessionId) as { n: number };
-  return Number(row.n);
+export async function checkCount(sessionId: string): Promise<number> {
+  const row = await get<{ n: number | string }>("SELECT COUNT(*) AS n FROM checks WHERE session_id = ?", [sessionId]);
+  return Number(row?.n ?? 0);
 }
 
-export function setStage(sessionId: string, stage: string, error?: string): void {
-  db().prepare("UPDATE sessions SET stage = ?, error = ? WHERE id = ?").run(stage, error ?? null, sessionId);
+export async function setStage(sessionId: string, stage: string, error?: string): Promise<void> {
+  await run("UPDATE sessions SET stage = ?, error = ? WHERE id = ?", [stage, error ?? null, sessionId]);
 }
 
-export function markReprocessing(sessionId: string): void {
-  db().prepare("UPDATE sessions SET status = 'awaiting_processing', stage = 'queued', error = NULL, decision = NULL WHERE id = ?").run(sessionId);
+export async function markReprocessing(sessionId: string): Promise<void> {
+  await run("UPDATE sessions SET status = 'awaiting_processing', stage = 'queued', error = NULL, decision = NULL WHERE id = ?", [sessionId]);
 }
 
-export function keepPreviousResult(sessionId: string, error: string): void {
-  db().prepare("UPDATE sessions SET status = 'in_review', stage = 'done', error = ? WHERE id = ?").run(error, sessionId);
+export async function keepPreviousResult(sessionId: string, error: string): Promise<void> {
+  await run("UPDATE sessions SET status = 'in_review', stage = 'done', error = ? WHERE id = ?", [error, sessionId]);
 }
 
-export function markFailed(sessionId: string, error: string, fileErrors: { fileName: string; reason: string }[]): void {
-  db()
-    .prepare("UPDATE sessions SET stage = 'failed', error = ?, file_errors = ?, status = 'awaiting_processing' WHERE id = ?")
-    .run(error, JSON.stringify(fileErrors), sessionId);
+export async function markFailed(sessionId: string, error: string, fileErrors: { fileName: string; reason: string }[]): Promise<void> {
+  await run("UPDATE sessions SET stage = 'failed', error = ?, file_errors = ?, status = 'awaiting_processing' WHERE id = ?", [
+    error,
+    JSON.stringify(fileErrors),
+    sessionId,
+  ]);
 }
 
-export function saveDocumentRead(input: {
-  id: string;
-  pageCount: number;
-  readError?: string;
-  preview?: PreviewDraft;
-}): void {
-  db()
-    .prepare("UPDATE documents SET page_count = ?, read_error = ?, preview_json = ? WHERE id = ?")
-    .run(input.pageCount, input.readError ?? null, input.preview ? JSON.stringify(input.preview) : null, input.id);
+export async function saveDocumentRead(input: { id: string; pageCount: number; readError?: string; preview?: PreviewDraft }): Promise<void> {
+  await run("UPDATE documents SET page_count = ?, read_error = ?, preview_json = ? WHERE id = ?", [
+    input.pageCount,
+    input.readError ?? null,
+    input.preview ? JSON.stringify(input.preview) : null,
+    input.id,
+  ]);
 }
 
-export function saveOutcome(input: {
+export async function saveOutcome(input: {
   sessionId: string;
   reportDocumentId: string;
   checks: CheckResult[];
   fileErrors: { fileName: string; reason: string }[];
   notices: string[];
   incomplete: boolean;
-}): void {
-  const connection = db();
-  connection.exec("BEGIN");
-  try {
-    const keptReviews = connection
-      .prepare(
-        `SELECT c.payload, r.reviewer_status, r.reviewer_comment, r.reviewed_at, r.source_json
-         FROM reviews r
-         INNER JOIN checks c ON c.session_id = r.session_id AND c.id = r.check_id
-         WHERE r.session_id = ?`,
-      )
-      .all(input.sessionId) as { payload: string; reviewer_status: string; reviewer_comment: string; reviewed_at: string | null; source_json: string | null }[];
-    connection.prepare("DELETE FROM reviews WHERE session_id = ?").run(input.sessionId);
-    connection.prepare("DELETE FROM checks WHERE session_id = ?").run(input.sessionId);
-    const insert = connection.prepare("INSERT INTO checks (id, session_id, position, payload) VALUES (?, ?, ?, ?)");
-    input.checks.forEach((check, index) => {
+}): Promise<void> {
+  await transaction(async (query) => {
+    const keptReviews = await query.all<{
+      payload: string;
+      reviewer_status: string;
+      reviewer_comment: string;
+      reviewed_at: string | null;
+      source_json: string | null;
+    }>(
+      `SELECT c.payload, r.reviewer_status, r.reviewer_comment, r.reviewed_at, r.source_json
+       FROM reviews r
+       INNER JOIN checks c ON c.session_id = r.session_id AND c.id = r.check_id
+       WHERE r.session_id = ?`,
+      [input.sessionId],
+    );
+    await query.run("DELETE FROM reviews WHERE session_id = ?", [input.sessionId]);
+    await query.run("DELETE FROM checks WHERE session_id = ?", [input.sessionId]);
+    for (const [index, check] of input.checks.entries()) {
       const stored: CheckResult = { ...check, reviewerStatus: "pending", reviewerComment: "" };
       delete stored.reviewedAt;
-      insert.run(check.id, input.sessionId, index, JSON.stringify(stored));
-    });
-    const restore = connection.prepare(
-      `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    );
+      await query.run("INSERT INTO checks (id, session_id, position, payload) VALUES (?, ?, ?, ?)", [
+        check.id,
+        input.sessionId,
+        index,
+        JSON.stringify(stored),
+      ]);
+    }
     for (const row of keptReviews) {
       if (row.reviewer_status === "pending" && !row.reviewer_comment && !row.source_json) continue;
       const previous = JSON.parse(row.payload) as CheckResult;
       const sameName = input.checks.filter((check) => check.fieldName === previous.fieldName);
       const match = sameName.length === 1 ? sameName[0] : sameName.find((check) => check.reportValue === previous.reportValue);
       if (!match) continue;
-      restore.run(input.sessionId, match.id, row.reviewer_status, row.reviewer_comment, row.reviewed_at, row.source_json);
-    }
-    connection
-      .prepare(
-        `UPDATE sessions
-         SET status = 'in_review', stage = 'done', error = NULL, report_document_id = ?, incomplete = ?, file_errors = ?, notices = ?
-         WHERE id = ?`,
-      )
-      .run(
-        input.reportDocumentId,
-        input.incomplete ? 1 : 0,
-        JSON.stringify(input.fileErrors),
-        JSON.stringify(input.notices),
-        input.sessionId,
+      await query.run(
+        `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [input.sessionId, match.id, row.reviewer_status, row.reviewer_comment, row.reviewed_at, row.source_json],
       );
-    const previousId = (connection.prepare("SELECT previous_id FROM sessions WHERE id = ?").get(input.sessionId) as { previous_id: string | null } | undefined)?.previous_id;
-    if (previousId && sessionOwner(previousId) === (connection.prepare("SELECT owner FROM sessions WHERE id = ?").get(input.sessionId) as { owner: string }).owner) {
-      const previous = readChecks(previousId);
-      const before = new Set(previous.filter((check) => check.status !== "match").map((check) => check.fieldName));
-      const after = new Set(input.checks.filter((check) => check.status !== "match").map((check) => check.fieldName));
-      let closed = 0;
-      let remaining = 0;
-      let appeared = 0;
-      for (const name of before) {
-        if (after.has(name)) remaining += 1;
-        else closed += 1;
-      }
-      for (const name of after) if (!before.has(name)) appeared += 1;
-      const title = (connection.prepare("SELECT title FROM sessions WHERE id = ?").get(previousId) as { title: string }).title;
-      const summary: RecheckSummary = { previousSessionId: previousId, previousTitle: title, closed, remaining, appeared };
-      connection.prepare("UPDATE sessions SET recheck = ? WHERE id = ?").run(JSON.stringify(summary), input.sessionId);
     }
-    connection.exec("COMMIT");
-  } catch (error) {
-    connection.exec("ROLLBACK");
-    throw error;
-  }
+    await query.run(
+      `UPDATE sessions
+       SET status = 'in_review', stage = 'done', error = NULL, report_document_id = ?, incomplete = ?, file_errors = ?, notices = ?
+       WHERE id = ?`,
+      [input.reportDocumentId, input.incomplete ? 1 : 0, JSON.stringify(input.fileErrors), JSON.stringify(input.notices), input.sessionId],
+    );
+    const current = await query.get<{ previous_id: string | null; owner: string }>("SELECT previous_id, owner FROM sessions WHERE id = ?", [input.sessionId]);
+    if (!current?.previous_id) return;
+    const previousOwner = await query.get<{ owner: string }>("SELECT owner FROM sessions WHERE id = ?", [current.previous_id]);
+    if (previousOwner?.owner !== current.owner) return;
+    const previous = await readChecks(current.previous_id, query);
+    const before = new Set(previous.filter((check) => check.status !== "match").map((check) => check.fieldName));
+    const after = new Set(input.checks.filter((check) => check.status !== "match").map((check) => check.fieldName));
+    let closed = 0;
+    let remaining = 0;
+    let appeared = 0;
+    for (const name of before) {
+      if (after.has(name)) remaining += 1;
+      else closed += 1;
+    }
+    for (const name of after) if (!before.has(name)) appeared += 1;
+    const title = await query.get<{ title: string }>("SELECT title FROM sessions WHERE id = ?", [current.previous_id]);
+    const summary: RecheckSummary = {
+      previousSessionId: current.previous_id,
+      previousTitle: title?.title ?? current.previous_id,
+      closed,
+      remaining,
+      appeared,
+    };
+    await query.run("UPDATE sessions SET recheck = ? WHERE id = ?", [JSON.stringify(summary), input.sessionId]);
+  });
 }
 
-export function saveReview(sessionId: string, checkId: string, status: ReviewerStatus, comment: string, source?: EvidenceReference | null): void {
-  const exists = db().prepare("SELECT id FROM checks WHERE id = ? AND session_id = ?").get(checkId, sessionId);
+export async function saveReview(sessionId: string, checkId: string, status: ReviewerStatus, comment: string, source?: EvidenceReference | null): Promise<void> {
+  const exists = await get<{ id: string }>("SELECT id FROM checks WHERE id = ? AND session_id = ?", [checkId, sessionId]);
   if (!exists) throw new Error("Показатель не найден");
-  const current = db().prepare("SELECT source_json FROM reviews WHERE session_id = ? AND check_id = ?").get(sessionId, checkId) as { source_json: string | null } | undefined;
+  const current = await get<{ source_json: string | null }>("SELECT source_json FROM reviews WHERE session_id = ? AND check_id = ?", [sessionId, checkId]);
   const sourceJson = source === undefined ? (current?.source_json ?? null) : source ? JSON.stringify(source) : null;
-  db()
-    .prepare(
-      `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(session_id, check_id) DO UPDATE SET
-         reviewer_status = excluded.reviewer_status,
-         reviewer_comment = excluded.reviewer_comment,
-         reviewed_at = excluded.reviewed_at,
-         source_json = excluded.source_json`,
-    )
-    .run(sessionId, checkId, status, comment, new Date().toISOString(), sourceJson);
+  await run(
+    `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(session_id, check_id) DO UPDATE SET
+       reviewer_status = excluded.reviewer_status,
+       reviewer_comment = excluded.reviewer_comment,
+       reviewed_at = excluded.reviewed_at,
+       source_json = excluded.source_json`,
+    [sessionId, checkId, status, comment, new Date().toISOString(), sourceJson],
+  );
 }
 
-export function clearReviews(sessionId: string): void {
-  const connection = db();
-  connection.prepare("DELETE FROM reviews WHERE session_id = ?").run(sessionId);
-  connection.prepare("UPDATE sessions SET decision = NULL, status = 'in_review' WHERE id = ? AND status != 'awaiting_processing'").run(sessionId);
+export async function clearReviews(sessionId: string): Promise<void> {
+  await transaction(async (query) => {
+    await query.run("DELETE FROM reviews WHERE session_id = ?", [sessionId]);
+    await query.run("UPDATE sessions SET decision = NULL, status = 'in_review' WHERE id = ? AND status != 'awaiting_processing'", [sessionId]);
+  });
 }
 
-export function saveDecision(sessionId: string, decision: Decision | null, comment: string): void {
+export async function saveDecision(sessionId: string, decision: Decision | null, comment: string): Promise<void> {
   if (!decision) {
-    db().prepare("UPDATE sessions SET decision = NULL, status = 'in_review' WHERE id = ?").run(sessionId);
+    await run("UPDATE sessions SET decision = NULL, status = 'in_review' WHERE id = ?", [sessionId]);
     return;
   }
   const payload: ReviewerDecision = { decision, comment, decidedAt: new Date().toISOString() };
-  db().prepare("UPDATE sessions SET decision = ?, status = 'completed' WHERE id = ?").run(JSON.stringify(payload), sessionId);
+  await run("UPDATE sessions SET decision = ?, status = 'completed' WHERE id = ?", [JSON.stringify(payload), sessionId]);
 }
 
-export function deleteSession(sessionId: string): void {
-  const rows = documentRows(sessionId);
-  const connection = db();
-  connection.exec("BEGIN");
-  try {
-    connection.prepare("DELETE FROM reviews WHERE session_id = ?").run(sessionId);
-    connection.prepare("DELETE FROM checks WHERE session_id = ?").run(sessionId);
-    connection.prepare("DELETE FROM documents WHERE session_id = ?").run(sessionId);
-    connection.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
-    connection.exec("COMMIT");
-  } catch (error) {
-    connection.exec("ROLLBACK");
-    throw error;
-  }
-  for (const row of rows) {
-    fs.rmSync(row.storage_path, { force: true });
-  }
+export async function deleteSession(sessionId: string): Promise<void> {
+  const rows = await documentRows(sessionId);
+  await transaction(async (query) => {
+    await query.run("DELETE FROM reviews WHERE session_id = ?", [sessionId]);
+    await query.run("DELETE FROM checks WHERE session_id = ?", [sessionId]);
+    await query.run("DELETE FROM documents WHERE session_id = ?", [sessionId]);
+    await query.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
+  });
+  for (const row of rows) fs.rmSync(row.storage_path, { force: true });
   fs.rmSync(path.dirname(rows[0]?.storage_path ?? path.join(dataDir(), "files", sessionId)), { recursive: true, force: true });
 }
 
-export function pendingSessionIds(): string[] {
-  const rows = db()
-    .prepare(
-      `SELECT id FROM sessions
-       WHERE status = 'awaiting_processing' AND stage IN ('queued', 'reading', 'extracting', 'matching') AND (error IS NULL OR error = '')`,
-    )
-    .all() as { id: string }[];
+export async function pendingSessionIds(): Promise<string[]> {
+  const rows = await all<{ id: string }>(
+    `SELECT id FROM sessions
+     WHERE status = 'awaiting_processing' AND stage IN ('queued', 'reading', 'extracting', 'matching') AND (error IS NULL OR error = '')`,
+  );
   return rows.map((row) => row.id);
 }

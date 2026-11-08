@@ -55,12 +55,13 @@ export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
         continue;
       }
       try {
-        const ocrLines = await recognizeImage(rendered, Math.ceil(page.getViewport({ scale: 2 }).width), Math.ceil(page.getViewport({ scale: 2 }).height));
-        if (!ocrLines.length) {
+        const recognized = await recognizeImage(rendered, Math.ceil(page.getViewport({ scale: 2 }).width), Math.ceil(page.getViewport({ scale: 2 }).height), "image/png");
+        if (!recognized.lines.length) {
           warnings.push(`Страница ${pageNumber}: распознавание не нашло текста.`);
           continue;
         }
-        ocrLines.forEach((line, index) => {
+        if (recognized.engine === "model") warnings.push(`Страница ${pageNumber}: текст распознан запасным OCR без координат строк.`);
+        recognized.lines.forEach((line, index) => {
           const anchor = `p${pageNumber}o${index + 1}`;
           fragments.push({
             id: anchor,
@@ -69,8 +70,8 @@ export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
             locationLabel: `Стр. ${pageNumber}`,
             anchor,
             shape: "line",
-            box: line.box,
-            tokens: line.tokens,
+            ...(line.box ? { box: line.box } : {}),
+            ...(line.tokens ? { tokens: line.tokens } : {}),
           });
         });
       } catch (error) {

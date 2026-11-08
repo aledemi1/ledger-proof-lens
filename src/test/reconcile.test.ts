@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { closeDb, db, readSession, saveReview } from "@/server/db";
+import { closeDb, readSession, saveReview } from "@/server/db";
+import { all, run } from "@/server/store";
 import { readFile } from "@/server/extract";
 import {
   actPdf,
@@ -25,7 +26,19 @@ import { handleApi } from "@/server/http";
 import { enqueue, enqueueRebuild } from "@/server/process";
 import { duplicateNames, reconcile, type PreparedDoc } from "@/server/reconcile";
 
-const owner = "a".repeat(32);
+async function signIn(): Promise<string> {
+  const response = await handleApi(
+    new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: `user-${crypto.randomUUID()}@example.com`, password: "password123" }),
+    }),
+  );
+  if (response.status !== 201) throw new Error(await response.text());
+  const token = /sverko_auth=([^;]+)/.exec(response.headers.get("set-cookie") ?? "")?.[1];
+  if (!token) throw new Error("нет cookie");
+  return `sverko_auth=${token}`;
+}
 
 async function prepare(name: string, buffer: Buffer, isReport: boolean): Promise<PreparedDoc> {
   const read = await readFile(name, buffer);
@@ -37,7 +50,9 @@ function byName(checks: { fieldName: string; status: string; discrepancy: string
 }
 
 describe("document reconciliation", () => {
-  afterEach(() => closeDb());
+  afterEach(async () => {
+    await closeDb();
+  });
 
   it("compares an xlsx report with an act and a waybill", async () => {
     const report = await prepare("Отчет_поставка.xlsx", supplyReport(), true);
@@ -148,7 +163,8 @@ describe("document reconciliation", () => {
   it("marks the audit incomplete when one supporting file cannot be read", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sverko-"));
     process.env["SVERKO_DATA_DIR"] = dir;
-    closeDb();
+    await closeDb();
+    const cookie = await signIn();
     const form = new FormData();
     form.set("title", "Неполный комплект");
     form.set("idempotencyKey", "incomplete-1");
@@ -156,18 +172,18 @@ describe("document reconciliation", () => {
     form.set("supporting", new File([new Uint8Array(waybill("34", 47))], "Накладная_34.xlsx"), "Накладная_34.xlsx");
     form.append("supporting", new File([new Uint8Array(brokenPdf())], "Поврежденный.pdf"), "Поврежденный.pdf");
     form.set("supportingTypes", JSON.stringify(["waybill", "unknown"]));
-    const response = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie: `sverko_sid=${owner}` } }));
+    const response = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie } }));
     expect(response.status).toBe(201);
     const created = (await response.json()) as { id: string };
     await enqueue(created.id);
-    const session = readSession(created.id);
+    const session = await readSession(created.id);
     expect(session?.fileErrors?.[0]?.fileName).toBe("Поврежденный.pdf");
     expect(session?.incomplete).toBe(true);
     expect(session?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("mismatch");
     expect(session?.checks.find((check) => check.fieldName === "Транспортные расходы")?.status).toBe("needs_review");
-    saveReview(created.id, session!.checks.find((check) => check.fieldName === "Количество")!.id, "verified", "Поставщик подтвердил 50 штук письмом");
-    closeDb();
-    const reopened = readSession(created.id);
+    await saveReview(created.id, session!.checks.find((check) => check.fieldName === "Количество")!.id, "verified", "Поставщик подтвердил 50 штук письмом");
+    await closeDb();
+    const reopened = await readSession(created.id);
     const reviewed = reopened?.checks.find((check) => check.fieldName === "Количество");
     expect(reviewed?.status).toBe("mismatch");
     expect(reviewed?.reviewerStatus).toBe("verified");
@@ -176,26 +192,27 @@ describe("document reconciliation", () => {
 
   it("rechecks the whole set after a supporting document is added", async () => {
     process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-"));
-    closeDb();
+    await closeDb();
+    const cookie = await signIn();
     const form = new FormData();
     form.set("title", "Частичная поставка");
     form.set("idempotencyKey", "add-doc-1");
     form.set("report", new File([new Uint8Array(tableFile("Отчёт", [["Показатель", "Значение"], ["Наименование оборудования", "Сервер Dell PowerEdge"], ["Количество", "47 шт"]]))], "Отчет_части.xlsx"), "Отчет_части.xlsx");
     form.set("supporting", new File([new Uint8Array(waybill("33", 30))], "Накладная_33.xlsx"), "Накладная_33.xlsx");
-    const createdResponse = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie: `sverko_sid=${owner}` } }));
+    const createdResponse = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie } }));
     const created = (await createdResponse.json()) as { id: string };
     await enqueue(created.id);
-    const before = readSession(created.id);
+    const before = await readSession(created.id);
     const quantity = before?.checks.find((check) => check.fieldName === "Количество");
     expect(quantity?.status).toBe("mismatch");
-    saveReview(created.id, quantity!.id, "verified", "Ждём вторую накладную");
+    await saveReview(created.id, quantity!.id, "verified", "Ждём вторую накладную");
 
     const extra = new FormData();
     extra.set("supporting", new File([new Uint8Array(waybill("35", 17))], "Накладная_35.xlsx"), "Накладная_35.xlsx");
-    const added = await handleApi(new Request(`http://localhost/api/audits/${created.id}/documents`, { method: "POST", body: extra, headers: { cookie: `sverko_sid=${owner}` } }));
+    const added = await handleApi(new Request(`http://localhost/api/audits/${created.id}/documents`, { method: "POST", body: extra, headers: { cookie } }));
     expect(added.status).toBe(200);
     await enqueueRebuild(created.id);
-    const after = readSession(created.id);
+    const after = await readSession(created.id);
     const summed = after?.checks.find((check) => check.fieldName === "Количество");
     expect(after?.supportingDocumentIds).toHaveLength(2);
     expect(summed?.status).toBe("match");
@@ -206,7 +223,8 @@ describe("document reconciliation", () => {
 
   it("keeps check ids separate for every audit in one database", async () => {
     process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-"));
-    closeDb();
+    await closeDb();
+    const cookie = await signIn();
     const ids: string[] = [];
     for (const quantity of [47, 50]) {
       const form = new FormData();
@@ -214,33 +232,32 @@ describe("document reconciliation", () => {
       form.set("idempotencyKey", `separate-${quantity}`);
       form.set("report", new File([new Uint8Array(supplyReport())], "Отчет_поставка.xlsx"), "Отчет_поставка.xlsx");
       form.set("supporting", new File([new Uint8Array(waybill("34", quantity))], "Накладная_34.xlsx"), "Накладная_34.xlsx");
-      const response = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie: `sverko_sid=${owner}` } }));
+      const response = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie } }));
       const created = (await response.json()) as { id: string };
       await enqueue(created.id);
       ids.push(created.id);
     }
-    const [first, second] = ids.map((id) => readSession(id));
+    const [first, second] = await Promise.all(ids.map((id) => readSession(id)));
     expect(first?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("mismatch");
     expect(second?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("match");
     const quantityId = second!.checks.find((check) => check.fieldName === "Количество")!.id;
-    saveReview(second!.id, quantityId, "confirmed", "");
-    expect(readSession(first!.id)?.checks.find((check) => check.id === quantityId)?.reviewerStatus).toBe("pending");
+    await saveReview(second!.id, quantityId, "confirmed", "");
+    expect((await readSession(first!.id))?.checks.find((check) => check.id === quantityId)?.reviewerStatus).toBe("pending");
   });
 
-  it("moves checks from the older single-key table", () => {
+  it("moves checks from the older single-key table", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sverko-"));
     process.env["SVERKO_DATA_DIR"] = dir;
-    closeDb();
+    await closeDb();
     const legacy = new DatabaseSync(path.join(dir, "sverko.sqlite"));
     legacy.exec(`
       CREATE TABLE checks (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, position INTEGER NOT NULL, payload TEXT NOT NULL);
       INSERT INTO checks VALUES ('c1', 'aud_old', 0, '{}');
     `);
     legacy.close();
-    const connection = db();
-    expect(connection.prepare("SELECT session_id FROM checks WHERE id = 'c1'").all()).toEqual([{ session_id: "aud_old" }]);
-    connection.prepare("INSERT INTO checks VALUES ('c1', 'aud_new', 0, '{}')").run();
-    expect(connection.prepare("SELECT COUNT(*) AS n FROM checks WHERE id = 'c1'").get()).toEqual({ n: 2 });
+    expect(await all<{ session_id: string }>("SELECT session_id FROM checks WHERE id = 'c1'")).toEqual([{ session_id: "aud_old" }]);
+    await run("INSERT INTO checks (id, session_id, position, payload) VALUES ('c1', 'aud_new', 0, '{}')");
+    expect(await all<{ n: number }>("SELECT COUNT(*) AS n FROM checks WHERE id = 'c1'")).toEqual([{ n: 2 }]);
   });
 
   it("recognizes a readable scan", async () => {

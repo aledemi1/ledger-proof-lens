@@ -3,7 +3,8 @@
 # Timeweb App Platform собирает этот Dockerfile в корне репозитория.
 # Сборка идёт в production, иначе Vite оставляет dev-JSX и SSR падает.
 # Зависимости ставятся полностью: vite и плагины лежат в devDependencies.
-# Рантайм — Node 22: проверка документов использует встроенный node:sqlite.
+# Рантайм — Node 22. Без DATABASE_URL проверка хранит карточки в node:sqlite.
+# С DATABASE_URL карточки, аккаунты и решения пишутся в PostgreSQL. Оригиналы остаются в SVERKO_DATA_DIR.
 FROM oven/bun:1.4.2 AS builder
 WORKDIR /app
 ENV NODE_ENV=production

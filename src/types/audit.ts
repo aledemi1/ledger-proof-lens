@@ -128,6 +128,8 @@ export interface AuditSession {
   createdAt: string;
   status: SessionStatus;
   isDemo: boolean;
+  /** Set when the check belongs to a registered account. */
+  ownerEmail?: string;
   reportDocumentId: string | null;
   supportingDocumentIds: string[];
   checks: CheckResult[];

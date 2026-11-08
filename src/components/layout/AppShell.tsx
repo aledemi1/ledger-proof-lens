@@ -1,8 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { FolderOpen, Plus, ScanSearch } from "lucide-react";
+import { FolderOpen, LogIn, Plus, ScanSearch, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAccount } from "@/hooks/useAccount";
+import { loadAccount } from "@/lib/account";
 import sverkoIcon from "@/assets/sverko-icon.jpg";
 
 const nav = [
@@ -20,17 +22,46 @@ function Logo() {
   );
 }
 
+function AccountLinks({ compact = false }: { compact?: boolean }) {
+  const account = useAccount();
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+    await loadAccount();
+  };
+  if (account === undefined) return null;
+  if (!account) {
+    return (
+      <Button asChild variant="ghost" size="sm">
+        <Link to="/login"><LogIn className="size-4" />{compact ? null : "Войти"}</Link>
+      </Button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      {account.role === "admin" && (
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/admin"><Users className="size-4" />{compact ? null : "Пользователи"}</Link>
+        </Button>
+      )}
+      {!compact && <span className="max-w-40 truncate px-2 text-xs text-muted-foreground">{account.email}</span>}
+      <Button variant="ghost" size="sm" onClick={() => void logout()}>{compact ? "Выход" : "Выйти"}</Button>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const account = useAccount();
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Проверки</Link></Button></div></header><main>{children}</main></div>;
+  const items = account?.role === "admin" ? [...nav, { to: "/admin" as const, label: "Пользователи", Icon: Users, exact: true }] : nav;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />Проверки</Link></Button><AccountLinks /></div></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>
         {workspace ? <Link to="/" aria-label="Sverko — главная" className="mx-auto grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><ScanSearch className="size-5" /></Link> : <Logo />}
         <nav className="mt-6 flex flex-col gap-0.5 px-2">
-          {nav.map(({ to, label, Icon, exact }) => (
+          {items.map(({ to, label, Icon, exact }) => (
             <Link
               key={to}
               to={to}
@@ -45,11 +76,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        <div className="mt-auto px-2"><AccountLinks compact={workspace} /></div>
       </aside>
       <header className="no-print sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Logo />
         <nav className="flex gap-1">
-          {nav.map(({ to, label, Icon, exact }) => (
+          {items.map(({ to, label, Icon, exact }) => (
             <Link
               key={to}
               to={to}
@@ -61,6 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Icon className="size-4" />
             </Link>
           ))}
+          <AccountLinks compact />
         </nav>
       </header>
       <main className="min-w-0 flex-1">{children}</main>

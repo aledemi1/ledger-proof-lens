@@ -10,7 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as NewRouteImport } from './routes/new'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuditsIndexRouteImport } from './routes/audits.index'
 import { Route as AuditsIdIndexRouteImport } from './routes/audits.$id.index'
 import { Route as AuditsIdConclusionRouteImport } from './routes/audits.$id.conclusion'
@@ -20,9 +23,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewRoute = NewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuditsIndexRoute = AuditsIndexRouteImport.update({
@@ -43,14 +61,20 @@ const AuditsIdConclusionRoute = AuditsIdConclusionRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/register': typeof RegisterRoute
   '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/register': typeof RegisterRoute
   '/audits': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id': typeof AuditsIdIndexRoute
@@ -58,7 +82,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/login': typeof LoginRoute
   '/new': typeof NewRoute
+  '/register': typeof RegisterRoute
   '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
@@ -66,13 +93,31 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/new' | '/audits/' | '/audits/$id/conclusion' | '/audits/$id/'
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/new'
+    | '/register'
+    | '/audits/'
+    | '/audits/$id/conclusion'
+    | '/audits/$id/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/new' | '/audits' | '/audits/$id/conclusion' | '/audits/$id'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/new'
+    | '/register'
+    | '/audits'
+    | '/audits/$id/conclusion'
+    | '/audits/$id'
   id:
     | '__root__'
     | '/'
+    | '/admin'
+    | '/login'
     | '/new'
+    | '/register'
     | '/audits/'
     | '/audits/$id/conclusion'
     | '/audits/$id/'
@@ -80,7 +125,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  LoginRoute: typeof LoginRoute
   NewRoute: typeof NewRoute
+  RegisterRoute: typeof RegisterRoute
   AuditsIndexRoute: typeof AuditsIndexRoute
   AuditsIdConclusionRoute: typeof AuditsIdConclusionRoute
   AuditsIdIndexRoute: typeof AuditsIdIndexRoute
@@ -95,11 +143,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/new': {
       id: '/new'
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof NewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audits/': {
@@ -128,7 +197,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  LoginRoute: LoginRoute,
   NewRoute: NewRoute,
+  RegisterRoute: RegisterRoute,
   AuditsIndexRoute: AuditsIndexRoute,
   AuditsIdConclusionRoute: AuditsIdConclusionRoute,
   AuditsIdIndexRoute: AuditsIdIndexRoute,

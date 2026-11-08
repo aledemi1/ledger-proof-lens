@@ -52,6 +52,9 @@ export function AuditsListPage() {
       {error && (
         <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}. Демонстрационные проверки по-прежнему доступны, подменять ими загруженные комплекты приложение не будет.
+          {error.includes("Войдите") && (
+            <span> <Link to="/login" className="underline underline-offset-4">Войти</Link> или <Link to="/register" className="underline underline-offset-4">создать аккаунт</Link>.</span>
+          )}
         </div>
       )}
 
@@ -111,6 +114,7 @@ function ProjectFolder({ session: s, showDemo }: { session: AuditSession; showDe
           <p className="line-clamp-2 font-semibold leading-snug">{s.title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {formatDate(s.createdAt)}
+            {s.ownerEmail ? ` · ${s.ownerEmail}` : ""}
             {s.isDemo && showDemo && " · пример"}
           </p>
         </div>

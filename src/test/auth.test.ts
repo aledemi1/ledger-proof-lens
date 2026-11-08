@@ -1,0 +1,65 @@
+// @vitest-environment node
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { closeDb } from "@/server/db";
+import { handleApi } from "@/server/http";
+import { run } from "@/server/store";
+
+async function register(email: string): Promise<string> {
+  const response = await handleApi(
+    new Request("http://localhost/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: "password123" }),
+    }),
+  );
+  expect(response.status).toBe(201);
+  const token = /sverko_auth=([^;]+)/.exec(response.headers.get("set-cookie") ?? "")?.[1];
+  if (!token) throw new Error("нет cookie");
+  return `sverko_auth=${token}`;
+}
+
+describe("accounts", () => {
+  afterEach(async () => {
+    await closeDb();
+  });
+
+  it("keeps a user's audits private and lets an admin see every account", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-auth-"));
+    await closeDb();
+    const user = await register("user@example.com");
+    const outsider = await register("other@example.com");
+    const denied = await handleApi(new Request("http://localhost/api/admin/users", { headers: { cookie: user } }));
+    expect(denied.status).toBe(403);
+
+    await run("UPDATE users SET role = 'admin' WHERE email = ?", ["user@example.com"]);
+    const users = await handleApi(new Request("http://localhost/api/admin/users", { headers: { cookie: user } }));
+    expect(users.status).toBe(200);
+    const list = (await users.json()) as { email: string; role: string }[];
+    expect(list.map((item) => item.email).sort()).toEqual(["other@example.com", "user@example.com"]);
+
+    const me = (await (await handleApi(new Request("http://localhost/api/auth/me", { headers: { cookie: outsider } }))).json()) as { id: string };
+    await run(
+      "INSERT INTO sessions (id, owner, idempotency_key, title, created_at, status, stage) VALUES ('aud_private', ?, 'auth-1', 'Чужая', ?, 'in_review', 'done')",
+      [me.id, new Date().toISOString()],
+    );
+    const stranger = await register("stranger@example.com");
+    const ownList = (await (await handleApi(new Request("http://localhost/api/audits", { headers: { cookie: outsider } }))).json()) as { id: string }[];
+    const hidden = (await (await handleApi(new Request("http://localhost/api/audits", { headers: { cookie: stranger } }))).json()) as { id: string }[];
+    const adminList = (await (await handleApi(new Request("http://localhost/api/audits", { headers: { cookie: user } }))).json()) as { title: string }[];
+    expect(ownList.map((item) => item.id)).toEqual(["aud_private"]);
+    expect(hidden).toEqual([]);
+    expect(adminList.map((item) => item.title)).toEqual(["Чужая"]);
+
+    const demote = await handleApi(
+      new Request("http://localhost/api/admin/users/missing", {
+        method: "PATCH",
+        headers: { cookie: user, "content-type": "application/json" },
+        body: JSON.stringify({ role: "user" }),
+      }),
+    );
+    expect(demote.status).toBe(404);
+  });
+});

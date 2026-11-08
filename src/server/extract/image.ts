@@ -12,28 +12,29 @@ export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
   } catch {
     throw new Error("файл повреждён: изображение не открывается");
   }
-  let lines;
+  const mime = buffer[0] === 0xff && buffer[1] === 0xd8 ? "image/jpeg" : "image/png";
+  let recognized;
   try {
-    lines = await recognizeImage(buffer, width, height);
+    recognized = await recognizeImage(buffer, width, height, mime);
   } catch (error) {
     throw new Error(ocrUnavailableReason(error));
   }
-  if (!lines.length) throw new Error("на изображении не удалось распознать текст");
-  const fragments = lines.map((line, index) => ({
+  if (!recognized.lines.length) throw new Error("на изображении не удалось распознать текст");
+  const fragments = recognized.lines.map((line, index) => ({
     id: `i${index + 1}`,
     text: line.text,
     pageNumber: 1,
     locationLabel: "Скан",
     anchor: `i${index + 1}`,
     shape: "line" as const,
-    box: line.box,
-    tokens: line.tokens,
+    ...(line.box ? { box: line.box } : {}),
+    ...(line.tokens ? { tokens: line.tokens } : {}),
   }));
   return {
     fragments,
     preview: { kind: "image", width, height },
     pageCount: 1,
     text: fragments.map((fragment) => fragment.text).join("\n"),
-    warnings: [],
+    warnings: recognized.engine === "model" ? ["Текст распознан запасным OCR. Координаты строк не размечены, потому что запасной способ возвращает только текст."] : [],
   };
 }
