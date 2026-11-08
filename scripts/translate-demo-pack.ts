@@ -100,7 +100,8 @@ async function translateBatch(locale: Locale, entries: { id: string; text: strin
     'Return JSON {"items":[{"id":"","text":""}]} using only the given ids.',
     "Keep every number, date, percentage and numeric token exactly.",
     "Keep product codes, contract numbers, INN and organization abbreviations exactly: ДЭ-100, ВА-220, ЦЛ-6, EQ-01, SRV-01, СЛ-16/2025, ООО, АО, ИНН, КПП.",
-    "Keep these units exactly when they appear: шт, компл, руб, час, мг, чел, ₽, НДС.",
+    "Keep these units exactly when they appear: шт, компл, руб, час, мг, чел, ₽.",
+    "Translate НДС into the local value-added tax name: VAT, MwSt, TVA, IVA, KDV, BTW or 增值税. Keep the rate, for example 20%.",
     "Do not add notes. Do not omit a string.",
   ].join("\n");
   const raw = await chat(system, JSON.stringify({ items: entries }));

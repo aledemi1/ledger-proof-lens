@@ -15,13 +15,13 @@ export type Role =
 const SCALE = 10000n;
 
 const ROLE_RULES: { role: Role; re: RegExp }[] = [
-  { role: "inn", re: /(^|[^\p{L}\p{N}])(инн|inn|(?<!incl\. )(?<!incl )(?<!including )(?<!excl\. )(?<!excl )(?<!excluding )(?<!without )vat|nif|nip|btw|ust-?id|税号)(?=[^\p{L}\p{N}]|$)/iu },
+  { role: "inn", re: /(^|[^\p{L}\p{N}])(инн|inn|nif|nip|ust-?id|税号)(?=[^\p{L}\p{N}]|$)/iu },
   { role: "contract_number", re: /договор|contract|vertrag|contrat|contratto|contrato|umowa|overeenkomst|sözleşme|sozlesme|合同/i },
   { role: "counterparty", re: /поставщик|контрагент|исполнитель|покупатель|заказчик|грузоотправитель|грузополучатель|supplier|vendor|customer|buyer|lieferant|kunde|fournisseur|acheteur|fornitore|cliente|proveedor|comprador|fornecedor|dostawca|odbiorca|leverancier|koper|tedarikçi|alıcı|供应商|买方/i },
   { role: "transport", re: /транспорт|доставк|перевоз|transport|delivery|shipping|fracht|lieferung|livraison|trasporto|transporte|przewóz|przewoz|vervoer|nakliye|运输/i },
   { role: "unit_price", re: /цена|тариф|стоимость\s+единиц|за\s+единиц|unit\s*price|\bprice\b|\brate\b|\bprijs\b|\btarif|\btariff|\btarief\b|preis|prix|precio|prezzo|preço|preco|cena jedn|\bcena\b|stukprijs|taryfa|birim fiyat|\bfiyat\b|\bpre[cç]o\b|费率|单价/i },
   { role: "quantity", re: /кол-?во|количество|поставлено|число\s+единиц|объ[её]м|quantity|qty|volume|volumen|umfang|omvang|hacim|accepted|received|geaccepteerd|angenommen|akzeptiert|abzüglich|abzuglich|accept[eé]|d[eé]duction|aceptado|aceito|aceite|accettato|przyj[eę]t|ontvangen|kabul|\breceipt\b|\bbalance\b|\bhours\b|\bkm\b|menge|cantidad|quantité|quantite|quantità|quantita|quantidade|ilość|ilosc|hoeveelheid|miktar|数量|体积|验收|已收|приход|остаток/i },
-  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*ндс|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
+  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*(?:ндс|vat\b)|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
   { role: "date", re: /(^|[^\p{L}])(дата|date|datum|fecha|data|tarih\w*|日期)(?=[^\p{L}]|$)/iu },
   { role: "item_name", re: /наименование|номенклатур|товар|оборудован|услуг|description|bezeichnung|désignation|designation|denominazione|denomina|descrizione|descrição|descricao|nazwa|benaming|omschrijving|açıklama|aciklama|名称|品名|(?<![\p{L}])item(?!\s*code)/iu },
 ];
@@ -155,7 +155,7 @@ export function isQuantityUnit(unit: string): boolean {
 }
 
 export function isMoneyUnit(unit: string): boolean {
-  return /руб|ндс|₽|rub|eur|usd|vat|mwst|tva|iva|btw|kdv|€/i.test(unit);
+  return /руб|ндс|₽|rub|eur|usd|vat|mwst|tva|iva|btw|kdv|增值税|€/i.test(unit);
 }
 
 export function isDateUnit(unit: string): boolean {
@@ -199,9 +199,9 @@ export type VatBasis = "net" | "gross" | "tax" | "unknown";
 /** Whether a money label is the net amount, the gross amount, or the tax itself. */
 export function vatBasis(label: string): VatBasis {
   const text = label.toLowerCase().replace(/ё/g, "е");
-  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|^vat\b|mwst|tva|iva|btw|kdv|税额/.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|\bbez\b|不含|含/.test(text)) return "tax";
+  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|^vat\b|mwst|tva|\biva\b|\bbtw\b|\bkdv\b|增值税|税额/.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|\bbez\b|mit\s|met\s|avec\s|\bcon\s|\bcom\s|不含|含/.test(text)) return "tax";
   if (/без\s*ндс|без\s+налога|excl\.?\s*vat|without|excluding|ohne|zonder|\bbez\b|netto|sin\s|hors\s|senza|sem\s|excl\.?\s*btw|hari[cç]|haric|不含/.test(text)) return "net";
-  if (/с\s*ндс|включая\s+ндс|incl\.?\s*vat|including|avec\s|\bcom\s|con\s|brutto|\bmet\s|mit\s+(?:mwst|ндс|vat)|z\s*ндс|ttc|dahil|含/.test(text) && !/不含|zonder|without|ohne|sin\s|sem\s|hors\s|excl|hari[cç]|haric|senza|\bbez\b/.test(text)) return "gross";
+  if (/с\s*ндс|включая\s+ндс|incl\.?\s*vat|including|avec\s|\bcom\s|con\s|brutto|\bmet\s|mit\s+(?:mwst|ндс|vat)|z\s*(?:ндс|vat\b)|ttc|dahil|含/.test(text) && !/不含|zonder|without|ohne|sin\s|sem\s|hors\s|excl|hari[cç]|haric|senza|\bbez\b/.test(text)) return "gross";
   return "unknown";
 }
 

@@ -549,7 +549,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     else if (performed.length) pool = performed;
     else if (calculated.length) pool = calculated;
     else pool = pool.filter((source) => source.docKind !== "invoice" && source.docKind !== "contract");
-  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*ндс|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
+  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*(?:ндс|vat\b)|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
     const shipped = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
     if (shipped.length) pool = shipped;
   }
