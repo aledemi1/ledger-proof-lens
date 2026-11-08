@@ -1,5 +1,5 @@
 import type { ReadDocument } from "../model";
-import { ocrUnavailableReason, recognizeImage } from "./ocr";
+import { recognizeUploadedImage } from "./ocr";
 
 export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
   let width = 0;
@@ -15,9 +15,9 @@ export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
   const mime = buffer[0] === 0xff && buffer[1] === 0xd8 ? "image/jpeg" : "image/png";
   let recognized;
   try {
-    recognized = await recognizeImage(buffer, width, height, mime);
+    recognized = await recognizeUploadedImage(buffer, width, height, mime);
   } catch (error) {
-    throw new Error(ocrUnavailableReason(error));
+    throw new Error(error instanceof Error ? error.message : "не удалось распознать изображение");
   }
   if (!recognized.lines.length) throw new Error("на изображении не удалось распознать текст");
   const fragments = recognized.lines.map((line, index) => ({
@@ -35,6 +35,6 @@ export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
     preview: { kind: "image", width, height },
     pageCount: 1,
     text: fragments.map((fragment) => fragment.text).join("\n"),
-    warnings: recognized.engine === "model" ? ["Текст распознан запасным OCR. Координаты строк не размечены, потому что запасной способ возвращает только текст."] : [],
+    warnings: ["Текст распознан моделью gpt-5.4. Координаты строк не размечены: модель возвращает только текст."],
   };
 }

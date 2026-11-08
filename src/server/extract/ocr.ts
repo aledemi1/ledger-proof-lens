@@ -141,10 +141,26 @@ async function recognizeWithTesseract(buffer: Buffer, width: number, height: num
   return worker.recognize(buffer, width, height);
 }
 
-async function recognizeWithModel(buffer: Buffer, mime: string): Promise<OcrResult> {
+/** Uploaded photos skip Tesseract and go straight to this vision model. */
+export const UPLOADED_IMAGE_MODEL = "gpt-5.4";
+
+export async function recognizeUploadedImage(buffer: Buffer, width: number, height: number, mime = "image/png"): Promise<OcrResult> {
+  void width;
+  void height;
+  const config = aiConfig();
+  if (!config) throw new Error("для распознавания изображения нужен ключ языковой модели (AI_API_KEY)");
+  try {
+    return await recognizeWithModel(buffer, mime, UPLOADED_IMAGE_MODEL);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "нет ответа";
+    throw new Error(`Не удалось распознать изображение моделью ${UPLOADED_IMAGE_MODEL} (${message}).`);
+  }
+}
+
+async function recognizeWithModel(buffer: Buffer, mime: string, modelName?: string): Promise<OcrResult> {
   const config = aiConfig();
   if (!config) throw new Error("основной OCR недоступен, а запасное распознавание не настроено");
-  const model = process.env["AI_OCR_MODEL"]?.trim() || config.model;
+  const model = modelName || process.env["AI_OCR_MODEL"]?.trim() || config.model;
   const messages = [
     {
       role: "system",
