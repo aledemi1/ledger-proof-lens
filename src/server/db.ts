@@ -298,6 +298,14 @@ export function setStage(sessionId: string, stage: string, error?: string): void
   db().prepare("UPDATE sessions SET stage = ?, error = ? WHERE id = ?").run(stage, error ?? null, sessionId);
 }
 
+export function markReprocessing(sessionId: string): void {
+  db().prepare("UPDATE sessions SET status = 'awaiting_processing', stage = 'queued', error = NULL, decision = NULL WHERE id = ?").run(sessionId);
+}
+
+export function keepPreviousResult(sessionId: string, error: string): void {
+  db().prepare("UPDATE sessions SET status = 'in_review', stage = 'done', error = ? WHERE id = ?").run(error, sessionId);
+}
+
 export function markFailed(sessionId: string, error: string, fileErrors: { fileName: string; reason: string }[]): void {
   db()
     .prepare("UPDATE sessions SET stage = 'failed', error = ?, file_errors = ?, status = 'awaiting_processing' WHERE id = ?")
@@ -326,6 +334,15 @@ export function saveOutcome(input: {
   const connection = db();
   connection.exec("BEGIN");
   try {
+    const keptReviews = connection
+      .prepare(
+        `SELECT c.payload, r.reviewer_status, r.reviewer_comment, r.reviewed_at, r.source_json
+         FROM reviews r
+         INNER JOIN checks c ON c.session_id = r.session_id AND c.id = r.check_id
+         WHERE r.session_id = ?`,
+      )
+      .all(input.sessionId) as { payload: string; reviewer_status: string; reviewer_comment: string; reviewed_at: string | null; source_json: string | null }[];
+    connection.prepare("DELETE FROM reviews WHERE session_id = ?").run(input.sessionId);
     connection.prepare("DELETE FROM checks WHERE session_id = ?").run(input.sessionId);
     const insert = connection.prepare("INSERT INTO checks (id, session_id, position, payload) VALUES (?, ?, ?, ?)");
     input.checks.forEach((check, index) => {
@@ -333,6 +350,18 @@ export function saveOutcome(input: {
       delete stored.reviewedAt;
       insert.run(check.id, input.sessionId, index, JSON.stringify(stored));
     });
+    const restore = connection.prepare(
+      `INSERT INTO reviews (session_id, check_id, reviewer_status, reviewer_comment, reviewed_at, source_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const row of keptReviews) {
+      if (row.reviewer_status === "pending" && !row.reviewer_comment && !row.source_json) continue;
+      const previous = JSON.parse(row.payload) as CheckResult;
+      const sameName = input.checks.filter((check) => check.fieldName === previous.fieldName);
+      const match = sameName.length === 1 ? sameName[0] : sameName.find((check) => check.reportValue === previous.reportValue);
+      if (!match) continue;
+      restore.run(input.sessionId, match.id, row.reviewer_status, row.reviewer_comment, row.reviewed_at, row.source_json);
+    }
     connection
       .prepare(
         `UPDATE sessions

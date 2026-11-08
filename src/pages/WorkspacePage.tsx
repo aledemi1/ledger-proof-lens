@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, ChevronDown, ChevronLeft, ChevronRight, FileCheck2, List, MoreHorizontal, Quote, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, BarChart3, ChevronDown, ChevronLeft, ChevronRight, FileCheck2, List, MoreHorizontal, Plus, Quote, RotateCcw } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { ReviewBar } from "@/components/audit/ReviewBar";
 import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { checkStatusMeta, DemoBadge, SessionStatusBadge, severityMeta } from "@/components/audit/badges";
 import { useAuditSession } from "@/hooks/useAudit";
+import { SUPPORTING_EXTENSIONS } from "@/lib/documentTypes";
 import { isIssue } from "@/lib/conclusion";
 import { checkTitle, groupIssues, groupMatches } from "@/lib/findings";
 import { readingAgainst } from "@/lib/reading";
@@ -235,8 +236,9 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
             </Link>
           </Button>
         </div>
-        {(quietNotices.length > 0 || fileProblems.length > 0 || session.recheck) && (
+        {(quietNotices.length > 0 || fileProblems.length > 0 || session.recheck || session.processingError) && (
           <p className="mt-1 truncate text-[11px] text-muted-foreground" title={[...quietNotices, ...fileProblems.map((file) => `${file.fileName}: ${file.reason}`)].join(" ")}>
+            {session.processingError ? `${session.processingError} ` : ""}
             {fileProblems.length > 0 ? `Непрочитано файлов: ${fileProblems.length}. ` : ""}
             {quietNotices[0] ?? ""}
             {session.recheck ? ` Повтор «${session.recheck.previousTitle}»: закрылось ${session.recheck.closed}, осталось ${session.recheck.remaining}, появилось ${session.recheck.appeared}.` : ""}
@@ -305,7 +307,12 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
               focus={sourceFocus}
               onMarkClick={onSourceMark}
               emptyText="Выберите первичный документ в списке."
-              title={<DocumentSwitcher documents={sources} activeId={sourceId} onSelect={showSource} counts={counts} sourceIds={sourceIds} page={sourceFocus?.pageNumber || undefined} duplicates={duplicateNames} />}
+              title={
+                <div className="flex min-w-0 flex-1 items-center gap-1">
+                  <DocumentSwitcher documents={sources} activeId={sourceId} onSelect={showSource} counts={counts} sourceIds={sourceIds} page={sourceFocus?.pageNumber || undefined} duplicates={duplicateNames} />
+                  <AddDocumentsButton sessionId={session.id} demo={session.isDemo} />
+                </div>
+              }
               banner={
                 selected && (
                   <Comparison
@@ -336,6 +343,42 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
 }
 
 /** The single comparison: report value, source value, difference; explanation on demand. */
+function AddDocumentsButton({ sessionId, demo }: { sessionId: string; demo: boolean }) {
+  const input = useRef<HTMLInputElement>(null);
+  const add = async (list: FileList | null) => {
+    const files = Array.from(list ?? []);
+    if (input.current) input.current.value = "";
+    if (!files.length) return;
+    const accepted = files.filter((file) => SUPPORTING_EXTENSIONS.includes(file.name.split(".").pop()?.toLowerCase() ?? ""));
+    if (accepted.length !== files.length) toast.error("Часть файлов пропущена: нужен PDF, Word, Excel или изображение");
+    if (!accepted.length) return;
+    if (demo) {
+      toast.message("Демонстрационный комплект не изменяется. В своей проверке добавленные документы сразу входят в сверку.");
+      return;
+    }
+    try {
+      await auditService.addDocuments(sessionId, accepted);
+      toast.success(accepted.length === 1 ? "Документ добавлен, сверка пересчитывается" : "Документы добавлены, сверка пересчитывается");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Не удалось добавить документы");
+    }
+  };
+  return (
+    <>
+      <input ref={input} type="file" className="hidden" multiple accept={SUPPORTING_EXTENSIONS.map((ext) => `.${ext}`).join(",")} onChange={(event) => void add(event.target.files)} />
+      <Button variant="outline" size="icon" className="size-8 shrink-0" aria-label="Добавить первичные документы" title="Добавить первичные документы" onClick={() => {
+        if (demo) {
+          toast.message("Демонстрационный комплект не изменяется. В своей проверке добавленные документы сразу входят в сверку.");
+          return;
+        }
+        input.current?.click();
+      }}>
+        <Plus />
+      </Button>
+    </>
+  );
+}
+
 function previewFragments(doc: AuditDocument): { anchor: string; text: string; label: string }[] {
   if (doc.preview.kind === "grid") {
     return doc.preview.sheets.flatMap((sheet) => sheet.rows.flatMap((row) => row.cells.filter((cell) => cell.text.trim()).map((cell) => ({

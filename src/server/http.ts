@@ -20,7 +20,7 @@ import {
 import { loadEnv } from "./env";
 import { fileExtension, validateFile } from "./extract/index";
 import { dataDir } from "./paths";
-import { enqueue, sha256 } from "./process";
+import { enqueue, enqueueRebuild, sha256 } from "./process";
 
 const TYPES = new Set(["unknown", "act", "invoice", "waybill", "contract", "payment", "other", "report"]);
 
@@ -51,6 +51,7 @@ export async function handleApi(request: Request): Promise<Response> {
     return json({ ok: true }, 200, cookie);
   }
   if (parts[3] === "documents" && request.method === "GET") return json(readDocuments(id), 200, cookie);
+  if (parts[3] === "documents" && request.method === "POST") return addDocuments(request, id, cookie);
   if (parts[3] === "files" && parts[4] && request.method === "GET") return fileResponse(id, parts[4], cookie);
   if (parts[3] === "checks" && parts[4] && parts[5] === "review" && request.method === "POST") return review(request, id, parts[4], cookie);
   if (parts[3] === "decision" && request.method === "POST") return decision(request, id, cookie);
@@ -132,6 +133,56 @@ async function createAudit(request: Request, owner: string, cookie?: string): Pr
   setReportDocument(sessionId, reportId);
   enqueue(sessionId);
   return json(readSession(sessionId), 201, cookie);
+}
+
+async function addDocuments(request: Request, sessionId: string, cookie?: string): Promise<Response> {
+  const session = readSession(sessionId);
+  if (!session) return json({ error: "Проверка не найдена" }, 404, cookie);
+  if (!session.reportDocumentId) return json({ error: "В проверке нет основного отчёта" }, 400, cookie);
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return json({ error: "Ожидалась форма с файлами" }, 400, cookie);
+  }
+  const supporting = form.getAll("supporting").filter((item): item is File => item instanceof File);
+  if (!supporting.length) return json({ error: "Приложите хотя бы один подтверждающий документ" }, 400, cookie);
+  let hinted: string[] = [];
+  try {
+    const raw = form.get("supportingTypes");
+    hinted = raw ? (JSON.parse(String(raw)) as string[]) : [];
+  } catch {
+    hinted = [];
+  }
+  const errors: { fileName: string; reason: string }[] = [];
+  const accepted: { file: File; buffer: Buffer; type: DocumentType }[] = [];
+  for (const [index, file] of supporting.entries()) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const reason = validateFile(file.name || "файл", buffer, "supporting");
+    if (reason) errors.push({ fileName: file.name || "файл", reason });
+    else accepted.push({ file, buffer, type: asType(hinted[index], file.name) });
+  }
+  if (errors.length) return json({ error: "Файлы не приняты", files: errors }, 400, cookie);
+  const folder = path.join(dataDir(), "files", sessionId);
+  fs.mkdirSync(folder, { recursive: true });
+  for (const item of accepted) {
+    const documentId = `doc_${randomBytes(8).toString("hex")}`;
+    const storagePath = path.join(folder, documentId);
+    fs.writeFileSync(storagePath, item.buffer);
+    insertDocument({
+      id: documentId,
+      sessionId,
+      role: "supporting",
+      name: item.file.name || documentId,
+      docType: item.type,
+      mimeType: item.file.type || mimeOf(item.file.name),
+      size: item.buffer.length,
+      sha256: sha256(item.buffer),
+      storagePath,
+    });
+  }
+  enqueueRebuild(sessionId);
+  return json(readSession(sessionId), 200, cookie);
 }
 
 async function review(request: Request, sessionId: string, checkId: string, cookie?: string): Promise<Response> {

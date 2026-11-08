@@ -126,6 +126,15 @@ export const apiAuditService: AuditService = {
     emit();
     return session;
   },
+  async addDocuments(sessionId, files) {
+    if (await isDemo(sessionId)) throw new AuditApiError("Демонстрационный комплект не изменяется. Новые документы можно добавить в своей проверке.", 400);
+    if (!files.length) throw new AuditApiError("Приложите хотя бы один подтверждающий документ", 400);
+    const form = new FormData();
+    for (const file of files) form.append("supporting", file, file.name);
+    const session = await request<AuditSession>(`/api/audits/${sessionId}/documents`, { method: "POST", body: form });
+    emit();
+    return session;
+  },
   async deleteDraft(sessionId) {
     if (await isDemo(sessionId)) return;
     await request(`/api/audits/${sessionId}`, { method: "DELETE" });

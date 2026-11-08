@@ -22,7 +22,7 @@ import {
   writeAcceptanceFixtures,
 } from "@/server/fixtures";
 import { handleApi } from "@/server/http";
-import { enqueue } from "@/server/process";
+import { enqueue, enqueueRebuild } from "@/server/process";
 import { duplicateNames, reconcile, type PreparedDoc } from "@/server/reconcile";
 
 const owner = "a".repeat(32);
@@ -144,6 +144,36 @@ describe("document reconciliation", () => {
     expect(reviewed?.status).toBe("mismatch");
     expect(reviewed?.reviewerStatus).toBe("verified");
     expect(reviewed?.reviewerComment).toContain("письмом");
+  });
+
+  it("rechecks the whole set after a supporting document is added", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-"));
+    closeDb();
+    const form = new FormData();
+    form.set("title", "Частичная поставка");
+    form.set("idempotencyKey", "add-doc-1");
+    form.set("report", new File([new Uint8Array(tableFile("Отчёт", [["Показатель", "Значение"], ["Наименование оборудования", "Сервер Dell PowerEdge"], ["Количество", "47 шт"]]))], "Отчет_части.xlsx"), "Отчет_части.xlsx");
+    form.set("supporting", new File([new Uint8Array(waybill("33", 30))], "Накладная_33.xlsx"), "Накладная_33.xlsx");
+    const createdResponse = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie: `sverko_sid=${owner}` } }));
+    const created = (await createdResponse.json()) as { id: string };
+    await enqueue(created.id);
+    const before = readSession(created.id);
+    const quantity = before?.checks.find((check) => check.fieldName === "Количество");
+    expect(quantity?.status).toBe("mismatch");
+    saveReview(created.id, quantity!.id, "verified", "Ждём вторую накладную");
+
+    const extra = new FormData();
+    extra.set("supporting", new File([new Uint8Array(waybill("35", 17))], "Накладная_35.xlsx"), "Накладная_35.xlsx");
+    const added = await handleApi(new Request(`http://localhost/api/audits/${created.id}/documents`, { method: "POST", body: extra, headers: { cookie: `sverko_sid=${owner}` } }));
+    expect(added.status).toBe(200);
+    await enqueueRebuild(created.id);
+    const after = readSession(created.id);
+    const summed = after?.checks.find((check) => check.fieldName === "Количество");
+    expect(after?.supportingDocumentIds).toHaveLength(2);
+    expect(summed?.status).toBe("match");
+    expect(summed?.evidenceReferences).toHaveLength(2);
+    expect(summed?.reviewerStatus).toBe("verified");
+    expect(summed?.reviewerComment).toContain("накладную");
   });
 
   it("keeps check ids separate for every audit in one database", async () => {

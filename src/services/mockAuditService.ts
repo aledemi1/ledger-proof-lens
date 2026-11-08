@@ -132,6 +132,25 @@ export const mockAuditService: AuditService = {
     write(store);
     return session;
   },
+  async addDocuments(sessionId, files) {
+    const store = read();
+    const draft = store.drafts.find((item) => item.session.id === sessionId);
+    if (!draft) throw new Error("Демонстрационный комплект не изменяется. Новые документы можно добавить в своей проверке.");
+    const added = files.map((file, index) => ({
+      id: `${sessionId}-add-${uid()}-${index}`,
+      name: file.name,
+      type: "unknown" as const,
+      mimeType: file.type,
+      size: file.size,
+      pageCount: 0,
+      preview: { kind: "none" as const, reason: "Файл принят, но локальный черновик не пересчитывает сверку." },
+    }));
+    draft.documents.push(...added);
+    draft.session.supportingDocumentIds.push(...added.map((document) => document.id));
+    draft.session.processingError = "Локальный черновик не пересчитывает сверку. Загрузите комплект через сервер.";
+    write(store);
+    return draft.session;
+  },
   async deleteDraft(sessionId) {
     const store = read();
     store.drafts = store.drafts.filter((d) => d.session.id !== sessionId);

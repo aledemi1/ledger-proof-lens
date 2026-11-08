@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import {
   checkCount,
   documentBuffers,
+  keepPreviousResult,
   markFailed,
+  markReprocessing,
   pendingSessionIds,
   readSession,
   saveDocumentRead,
@@ -18,30 +20,57 @@ import { duplicateNames, reconcile, unknownLabels } from "./reconcile";
 
 const jobs = new Map<string, Promise<void>>();
 
+function track(sessionId: string, job: Promise<void>): Promise<void> {
+  const tracked = job.finally(() => {
+    if (jobs.get(sessionId) === tracked) jobs.delete(sessionId);
+  });
+  jobs.set(sessionId, tracked);
+  return tracked;
+}
+
 export function enqueue(sessionId: string): Promise<void> {
   const current = jobs.get(sessionId);
   if (current) return current;
   if (checkCount(sessionId) > 0) return Promise.resolve();
   const session = readSession(sessionId);
   if (!session || session.processingStage === "failed") return Promise.resolve();
-  const job = processSession(sessionId)
-    .catch((error: unknown) => {
+  return track(
+    sessionId,
+    processSession(sessionId).catch((error: unknown) => {
       console.error(error);
       markFailed(sessionId, "Обработка прервалась из-за внутренней ошибки сервера. Загрузите комплект ещё раз.", []);
-    })
-    .finally(() => jobs.delete(sessionId));
-  jobs.set(sessionId, job);
-  return job;
+    }),
+  );
+}
+
+/** Runs the analysis again after the current pass, including documents added meanwhile. */
+export function enqueueRebuild(sessionId: string): Promise<void> {
+  markReprocessing(sessionId);
+  const previous = jobs.get(sessionId) ?? Promise.resolve();
+  return track(
+    sessionId,
+    previous.catch(() => undefined).then(() => {
+      markReprocessing(sessionId);
+      return processSession(sessionId, true);
+    }).catch((error: unknown) => {
+      console.error(error);
+      if (checkCount(sessionId) > 0) {
+        keepPreviousResult(sessionId, "Не удалось пересчитать проверку с новыми документами. Прежний результат сохранён.");
+        return;
+      }
+      markFailed(sessionId, "Обработка прервалась из-за внутренней ошибки сервера. Загрузите комплект ещё раз.", []);
+    }),
+  );
 }
 
 export function resumePending(): void {
   for (const id of pendingSessionIds()) enqueue(id);
 }
 
-export async function processSession(sessionId: string): Promise<void> {
-  if (checkCount(sessionId) > 0) return;
+export async function processSession(sessionId: string, replace = false): Promise<void> {
+  if (!replace && checkCount(sessionId) > 0) return;
   const existing = readSession(sessionId);
-  if (!existing || existing.processingStage === "failed") return;
+  if (!existing || (!replace && existing.processingStage === "failed")) return;
   const files = documentBuffers(sessionId);
   const reportFile = files.find((file) => file.row.role === "report");
   if (!reportFile) {
@@ -105,7 +134,7 @@ export async function processSession(sessionId: string): Promise<void> {
     ...duplicateNames(reportDoc, supporting).map((name) => `«${name}» повторяет уже учтённый файл и не увеличивает суммы.`),
   ];
   if (fileErrors.length) notices.unshift("Проверка неполная: часть подтверждающих файлов не прочитана. Найденные результаты сохранены.");
-  if (checkCount(sessionId) > 0) return;
+  if (!replace && checkCount(sessionId) > 0) return;
   saveOutcome({
     sessionId,
     reportDocumentId: reportFile.row.id,
