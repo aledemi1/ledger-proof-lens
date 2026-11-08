@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const en: Copy = {
   language: "Language",
   nav: { home: "Home", audits: "Reviews", new: "New review", users: "Users", login: "Sign in", logout: "Sign out", exit: "Exit" },
+  theme: { label: "Theme", light: "Light", dusk: "Dusk", night: "Night" },
   meta: {
     homeTitle: "Sverko — verify financial reports against source documents",
     homeDescription: "Sverko matches report figures to invoices, delivery notes, and certificates of completion, finds discrepancies, and prepares a conclusion with links to sources.",

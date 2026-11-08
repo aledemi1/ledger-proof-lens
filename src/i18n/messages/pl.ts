@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const pl: Copy = {
   language: "Język",
   nav: { home: "Strona główna", audits: "Kontrole", new: "Nowa kontrola", users: "Użytkownicy", login: "Zaloguj się", logout: "Wyloguj się", exit: "Wyjdź" },
+  theme: { label: "Motyw", light: "Jasny", dusk: "Zmierzch", night: "Nocny" },
   meta: {
     homeTitle: "Sverko — weryfikacja raportu na podstawie dokumentów pierwotnych",
     homeDescription: "Sverko zestawia pozycje raportu z fakturami, listami przewozowymi i protokołami, wykrywa rozbieżności i przygotowuje podsumowanie ze wskazaniami źródeł.",

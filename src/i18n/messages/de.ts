@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const de: Copy = {
   language: "Sprache",
   nav: { home: "Start", audits: "Prüfungen", new: "Neue Prüfung", users: "Benutzer", login: "Anmelden", logout: "Abmelden", exit: "Beenden" },
+  theme: { label: "Design", light: "Hell", dusk: "Dämmerung", night: "Nacht" },
   meta: {
     homeTitle: "Sverko — Berichte anhand von Belegen prüfen",
     homeDescription: "Sverko gleicht Berichtswerte mit Rechnungen, Lieferscheinen und Abnahmen ab, findet Abweichungen und erstellt ein Schlussdokument mit Verweisen auf Quellen.",

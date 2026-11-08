@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const tr: Copy = {
   language: "Dil",
   nav: { home: "Ana sayfa", audits: "Kontroller", new: "Yeni kontrol", users: "Kullanıcılar", login: "Giriş yap", logout: "Çıkış yap", exit: "Çıkış" },
+  theme: { label: "Tema", light: "Açık", dusk: "Alacakaranlık", night: "Gece" },
   meta: {
     homeTitle: "Sverko — birincil belgelere göre rapor doğrulama",
     homeDescription: "Sverko rapor göstergelerini faturalar, irsaliyeler ve tutanaklarla eşleştirir, uyumsuzlukları bulur ve kaynak referanslı bir sonuç hazırlar.",

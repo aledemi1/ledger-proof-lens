@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const zh: Copy = {
   language: "语言",
   nav: { home: "首页", audits: "核对", new: "新建核对", users: "用户", login: "登录", logout: "退出登录", exit: "退出" },
+  theme: { label: "主题", light: "浅色", dusk: "暮色", night: "夜间" },
   meta: {
     homeTitle: "Sverko — 基于原始凭证的报表可信度核对",
     homeDescription: "Sverko 将报表指标与账单、送货单和验收单比对，发现差异并生成带源引用的结论。",

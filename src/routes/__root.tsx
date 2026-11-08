@@ -15,6 +15,8 @@ import appCss from "../styles.css?url";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import { ThemeSwitcher } from "@/components/layout/ThemeSwitcher";
+import { THEME_INIT_SCRIPT, usePrintInLight } from "@/lib/theme";
 import { LOCALE_HTML_LANG } from "@/i18n/locales";
 import { useCopy } from "@/i18n/messages";
 import { localeFromPathname, stripLocalePrefix } from "@/i18n/path";
@@ -25,7 +27,7 @@ function NotFoundComponent() {
   const t = useCopy();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="absolute right-3 top-3"><LocaleSwitcher /></div>
+      <div className="absolute right-3 top-3 flex gap-1.5"><ThemeSwitcher /><LocaleSwitcher /></div>
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">{t.common.notFoundTitle}</h2>
@@ -48,7 +50,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="absolute right-3 top-3"><LocaleSwitcher /></div>
+      <div className="absolute right-3 top-3 flex gap-1.5"><ThemeSwitcher /><LocaleSwitcher /></div>
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">{t.common.pageFailed}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{t.common.pageFailedText}</p>
@@ -115,8 +117,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootShell({ children }: { children: ReactNode }) {
   const locale = useLocale();
   return (
-    <html lang={LOCALE_HTML_LANG[locale]}>
+    <html lang={LOCALE_HTML_LANG[locale]} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
@@ -129,6 +132,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  usePrintInLight();
 
   return (
     <QueryClientProvider client={queryClient}>

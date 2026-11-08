@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const pt: Copy = {
   language: "Idioma",
   nav: { home: "Início", audits: "Conferências", new: "Nova conferência", users: "Usuários", login: "Entrar", logout: "Sair", exit: "Saída" },
+  theme: { label: "Tema", light: "Claro", dusk: "Crepúsculo", night: "Noite" },
   meta: {
     homeTitle: "Sverko — verificação de relatórios com documentos de origem",
     homeDescription: "O Sverko confronta os indicadores do relatório com notas fiscais, romaneios e termos, encontra divergências e prepara uma conclusão com referências às fontes.",

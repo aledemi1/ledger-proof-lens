@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const fr: Copy = {
   language: "Langue",
   nav: { home: "Accueil", audits: "Contrôles", new: "Nouveau contrôle", users: "Utilisateurs", login: "Connexion", logout: "Déconnexion", exit: "Quitter" },
+  theme: { label: "Thème", light: "Clair", dusk: "Crépuscule", night: "Nuit" },
   meta: {
     homeTitle: "Sverko — vérifier les rapports à partir des pièces justificatives",
     homeDescription: "Sverko rapproche les indicateurs du rapport des factures, bons de livraison et PV de réception, détecte les écarts et prépare une conclusion avec liens vers les sources.",

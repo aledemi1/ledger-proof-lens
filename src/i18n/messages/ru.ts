@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const ru: Copy = {
   language: "Язык",
   nav: { home: "Главная", audits: "Проверки", new: "Новая проверка", users: "Пользователи", login: "Войти", logout: "Выйти", exit: "Выход" },
+  theme: { label: "Тема", light: "Светлая", dusk: "Сумерки", night: "Ночная" },
   meta: {
     homeTitle: "Sverko — проверка достоверности отчётности по первичным документам",
     homeDescription: "Sverko сопоставляет показатели отчёта со счетами, накладными и актами, находит расхождения и готовит заключение со ссылками на источники.",

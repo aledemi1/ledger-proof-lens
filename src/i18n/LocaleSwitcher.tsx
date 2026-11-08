@@ -109,7 +109,7 @@ function Flag({ locale }: { locale: Locale }) {
 }
 
 /** Плашка с флагом. Родитель ставит её справа сверху. */
-export function LocaleSwitcher() {
+export function LocaleSwitcher({ align = "right" }: { align?: "left" | "right" }) {
   const locale = useLocale();
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
@@ -159,7 +159,7 @@ export function LocaleSwitcher() {
         </svg>
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-50 mt-2 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg">
+        <div role="menu" className={`absolute ${align === "left" ? "left-0" : "right-0"} z-50 mt-2 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg`}>
           {LOCALES.map((item) => (
             <button
               key={item}

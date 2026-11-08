@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const it: Copy = {
   language: "Lingua",
   nav: { home: "Home", audits: "Verifiche", new: "Nuova verifica", users: "Utenti", login: "Accedi", logout: "Esci", exit: "Uscita" },
+  theme: { label: "Tema", light: "Chiaro", dusk: "Crepuscolo", night: "Notte" },
   meta: {
     homeTitle: "Sverko — verifica della rendicontazione rispetto ai documenti di origine",
     homeDescription: "Sverko confronta gli indicatori del report con fatture, DDT e verbali, individua le discrepanze e prepara una conclusione con riferimenti alle fonti.",

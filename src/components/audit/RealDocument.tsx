@@ -75,7 +75,7 @@ export function GridView({ sheets, layer, scrollRef }: { sheets: GridSheet[]; la
   const sheet = sheets[index];
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f3f3f3]">
+    <div className="excel-workbook flex h-full min-h-0 flex-col bg-[#f3f3f3] text-ink">
       <div ref={scrollRef} className="excel-scroll min-h-0 flex-1 overflow-auto bg-white">
         {sheet ? <ExcelSheet sheet={sheet} layer={layer} /> : null}
       </div>

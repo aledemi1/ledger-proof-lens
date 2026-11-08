@@ -3,6 +3,7 @@ import type { Copy } from "../copy";
 export const nl: Copy = {
   language: "Taal",
   nav: { home: "Start", audits: "Controles", new: "Nieuwe controle", users: "Gebruikers", login: "Inloggen", logout: "Uitloggen", exit: "Afsluiten" },
+  theme: { label: "Thema", light: "Licht", dusk: "Schemering", night: "Nacht" },
   meta: {
     homeTitle: "Sverko — verificatie van rapporten aan de hand van brondocumenten",
     homeDescription: "Sverko koppelt rapportcijfers aan facturen, pakbonnen en werkbonnen, vindt afwijkingen en stelt een conclusie op met bronverwijzingen.",

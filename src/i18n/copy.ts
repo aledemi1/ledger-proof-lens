@@ -1,6 +1,7 @@
 export interface Copy {
   language: string;
   nav: { home: string; audits: string; new: string; users: string; login: string; logout: string; exit: string };
+  theme: { label: string; light: string; dusk: string; night: string };
   meta: { homeTitle: string; homeDescription: string; login: string; register: string; admin: string; newTitle: string; newDescription: string; auditsTitle: string; auditsDescription: string; workspace: string; conclusion: string };
   common: { loading: string; notFoundTitle: string; notFoundText: string; home: string; tryAgain: string; pageFailed: string; pageFailedText: string; cancel: string; save: string; close: string; demo: string; demoTitle: string; example: string };
   status: { match: string; mismatch: string; notFound: string; needsReview: string };

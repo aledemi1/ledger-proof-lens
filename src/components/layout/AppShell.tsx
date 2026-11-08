@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/hooks/useAccount";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 import { useCopy } from "@/i18n/messages";
 import { loadAccount } from "@/lib/account";
 import sverkoIcon from "@/assets/sverko-icon.jpg";
@@ -15,11 +16,11 @@ const nav = [
   { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
 ] as const;
 
-function Logo() {
+function Logo({ shortOnPhone = false }: { shortOnPhone?: boolean }) {
   return (
     <Link to="/" className="flex items-center gap-2 px-2">
       <img src={sverkoIcon} width={32} height={32} alt="" className="size-8 rounded-md" />
-      <span className="text-xl font-semibold">Sverko</span>
+      <span className={cn("text-xl font-semibold", shortOnPhone && "hidden min-[420px]:inline")}>Sverko</span>
     </Link>
   );
 }
@@ -59,12 +60,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
   const items = account?.role === "admin" ? [...nav, { to: "/admin" as const, label: t.nav.users, Icon: Users, exact: true }] : nav;
-  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />{t.nav.audits}</Link></Button><AccountLinks /><LocaleSwitcher /></div></div></header><main>{children}</main></div>;
+  if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />{t.nav.audits}</Link></Button><AccountLinks /><ThemeSwitcher /><LocaleSwitcher /></div></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
       <aside className={cn("no-print sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-4 md:flex", workspace ? "w-16" : "w-56")}>
         {workspace ? <Link to="/" aria-label="Sverko — главная" className="mx-auto grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><ScanSearch className="size-5" /></Link> : <Logo />}
-        <nav className="mt-6 flex flex-col gap-0.5 px-2">
+        {!workspace && <div className="mt-4 flex gap-1.5 px-2"><ThemeSwitcher align="left" /><LocaleSwitcher align="left" /></div>}
+        <nav className={cn(workspace ? "mt-6" : "mt-4", "flex flex-col gap-0.5 px-2")}>
           {items.map(({ to, label, Icon, exact }) => (
             <Link
               key={to}
@@ -83,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mt-auto px-2"><AccountLinks compact={workspace} /></div>
       </aside>
       <header className="no-print sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
-        <Logo />
+        <Logo shortOnPhone />
         <nav className="flex gap-1">
           {items.map(({ to, label, Icon, exact }) => (
             <Link
@@ -98,10 +100,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
           <AccountLinks compact />
+          <ThemeSwitcher compact />
           <LocaleSwitcher />
         </nav>
       </header>
-      {!home && <div className="no-print fixed right-3 top-2 z-50 hidden md:block"><LocaleSwitcher /></div>}
+      {workspace && <div className="no-print fixed right-3 top-2 z-50 hidden gap-1.5 md:flex"><ThemeSwitcher /><LocaleSwitcher /></div>}
       <main className="min-w-0 flex-1">{children}</main>
     </div>
   );
