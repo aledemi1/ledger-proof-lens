@@ -34,8 +34,10 @@ const checks = reconcile(report, supporting, []);
 const notices = duplicateNames(report, supporting).map((name) => `«${name}» повторяет уже учтённый файл и не увеличивает суммы.`);
 notices.push("Учебный комплект: организации, люди и операции вымышлены.");
 
-rmSync(path.resolve("public/demo"), { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
+for (const entry of readdirSync(outDir, { withFileTypes: true })) {
+  if (entry.isFile()) rmSync(path.join(outDir, entry.name));
+}
 cpSync(reportPath, path.join(outDir, path.basename(reportPath)));
 for (const file of supportPaths) cpSync(file, path.join(outDir, path.basename(file)));
 

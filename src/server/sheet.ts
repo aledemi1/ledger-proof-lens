@@ -1,4 +1,4 @@
-import { detectRole, parseContractToken, parseDate, parseDecimal, parseMoney, parseQuantity, productCodes } from "./values";
+import { detectRole, headerWord, parseContractToken, parseDate, parseDecimal, parseMoney, parseQuantity, productCodes } from "./values";
 import type { Fragment } from "./model";
 
 export interface SheetCell {
@@ -35,10 +35,10 @@ function isKvRow(row: SheetCell[], next: SheetCell[] | undefined): boolean {
 }
 
 function indicatorColumns(row: SheetCell[]): { label: number; value: number; unit?: number } | null {
-  const label = row.find((cell) => /показател/i.test(cell.text) && !/значен/i.test(cell.text));
-  const value = row.find((cell) => /значен/i.test(cell.text));
+  const label = row.find((cell) => headerWord.indicator.test(cell.text) && !headerWord.value.test(cell.text));
+  const value = row.find((cell) => headerWord.value.test(cell.text));
   if (!label || !value) return null;
-  const unit = row.find((cell) => /^(ед\.?|единица)(?:\s|$)/i.test(cell.text.trim()));
+  const unit = row.find((cell) => headerWord.unit.test(cell.text.trim()));
   return unit ? { label: label.col, value: value.col, unit: unit.col } : { label: label.col, value: value.col };
 }
 
@@ -55,7 +55,7 @@ function isHeaderRow(row: SheetCell[]): boolean {
 function unitOf(row: SheetCell[], headers: Map<number, string>): string | undefined {
   for (const cell of row) {
     const header = headers.get(cell.col) ?? "";
-    if (/^ед\.?$|^единиц/i.test(header.trim()) && cell.text.trim()) return cell.text.trim();
+    if (headerWord.unit.test(header.trim()) && cell.text.trim()) return cell.text.trim();
   }
   return undefined;
 }
@@ -64,7 +64,7 @@ function itemOf(row: SheetCell[], headers: Map<number, string>): string | undefi
   let name = "";
   for (const cell of row) {
     const header = headers.get(cell.col) ?? "";
-    if (/наименован|вид\s+работ|показател/i.test(header) && cell.text.trim()) {
+    if ((headerWord.item.test(header) || headerWord.indicator.test(header)) && cell.text.trim()) {
       name = cell.text.trim();
       break;
     }
@@ -74,15 +74,15 @@ function itemOf(row: SheetCell[], headers: Map<number, string>): string | undefi
     }
   }
   if (!name) {
-    const numberCell = row.find((cell) => /№|номер/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
-    if (numberCell && !row.some((cell) => /наименован/i.test(headers.get(cell.col) ?? ""))) name = `№ ${numberCell.text.trim()}`;
+    const numberCell = row.find((cell) => /№|номер|number|nr\.?|n[oº]|numéro|numero/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
+    if (numberCell && !row.some((cell) => headerWord.item.test(headers.get(cell.col) ?? ""))) name = `№ ${numberCell.text.trim()}`;
   }
   if (!name) {
     const first = row.find((cell) => !isNumericish(cell.text) && detectRole(headers.get(cell.col) ?? "") == null);
     name = first?.text.trim() ?? "";
   }
   if (!name) return undefined;
-  const codeCell = row.find((cell) => /код|артикул/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
+  const codeCell = row.find((cell) => headerWord.code.test(headers.get(cell.col) ?? "") && cell.text.trim());
   const code = codeCell ? productCodes(codeCell.text).join(" ") : "";
   return code && !name.toUpperCase().includes(code) ? `${name} ${code}` : name;
 }
@@ -164,10 +164,10 @@ export function readGrid(
         const shape = role || (header && looksLikeValue(cell.text)) ? "table" : "title";
         const extra: Partial<Fragment> = { columnHeader: header };
         if (item && role !== "item_name") extra.rowLabel = item;
-        const quantityColumn = role === "quantity" || /кол-?во|количество|объем|объём|принято|получено|^часы?$/i.test(header);
-        const bareUnit = row.find((cell) => /^(шт\.?|компл\.?|набор\w*|час\.?|месяц\w*|человек|чел\.?|усл\.?|мг)$/i.test(cell.text.trim()));
+        const quantityColumn = role === "quantity" || headerWord.qty.test(header);
+        const bareUnit = row.find((cell) => /^(шт\.?|компл\.?|набор\w*|час\.?|месяц\w*|человек|чел\.?|усл\.?|мг|pcs\.?|pieces?|hours?|months?|service|stk\.?|件|个)$/i.test(cell.text.trim()));
         if (quantityColumn && unit) extra.unitHint = unit;
-        else if (quantityColumn && /^часы?$/i.test(header)) extra.unitHint = "час";
+        else if (quantityColumn && /^часы?$|^hours?$/i.test(header)) extra.unitHint = "час";
         else if (quantityColumn && bareUnit) extra.unitHint = bareUnit.text.trim();
         preview.cells.push({ anchor: push(cell, shape, extra), text: cell.text, address: cell.address });
       }

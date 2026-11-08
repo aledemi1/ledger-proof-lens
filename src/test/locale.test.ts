@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { localeFromPathname, stripLocalePrefix, withLocale } from "@/i18n/path";
+import { detectRole } from "@/server/values";
 
 describe("locale paths", () => {
   it("keeps Russian on the bare path and prefixes the other languages", () => {
@@ -10,5 +11,11 @@ describe("locale paths", () => {
     expect(stripLocalePrefix("/ru")).toBe("/");
     expect(localeFromPathname("/fr/new")).toBe("fr");
     expect(localeFromPathname("/audits")).toBe("ru");
+  });
+
+  it("recognizes translated report headers", () => {
+    expect(detectRole("Quantity")).toBe("quantity");
+    expect(detectRole("Item")).toBe("item_name");
+    expect(detectRole("Contract")).toBe("contract_number");
   });
 });

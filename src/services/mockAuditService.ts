@@ -1,5 +1,7 @@
 import { buildConclusion } from "@/lib/conclusion";
-import { sampleDocuments, sampleSessions } from "@/mocks/demoAudit";
+import { DEMO_SESSION_ID, sampleDocuments, sampleSessions } from "@/mocks/demoAudit";
+import { getDemoLocale } from "@/mocks/demoLocale";
+import { loadDemoPack } from "@/mocks/localizedDemo";
 import type { AuditDocument, AuditSession, EvidenceReference, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import type { AuditService } from "./auditService";
 
@@ -48,23 +50,31 @@ function hydrate(session: AuditSession, store: Store): AuditSession {
   return { ...session, checks, reviewerDecision: decision, status };
 }
 
-function allSessions(store: Store) {
-  return [...store.drafts.map((d) => d.session), ...sampleSessions].map((s) => hydrate(s, store));
+async function demoPack() {
+  return loadDemoPack(getDemoLocale());
+}
+
+function allSessions(store: Store, demo: { session: AuditSession; documents: AuditDocument[] }) {
+  const sessions = [...store.drafts.map((d) => d.session), ...sampleSessions.map((session) => (session.id === DEMO_SESSION_ID ? demo.session : session))];
+  return sessions.map((session) => hydrate(session, store));
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 export const mockAuditService: AuditService = {
   async listSessions() {
-    return allSessions(read()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const demo = await demoPack();
+    return allSessions(read(), demo).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
   async getSession(id) {
-    return allSessions(read()).find((s) => s.id === id) ?? null;
+    const demo = await demoPack();
+    return allSessions(read(), demo).find((s) => s.id === id) ?? null;
   },
   async getDocuments(sessionId) {
     const store = read();
     const draft = store.drafts.find((d) => d.session.id === sessionId);
     if (draft) return draft.documents;
+    if (sessionId === DEMO_SESSION_ID) return (await demoPack()).documents;
     const s = sampleSessions.find((x) => x.id === sessionId);
     if (!s) return [];
     const ids = [s.reportDocumentId, ...s.supportingDocumentIds];
@@ -75,7 +85,7 @@ export const mockAuditService: AuditService = {
   },
   async updateReview(sessionId, checkId, update) {
     const store = read();
-    const session = allSessions(store).find((s) => s.id === sessionId);
+    const session = allSessions(store, await demoPack()).find((s) => s.id === sessionId);
     const check = session?.checks.find((c) => c.id === checkId);
     if (!check) throw new Error("Показатель не найден");
     const next: StoredReview = {

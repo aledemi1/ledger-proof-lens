@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocale } from "@/i18n/use-locale";
+import { setDemoLocale } from "@/mocks/demoLocale";
 import { AuditApiError } from "@/services/apiAuditService";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, AuditSession } from "@/types/audit";
 
 /** Loads audits and refreshes when the service changes or a server job is still running. */
 export function useSessions() {
+  const locale = useLocale();
+  setDemoLocale(locale);
   const [sessions, setSessions] = useState<AuditSession[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -17,7 +21,7 @@ export function useSessions() {
       setError(message);
       if (reason instanceof AuditApiError && reason.demos.length) setSessions(reason.demos);
     }
-  }, []);
+  }, [locale]);
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 4000);
@@ -28,6 +32,8 @@ export function useSessions() {
 }
 
 export function useAuditSession(id: string) {
+  const locale = useLocale();
+  setDemoLocale(locale);
   const [session, setSession] = useState<AuditSession | null | undefined>(undefined);
   const [documents, setDocuments] = useState<AuditDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +48,7 @@ export function useAuditSession(id: string) {
       setSession(null);
       setDocuments([]);
     }
-  }, [id]);
+  }, [id, locale]);
   useEffect(() => {
     void load();
     return auditService.subscribe(load);

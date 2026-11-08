@@ -18,6 +18,9 @@ import {
 } from "./measure";
 import {
   detectRole,
+  isDateUnit,
+  isMoneyUnit,
+  isQuantityUnit,
   fingerprint,
   formatScaled,
   formatSigned,
@@ -144,16 +147,16 @@ export function unknownLabels(docs: PreparedDoc[]): UnknownLabel[] {
 }
 
 function roleFromUnit(label: string, raw: string, unitHint?: string): { role: Role; viaModel: boolean } | null {
-  if (unitHint && /^дат/i.test(unitHint) && parseDate(raw)) return { role: "date", viaModel: false };
-  if (unitHint && /шт|компл|час|месяц|чел|усл|мг/i.test(unitHint) && parseQuantity(raw, unitHint)) return { role: "quantity", viaModel: false };
-  if (unitHint && /руб|ндс|₽/i.test(unitHint) && parseMoney(raw) != null) return { role: /цена/i.test(label) ? "unit_price" : "line_total", viaModel: false };
+  if (unitHint && isDateUnit(unitHint) && parseDate(raw)) return { role: "date", viaModel: false };
+  if (unitHint && isQuantityUnit(unitHint) && parseQuantity(raw, unitHint)) return { role: "quantity", viaModel: false };
+  if (unitHint && isMoneyUnit(unitHint) && parseMoney(raw) != null) return { role: /цена|price|tarif|rate|preis|prix|precio|prezzo|preço|preco|cena|prijs|fiyat|单价/i.test(label) ? "unit_price" : "line_total", viaModel: false };
   return null;
 }
 
 function resolveRole(label: string, raw: string, hints: RoleHints, unitHint?: string): { role: Role; viaModel: boolean } | null {
-  if ((/дата/i.test(label) || /срок/i.test(label)) && parseDate(raw)) return { role: "date", viaModel: false };
+  if ((/дата|срок|date|datum|fecha|tarih|日期|deadline|frist|d[eé]lai|scadenza|plazo|termin|süre|sure|期限|period/i.test(label)) && parseDate(raw)) return { role: "date", viaModel: false };
   const measured = roleFromUnit(label, raw, unitHint);
-  if (measured && unitHint && !/руб|ндс|₽/i.test(unitHint)) return measured;
+  if (measured && unitHint && !isMoneyUnit(unitHint)) return measured;
   const known = detectRole(label);
   if (known) {
     const parsed = parseByRole(known, raw, unitHint);
@@ -211,17 +214,17 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
     if (restated) facts.push(makeFact(doc, kind, docNumber, "unit_price", "Цена без НДС", restated.price, fragment, restated.item));
     const deadline = parseRestatedDeadline(fragment.text);
     if (deadline) facts.push(makeFact(doc, kind, docNumber, "date", "Срок поставки", deadline, fragment));
-    const months = fragment.text.match(/гаранти\w*[^.\n]{0,60}?(\d{1,3})\s+месяц/i);
+    const months = fragment.text.match(/(?:гаранти\w*|warrant\w*|garantie|garant[ií]a|garanzia|gwaranc\w*|保修)[^.\n]{0,80}?(\d{1,3})\s*(?:месяц\w*|months?|monate?|mois|mesi|meses|miesi\w*|maanden|ay)/i);
     if (months?.[1]) facts.push(makeFact(doc, kind, docNumber, "quantity", "Гарантийный срок", `${months[1]} месяцев`, fragment));
     if ((doc.isReport ? false : kind === "contract") && !/допсоглашен/i.test(doc.name)) {
-      const signed = doc.read.text.match(/(?:договор\w*[^.\n]{0,40}|от)\s+(\d{2}\.\d{2}\.\d{4})/i);
+      const signed = doc.read.text.match(/(?:договор\w*[^.\n]{0,40}|от|dated|vom|d\.d\.|du|del|z\s+dnia)\s+(\d{2}\.\d{2}\.\d{4}|\d{1,2}\s+\p{L}+\s+\d{4})/iu);
       if (signed?.[1] && !facts.some((item) => item.role === "date" && /дата\s+договор/i.test(item.label))) {
         facts.push(makeFact(doc, kind, docNumber, "date", "Дата договора", signed[1], fragment));
       }
     }
-    const division = fragment.text.match(/цен[аы]\s+делени\w*[^.\n]{0,40}?(\d+[.,]\d+|\d+)\s*(мг|г|мм)?/i);
+    const division = fragment.text.match(/(?:цен[аы]\s+делени\w*|division(?:\s+value)?|scale\s+division|teilung|divisione|división|działk\w*|dzialk\w*|schaalverdeling|taksimat|分度)[^.\n]{0,50}?(\d+[.,]\d+|\d+)\s*(мг|mg|г|g|мм|mm)?/i);
     if (division?.[1]) facts.push(makeFact(doc, kind, docNumber, "quantity", "Цена деления", `${division[1]} ${division[2] ?? ""}`.trim(), fragment));
-    const country = fragment.text.match(/(страна(?:\s+\p{L}+){0,2})\s*[—–:-]\s*(\p{L}{3,40})/iu);
+    const country = fragment.text.match(/(страна(?:\s+\p{L}+){0,2}|country(?:\s+of(?:\s+\p{L}+){0,2})?|pays|paese|pa[ií]s|kraj|ülke|ulke|国家)\s*[—–:-]\s*(\p{L}{3,40})/iu);
     if (country?.[1] && country[2]) facts.push(makeFact(doc, kind, docNumber, "text", country[1], country[2], fragment));
     const contractPrice = parseContractPrice(fragment.text);
     if (contractPrice) facts.push(makeFact(doc, kind, docNumber, "unit_price", "Цена договора", contractPrice, fragment));
@@ -231,7 +234,7 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
       if (stated && service) facts.push(makeFact(doc, kind, docNumber, "line_total", "Сумма с НДС", stated, fragment, service));
     }
   }
-  const people = doc.read.fragments.filter((fragment) => fragment.shape === "table" && /участник|фио|слушател/i.test(fragment.columnHeader ?? "") && /[A-Za-zА-Яа-яЁё]{2,}/.test(fragment.text));
+  const people = doc.read.fragments.filter((fragment) => fragment.shape === "table" && /участник|фио|слушател|participant|attendee|teilnehmer|partecipant|uczestnik|deelnemer|katılımcı|katilimci|姓名/i.test(fragment.columnHeader ?? "") && /[A-Za-zА-Яа-яЁё]{2,}/.test(fragment.text));
   const firstPerson = people[0];
   if (people.length >= 2 && firstPerson) facts.push(makeFact(doc, kind, docNumber, "quantity", "Число участников", `${people.length} чел.`, firstPerson));
   return inherit(facts, doc.read.text);
@@ -356,17 +359,17 @@ function parseLine(text: string, hints: RoleHints): { role: Role; label: string;
 }
 
 function partySide(text: string): "supplier" | "buyer" | "any" {
-  if (/поставщик|исполнител|продавец/i.test(text)) return "supplier";
-  if (/заказчик|покупател|плательщик/i.test(text)) return "buyer";
+  if (/поставщик|исполнител|продавец|supplier|vendor|lieferant|fournisseur|fornitore|proveedor|fornecedor|dostawca|leverancier|tedarikçi|供应商/i.test(text)) return "supplier";
+  if (/заказчик|покупател|плательщик|customer|buyer|kunde|acheteur|cliente|comprador|odbiorca|koper|alıcı|买方/i.test(text)) return "buyer";
   return "any";
 }
 
 function isService(fact: Fact): boolean {
-  return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл/i.test(`${fact.item ?? ""} ${fact.label}`);
+  return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|installation|montage|training|schulung|formation|commissioning|inbetriebnahme|certification|zertifizierung|grounding|earthing|运输|安装|培训|调试|认证|接地/i.test(`${fact.item ?? ""} ${fact.label}`);
 }
 
 function isTotalRow(fact: Fact): boolean {
-  return /^(итого|всего)\b/i.test(`${fact.item ?? ""} ${fact.fragment.rowLabel ?? ""} ${fact.fragment.text}`);
+  return /^(итого|всего|total|summe|suma|totale|toplam|totaal|gesamt|合计|总计)/i.test(`${fact.item ?? ""} ${fact.fragment.rowLabel ?? ""} ${fact.fragment.text}`);
 }
 
 function orgTokens(name: string): string[] {
@@ -399,10 +402,10 @@ function isReturnDoc(fact: Fact): boolean {
 }
 
 function quantityFocus(label: string): "stock" | "received" | "contract" | "hours" | "any" {
-  if (/оприходован/i.test(label)) return "stock";
-  if (/за вычетом возврата|принят|получен/i.test(label)) return "received";
-  if (/по договору/i.test(label)) return "contract";
-  if (/час|продолжительн|^объем$|^объём$/i.test(label)) return "hours";
+  if (/оприходован|warehouse|lager|entrepôt|entrepot|magazzino|almacén|almacen|armazém|armazem|magazyn|depo|仓库/i.test(label)) return "stock";
+  if (/за вычетом возврата|принят|получен|accepted|received|geaccepteerd|aceito|less returns|angenommen|abzüglich|abzuglich|accept[eé]|d[eé]duction|menos devol|menos devoluç|al netto|pomniejsz|minus retour|iade|扣除退/i.test(label)) return "received";
+  if (/по договору|under the contract|per contract|laut vertrag|selon le contrat|secondo il contratto|según el contrato|segun el contrato|conforme o contrato|wg umowy|volgens contract|sözleşmeye|sozlesmeye|按合同/i.test(label)) return "contract";
+  if (/час|продолжительн|^объем$|^объём$|^volume$|^volumen$|^umfang$|^omvang$|^hacim$|^hours?$|^stunden$|^heures$|^ore$|^horas$|^godziny$|^uren$|^saat$|^工时$/i.test(label)) return "hours";
   return "any";
 }
 
@@ -463,7 +466,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
       };
     }
   }
-  if (/^(да|завершен|завершён|выполнено)$/i.test(fact.raw.trim()) && /выполнен|сертификац|ввод/i.test(fact.label)) {
+  if (/^(да|yes|ja|oui|s[iìí]|sim|tak|evet|是|завершен|завершён|выполнено|completed|done|abgeschlossen|termin[ée]|completato|completado|conclu[ií]do|zako[nń]czone|voltooid|tamamland[iı]|已完成)$/i.test(fact.raw.trim()) && /выполнен|сертификац|ввод|certification|commissioning|zertifizierung|inbetriebnahme|certificaci[oó]n|certificazione|certifica[cç][aã]o|certyfikacj|certificering|devreye|认证|调试/i.test(fact.label)) {
     const proving = sources.filter((source) => confirms(fact, source) && source.docKind !== "invoice" && !/письм|счет|счёт/i.test(source.docName));
     const serial = fact.label.match(/[A-ZА-ЯЁ]{1,6}\d{0,4}-\d{3,}/i)?.[0];
     const serialSeen = serial ? proving.some((source) => source.docText.includes(serial)) : proving.length > 0;
@@ -512,8 +515,8 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     if (journal.length) pool = journal;
   }
   if (/выполнен/i.test(fact.label)) pool = pool.filter((source) => source.docKind !== "invoice" && !/письм|счет|счёт/i.test(source.docName));
-  if (fact.role === "unit_price" && /договор/i.test(fact.label) && !fact.item) {
-    const stated = pool.filter((source) => /цена\s+договора/i.test(source.label));
+  if (fact.role === "unit_price" && /договор|contract|vertrag|contrat|contratto|contrato|umowa|overeenkomst|sözleşme|sozlesme|合同/i.test(fact.label) && !fact.item) {
+    const stated = pool.filter((source) => /цена\s+договора|contract\s+price|vertragspreis|prix\s+du\s+contrat|prezzo\s+del\s+contratto|precio\s+del\s+contrato|cena\s+umowy|contractprijs|合同价/i.test(source.label));
     if (stated.length) pool = stated;
   }
   if (fact.role === "unit_price") {
@@ -522,7 +525,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     if (amended.length) pool = amended;
     else if (contractual.length) pool = contractual;
   }
-  if (fact.role === "date" && /срок/i.test(fact.label)) {
+  if (fact.role === "date" && /срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(fact.label)) {
     const amended = pool.filter((source) => /допсоглашен/i.test(source.docName));
     if (amended.length) pool = amended;
   }
@@ -534,7 +537,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     else if (performed.length) pool = performed;
     else if (calculated.length) pool = calculated;
     else pool = pool.filter((source) => source.docKind !== "invoice" && source.docKind !== "contract");
-  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
+  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|含税/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
     const shipped = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
     if (shipped.length) pool = shipped;
   }
@@ -811,7 +814,7 @@ function confirms(report: Fact, source: Fact): boolean {
   if (report.contract && source.contract && !sameToken(report.contract, source.contract)) return false;
   if (report.role === "contract_number" && report.parsed.kind === "id" && source.parsed.kind === "id" && !sameToken(report.parsed.token, source.parsed.token) && source.docKind !== "contract") return false;
   if ((report.role === "counterparty" || report.role === "inn") && /ооо|ао|пао|зао|ип\b/i.test(report.raw) && !/ооо|ао|пао|зао|ип\b/i.test(source.raw) && source.role === "counterparty") return false;
-  if ((report.role === "line_total" || report.role === "unit_price") && source.docKind === "contract" && !source.item && !/договор/i.test(report.label)) return false;
+  if ((report.role === "line_total" || report.role === "unit_price") && source.docKind === "contract" && !source.item && !/договор|contract|vertrag|contrat|contratto|contrato|umowa|overeenkomst|sözleşme|sozlesme|合同/i.test(report.label)) return false;
   if (report.role === "item_name" && !sameItem(report.raw, source.raw)) return false;
   if (report.role === "text" && !similarText(report.label, source.label)) return false;
   if ((report.role === "inn" || report.role === "counterparty") && partySide(report.label) !== "any") {
@@ -819,8 +822,8 @@ function confirms(report: Fact, source: Fact): boolean {
     if (got === "any" && !/договор/i.test(source.docName)) return false;
     if (got !== "any" && got !== partySide(report.label)) return false;
   }
-  if (report.role === "date" && /дата\s+договор/i.test(report.label)) {
-    if (/срок/i.test(source.label) || source.docKind !== "contract" || /допсоглашен/i.test(source.docName)) return false;
+  if (report.role === "date" && /дата\s+договор|contract\s+date|vertragsdatum|date\s+du\s+contrat|data\s+del\s+contratto|fecha\s+del\s+contrato|data\s+do\s+contrato|data\s+umowy|contractdatum|sözleşme\s+tarihi|合同日期/i.test(report.label)) {
+    if (/срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(source.label) || source.docKind !== "contract" || /допсоглашен/i.test(source.docName)) return false;
   }
   if (needsItem(report.role) && report.item && !mentionsItem(report.item, source)) return false;
   if (!report.item && (report.role === "quantity" || report.role === "unit_price")) {
