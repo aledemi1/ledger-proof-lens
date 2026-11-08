@@ -47,13 +47,20 @@ export function similarText(a: string, b: string): boolean {
   const y = normText(b);
   if (!x || !y) return false;
   if (x === y) return true;
-  if (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x))) return true;
   const ta = new Set(x.split(" ").filter((w) => w.length > 2));
   const tb = new Set(y.split(" ").filter((w) => w.length > 2));
+  if (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x))) {
+    const shorter = x.length <= y.length ? x : y;
+    const longer = x.length <= y.length ? y : x;
+    const extra = longer.replace(shorter, " ").split(" ").filter((word) => word.length > 2);
+    if (extra.length <= 1) return true;
+  }
   if (!ta.size || !tb.size) return false;
   let inter = 0;
   for (const w of ta) if (tb.has(w)) inter += 1;
-  return inter / Math.min(ta.size, tb.size) >= 0.6;
+  const recall = inter / Math.min(ta.size, tb.size);
+  const coverage = inter / Math.max(ta.size, tb.size);
+  return recall >= 0.6 && coverage >= 0.5;
 }
 
 /** Accepts both 1 842 960,00 and 1,842,960.00 without rounding. */
@@ -82,7 +89,7 @@ export function parseDecimal(raw: string): bigint | null {
 function numberToken(raw: string): { num: string; rest: string } | null {
   const m = raw
     .trim()
-    .match(/(-?\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?)(.*)$/s);
+    .match(/(-?\d{1,3}(?:[ \u00A0,]\d{3})+(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?)(.*)$/s);
   if (!m?.[1]) return null;
   return { num: m[1], rest: (m[2] ?? "").trim() };
 }
@@ -99,7 +106,7 @@ export function parseQuantity(raw: string, unitHint?: string): { minor: bigint; 
   if (!token) return null;
   const minor = parseDecimal(token.num);
   if (minor == null) return null;
-  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|м2|м3|м|л|уп\.?|компл\.?|набор\w*|час\.?|месяц\w*|чел\w*|усл\.?|мг)/i);
+  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|м2|м3|месяц\w*|мг|компл\.?|набор\w*|час\.?|чел\w*|усл\.?|уп\.?|л|м(?![\p{L}]))/iu);
   const unit = cleanupUnit(unitMatch?.[1] ?? unitHint ?? "шт.");
   return { minor, unit };
 }
@@ -131,7 +138,7 @@ export function parseInn(raw: string): string | null {
 
 /** Contract numbers keep their digits and separators; comparison ignores spaces and a leading №. */
 export function parseContractToken(raw: string): string | null {
-  const cleaned = raw.replace(/№/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = raw.replace(/№/g, " ").replace(/инн\s*\/\s*кпп\s*[\d\s/]+/gi, " ").replace(/\s+/g, " ").trim();
   const prefixed = cleaned.match(/([A-Za-zА-Яа-яЁё]{1,12}-\d{1,8}\/\d{2,8})/);
   if (/\d{2}\.\d{2}\.\d{4}/.test(cleaned) && !prefixed) {
     const beside = cleaned.match(/(\d{1,8}\s*[-/]\s*\d{2,8})/);

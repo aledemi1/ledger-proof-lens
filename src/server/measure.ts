@@ -22,16 +22,34 @@ const WORD_NUMBER: Record<string, number> = { один: 1, одна: 1, два: 
 /** A delivery line such as "1 Дозатор ДЭ-100 шт. 5 18 500,00 92 500,00 18 500,00 111 000,00". */
 export function parseShipmentRow(text: string): ShipmentRow | null {
   const compact = text.replace(/\s+/g, " ").trim();
-  const amounts = compact.match(/\d{1,3}(?:\s\d{3})*,\d{2}/g) ?? [];
-  if (amounts.length < 2) return null;
+  const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(шт\.?|компл\.?|час\.?|усл\.?)\s+(\d{1,4})\s+(.+)$/i);
+  if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null;
+  const amounts = match[4].match(/\d{1,3}(?:\s\d{3})*,\d{2}/g) ?? [];
   const gross = amounts[amounts.length - 1];
-  if (!gross) return null;
-  const without = compact.replace(/\d{1,3}(?:\s\d{3})*,\d{2}/g, " ").replace(/\s+/g, " ").trim();
-  const match = without.match(/^(?:\d+\s+)?(.+?)\s+(шт\.?|компл\.?|час\.?|усл\.?)\s+(\d{1,4})$/i);
-  if (!match?.[2] || !match[3]) return null;
-  const item = (match[1] ?? "").trim();
-  if (item.length < 3) return null;
+  const item = match[1].trim();
+  if (!gross || amounts.length < 2 || item.length < 3 || /^(итого|всего)\b/i.test(item)) return null;
   return { item, quantity: `${match[3]} ${match[2]}`, unit: match[2], gross };
+}
+
+/** "Цена договора ... составляет 1 842 960,00 руб." */
+export function parseContractPrice(text: string): string | null {
+  const compact = text.replace(/\s+/g, " ");
+  const match = compact.match(/цена\s+договора[\s\S]{0,160}?составляет\s+(\d[\d\s\u00A0]*[.,]\d{2})\s*руб/i);
+  return match?.[1] ? `${match[1]} руб.` : null;
+}
+
+/** The amount a service document itself states as payable, not a line inside its calculation. */
+export function parseStatedTotal(text: string): string | null {
+  const compact = text.replace(/\s+/g, " ");
+  const payable = compact.match(/всего\s+к\s+оплате[^.]{0,50}?(\d[\d\s\u00A0]*[.,]\d{2})\s*руб/i);
+  if (payable?.[1]) return `${payable[1]} руб.`;
+  const overall = compact.match(/общая\s+стоимость[^.]{0,80}?(\d[\d\s\u00A0]*[.,]\d{2})\s*руб/i);
+  if (overall?.[1]) return `${overall[1]} руб.`;
+  const total = compact.match(/всего\s+(\d[\d\s\u00A0]*[.,]\d{2})\s*руб/i);
+  if (!total?.[1] || total.index == null) return null;
+  const around = compact.slice(Math.max(0, total.index - 24), total.index + total[0].length);
+  if (/без\s+ндс/i.test(around)) return null;
+  return `${total[1]} руб.`;
 }
 
 /** "оплачивается по цене 14 250,00 руб. ... «Мешалка»" -> the new unit price stated by an amendment. */
