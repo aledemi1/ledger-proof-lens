@@ -299,7 +299,7 @@ function inherit(facts: Fact[], text: string): Fact[] {
   const party = facts.find((fact) => fact.role === "counterparty")?.raw;
   const named = facts.filter((fact) => fact.role === "item_name");
   const singleNamed = named.length === 1 ? named[0] : undefined;
-  const netSheets = new Set(facts.filter((fact) => /за вычетом возврата/i.test(fact.fragment.columnHeader ?? "")).map((fact) => fact.fragment.sheet));
+  const netSheets = new Set(facts.filter((fact) => /за вычетом возврата|less returns|abzüglich|abzuglich|d[eé]duction|deducci[oó]n|al netto|pomniejsz|aftrek van retour|iade|扣除退/i.test(fact.fragment.columnHeader ?? "")).map((fact) => fact.fragment.sheet));
   const cutoff = periodEnd(text);
   return facts.map((fact) => {
     const next: Fact = { ...fact };
@@ -349,7 +349,7 @@ function parseLine(text: string, hints: RoleHints): { role: Role; label: string;
       return { role: "text", label: colon[1].trim(), value: colon[2].trim(), viaModel: false };
     }
   }
-  if (/договор/i.test(text)) {
+  if (/договор|contract|vertrag|contrat|contratto|contrato|umowa|overeenkomst|sözleşme|sozlesme|合同/i.test(text)) {
     const token = parseContractToken(text);
     if (token && /[-/]/.test(token)) return { role: "contract_number", label: "Номер договора", value: token, viaModel: false };
   }
@@ -365,7 +365,7 @@ function partySide(text: string): "supplier" | "buyer" | "any" {
 }
 
 function isService(fact: Fact): boolean {
-  return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|installation|montage|training|schulung|formation|commissioning|inbetriebnahme|certification|zertifizierung|grounding|earthing|运输|安装|培训|调试|认证|接地/i.test(`${fact.item ?? ""} ${fact.label}`);
+  return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|fracht|vervoer|nakliye|installation|instal|montage|montaje|montaggio|monta[zż]|training|schulung|formation|formazione|formaci[oó]n|szkol|eğitim|egitim|commissioning|inbetriebnahme|mise en service|inbedrijf|puesta en marcha|avviamento|rozruch|devreye|certificat|zertifiz|aarding|uziem|toprak|运输|安装|培训|调试|认证|接地/i.test(`${fact.item ?? ""} ${fact.label}`);
 }
 
 function isTotalRow(fact: Fact): boolean {
@@ -386,15 +386,27 @@ function innBeside(text: string, inn: string, token: string): boolean {
 }
 
 function mentionsItem(item: string, source: Fact): boolean {
-  if (source.item && sameItem(item, source.item)) return true;
+  if (source.item && sameItem(item, source.item)) {
+    const generic = /^(?:итого|всего|total|summe|suma|totale|toplam|totaal|gesamt|razem|zusammen|合计|总计)$/i;
+    if (generic.test(item.trim()) !== generic.test(source.item.trim())) return false;
+    return true;
+  }
   const blob = `${source.fragment.text} ${source.fragment.rowLabel ?? ""} ${source.docName} ${source.item ?? ""}`;
   const codes = productCodes(item);
   if (codes.length && codes.some((code) => blob.toUpperCase().includes(code))) return true;
   const number = item.match(/\d{3,}/)?.[0];
   if (number && new RegExp(`(^|\\D)${number}(\\D|$)`).test(blob)) return true;
-  const specific = ["заземл", "сертификац", "пусконалад", "перевоз", "обучен", "монтаж"];
-  const wanted = specific.find((stem) => normText(item).includes(stem));
-  return Boolean(wanted && normText(`${source.item ?? ""} ${source.docName}`).includes(wanted));
+  const links: { report: RegExp; doc: RegExp }[] = [
+    { report: /заземл|ground|earthing|erdung|aarding|terre|tierra|terra|toprak|uziem|接地/, doc: /заземл/ },
+    { report: /сертификац|certificat|zertifiz|认证/, doc: /сертификац/ },
+    { report: /пусконалад|commission|inbetrieb|调试/, doc: /пусконалад/ },
+    { report: /перевоз|transport|fracht|vervoer|nakliye|运输/, doc: /перевоз/ },
+    { report: /обучен|train|schulung|formation|formazione|formación|szkol|eğitim|egitim|培训/, doc: /обучен|протокол/ },
+    { report: /монтаж|install|montage|安装/, doc: /монтаж/ },
+  ];
+  const name = normText(item);
+  const link = links.find((entry) => entry.report.test(name));
+  return Boolean(link && link.doc.test(normText(`${source.item ?? ""} ${source.docName}`)));
 }
 
 function isReturnDoc(fact: Fact): boolean {
@@ -537,7 +549,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     else if (performed.length) pool = performed;
     else if (calculated.length) pool = calculated;
     else pool = pool.filter((source) => source.docKind !== "invoice" && source.docKind !== "contract");
-  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|含税/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
+  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*ндс|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
     const shipped = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
     if (shipped.length) pool = shipped;
   }

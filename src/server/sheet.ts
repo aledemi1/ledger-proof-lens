@@ -49,6 +49,7 @@ function isHeaderRow(row: SheetCell[]): boolean {
   if (row.length === 2 && isKvRow(row, undefined)) return false;
   const labels = row.filter((cell) => !isNumericish(cell.text));
   if (labels.length < 2) return false;
+  if (labels.some((cell) => /участник|фио|слушател|participant|attendee|teilnehmer|partecipant|uczestnik|deelnemer|katılımcı|katilimci|姓名/i.test(cell.text))) return true;
   return labels.some((cell) => detectRole(cell.text));
 }
 
@@ -74,7 +75,7 @@ function itemOf(row: SheetCell[], headers: Map<number, string>): string | undefi
     }
   }
   if (!name) {
-    const numberCell = row.find((cell) => /№|номер|number|nr\.?|n[oº]|numéro|numero/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
+    const numberCell = row.find((cell) => /№|номер|number|nr\.?|n[oº]|numéro|numero|ordine|pedido|sipariş|siparis|polecen|opdracht|ordem|ödeme|odeme/i.test(headers.get(cell.col) ?? "") && cell.text.trim());
     if (numberCell && !row.some((cell) => headerWord.item.test(headers.get(cell.col) ?? ""))) name = `№ ${numberCell.text.trim()}`;
   }
   if (!name) {

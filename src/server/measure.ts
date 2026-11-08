@@ -26,7 +26,7 @@ const WORD_NUMBER: Record<string, number> = {
 /** A delivery line such as "1 Дозатор ДЭ-100 шт. 5 18 500,00 92 500,00 18 500,00 111 000,00". */
 export function parseShipmentRow(text: string): ShipmentRow | null {
   const compact = text.replace(/\s+/g, " ").trim();
-  const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(шт\.?|компл\.?|час\.?|усл\.?|pcs\.?|pieces?|hours?|service|stk\.?)\s+(\d{1,4})\s+(.+)$/i);
+  const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(шт\.?|компл\.?|час\.?|усл\.?|pcs\.?|pieces?|hours?|service|stk\.?|szt\.?|pz\.?|ud\.?|adet)\s+(\d{1,4})\s+(.+)$/i);
   if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null;
   const amounts = match[4].match(/\d{1,3}(?:[ \u00A0]\d{3})*,\d{2}|\d{1,3}(?:,\d{3})+\.\d{2}/g) ?? [];
   const gross = amounts[amounts.length - 1];
@@ -35,11 +35,17 @@ export function parseShipmentRow(text: string): ShipmentRow | null {
   return { item, quantity: `${match[3]} ${match[2]}`, unit: match[2], gross };
 }
 
-/** "Цена договора ... составляет 1 842 960,00 руб." */
+/** "Цена договора ... составляет 1 842 960,00 руб." The contract price is the largest amount in that sentence. */
 export function parseContractPrice(text: string): string | null {
   const compact = text.replace(/\s+/g, " ");
-  const match = compact.match(/(?:цена\s+договора|contract\s+price|vertragspreis|prix[\s\S]{0,40}?contrat|prezzo[\s\S]{0,40}?contratto|precio[\s\S]{0,40}?contrato|pre[cç]o[\s\S]{0,40}?contrato|cena[\s\S]{0,24}?umow|contractprijs|sözleşme\s+bedeli|sozlesme\s+bedeli|合同价)[\s\S]{0,140}?(?:составляет|\bis\b|\bist\b|\best\b|beträgt|betragt|s[\u2019'][eéè]l[eéè]ve|ammonta|asciende|importa|wynosi|bedraagt|tutar|为)(?:\s+\S+){0,2}\s+(\d[\d\s\u00A0]*[.,]\d{2})\s*(?:руб|rub)/i);
-  return match?.[1] ? `${match[1]} руб.` : null;
+  const start = compact.search(/цена\s+договора|contract\s+price|vertragspreis|prix.{0,40}?contrat|prezzo.{0,40}?contratto|precio.{0,40}?contrato|pre[cç]o.{0,40}?contrato|cena.{0,24}?umow|contractprijs|prijs.{0,40}?contract|sözleşme\s+bedeli|sozlesme\s+bedeli|合同价/i);
+  if (start < 0) return null;
+  const window = compact.slice(start, start + 260);
+  const cut = window.search(/оборудован|ausr[uü]stung|equipment|[eé]quipement|attrezzatur|equipo|ekipman|sprz[eę]t|设备/i);
+  const sentence = cut > 30 ? window.slice(0, cut) : window.slice(0, 180);
+  const amounts = [...sentence.matchAll(/(\d[\d\s\u00A0]*[.,]\d{2})\s*(?:руб|rub)/gi)].map((item) => item[1] ?? "");
+  const chosen = amounts.sort((a, b) => Number(b.replace(/[^\d]/g, "")) - Number(a.replace(/[^\d]/g, "")))[0];
+  return chosen ? `${chosen} руб.` : null;
 }
 
 /** The amount a service document itself states as payable, not a line inside its calculation. */
@@ -60,7 +66,7 @@ export function parseStatedTotal(text: string): string | null {
 /** "1 шт. 76 400,00 ..." when the item name is the previous line. */
 export function parseQtyBeforeUnit(text: string, previous: string): ShipmentRow | null {
   const compact = text.replace(/\s+/g, " ").trim();
-  const match = compact.match(/^(\d{1,4})\s+(шт\.?|компл\.?|pcs\.?|pieces?)/i);
+  const match = compact.match(/^(\d{1,4})\s+(шт\.?|компл\.?|pcs\.?|pieces?|szt\.?|pz\.?|ud\.?|adet)/i);
   const amounts = compact.match(/\d{1,3}(?:[ \u00A0]\d{3})*,\d{2}|\d{1,3}(?:,\d{3})+\.\d{2}/g) ?? [];
   const item = previous.replace(/\s+/g, " ").trim();
   const gross = amounts[amounts.length - 1];
@@ -69,9 +75,9 @@ export function parseQtyBeforeUnit(text: string, previous: string): ShipmentRow 
 }
 
 export function parseRestatedPrice(text: string): { item: string; price: string } | null {
-  const item = text.match(/[«“"]([^»”"]{3,80})[»”"]/);
+  const item = text.match(/[«“„"]([^»”"“]{3,80})[»”"“]/);
   const price = text.match(/(?:цен\w*|\bprice\b|preis|prix|precio|prezzo|preço|preco|cena|prijs|fiyat|单价)[^.\n]{0,40}?(\d[\d\s\u00A0]*[.,]\d{2})\s*(?:руб|rub)/i);
-  if (!item?.[1] || !price?.[1] || !/вместо|после\s+изменен|дополнительн|instead|after\s+the\s+amend|anstelle|au lieu|invece|en lugar|em vez|zamiast|in plaats|yerine|改为/i.test(text)) return null;
+  if (!item?.[1] || !price?.[1] || !/вместо|после\s+изменен|дополнительн|instead|after\s+the\s+amend|anstelle|statt\b|au lieu|invece|en lugar|em vez|zamiast|in plaats|yerine|改为/i.test(text)) return null;
   return { item: item[1], price: `${price[1]} руб.` };
 }
 
