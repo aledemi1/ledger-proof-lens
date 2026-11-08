@@ -6,6 +6,7 @@ import { checkStatusMeta } from "@/components/audit/badges";
 import { useAuditSession } from "@/hooks/useAudit";
 import { evidencePlace } from "@/lib/format";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
+import { LandingSections } from "@/components/landing/LandingSections";
 
 export function LandingPage() {
   const { session, documents } = useAuditSession(DEMO_SESSION_ID);
@@ -49,7 +50,8 @@ export function LandingPage() {
         </div>
       </section>
       <section className="mt-7 border-b border-border pb-7"><div className="grid gap-5 sm:grid-cols-3">{[{ Icon: FileText, title: "01 / Соберите документы", text: "Отчёт, акты, накладные и счета в одной проверке." }, { Icon: GitCompareArrows, title: "02 / Проверьте расхождения", text: "От значения в отчёте к подтверждающему фрагменту." }, { Icon: ClipboardCheck, title: "03 / Примите решение", text: "Замечания, комментарии и источники в заключении." }].map(({ Icon, title, text }) => <div key={title} className="flex gap-3"><Icon className="mt-1 size-5 shrink-0 text-primary" /><div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{text}</p></div></div>)}</div></section>
-      <footer className="flex flex-wrap items-center justify-between gap-2 pt-5 text-xs text-muted-foreground"><span>Sverko · Проверка отчётности</span><span>Выводы системы. Решение человека.</span></footer>
+      <LandingSections />
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5 text-xs text-muted-foreground"><span>Sverko · Проверка отчётности</span><span>Выводы системы. Решение человека.</span></footer>
     </div>
   );
 }
