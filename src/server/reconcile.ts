@@ -9,6 +9,7 @@ import {
   moneyBasis,
   parseRestatedDeadline,
   parseRestatedPrice,
+  clipParty,
   parseContractPrice,
   parseQtyBeforeUnit,
   parseShipmentRow,
@@ -158,7 +159,7 @@ function resolveRole(label: string, raw: string, hints: RoleHints, unitHint?: st
   const measured = roleFromUnit(label, raw, unitHint);
   if (measured && unitHint && !isMoneyUnit(unitHint)) return measured;
   const known = detectRole(label);
-  if (known) {
+  if (known && !(known === "item_name" && isStatusValue(raw))) {
     const parsed = parseByRole(known, raw, unitHint);
     const textual = known === "counterparty" || known === "item_name";
     if (textual || parsed.kind !== "text") return { role: known, viaModel: false };
@@ -181,9 +182,9 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
     if (fragment.shape === "title") continue;
     const label = (fragment.label || fragment.columnHeader || "").trim();
     if (fragment.shape === "line") {
-      const parsedLine = parseLine(fragment.text, hints);
-      if (!parsedLine) continue;
-      facts.push(makeFact(doc, kind, docNumber, parsedLine.role, parsedLine.label, parsedLine.value, fragment, undefined, parsedLine.viaModel));
+      for (const parsedLine of parseStatements(fragment.text, hints)) {
+        facts.push(makeFact(doc, kind, docNumber, parsedLine.role, parsedLine.label, parsedLine.value, fragment, undefined, parsedLine.viaModel));
+      }
       continue;
     }
     if (!label || fragment.shape === "kv" && !fragment.label) continue;
@@ -216,8 +217,8 @@ function buildFacts(doc: PreparedDoc, hints: RoleHints): Fact[] {
     if (deadline) facts.push(makeFact(doc, kind, docNumber, "date", "Срок поставки", deadline, fragment));
     const months = fragment.text.match(/(?:гаранти\w*|warrant\w*|garantie|garant[ií]a|garanzia|gwaranc\w*|保修)[^.\n]{0,80}?(\d{1,3})\s*(?:месяц\w*|months?|monate?|mois|mesi|meses|miesi\w*|maanden|ay)/i);
     if (months?.[1]) facts.push(makeFact(doc, kind, docNumber, "quantity", "Гарантийный срок", `${months[1]} месяцев`, fragment));
-    if ((doc.isReport ? false : kind === "contract") && !/допсоглашен/i.test(doc.name)) {
-      const signed = doc.read.text.match(/(?:договор\w*[^.\n]{0,40}|от|dated|vom|d\.d\.|du|del|z\s+dnia)\s+(\d{2}\.\d{2}\.\d{4}|\d{1,2}\s+\p{L}+\s+\d{4})/iu);
+    if ((doc.isReport ? false : kind === "contract") && !isAmendmentDoc(doc.name, doc.read.text)) {
+      const signed = doc.read.text.match(/(?:(?<![\p{L}])договор(?!н)\w*|(?<![\p{L}])от(?![\p{L}])|dated|vom|d\.d\.|(?<![\p{L}])du(?![\p{L}])|(?<![\p{L}])del(?![\p{L}])|z\s+dnia)[^.\n]{0,40}?\s+(\d{2}\.\d{2}\.\d{4}|\d{1,2}\s+\p{L}+\s+\d{4})/iu);
       if (signed?.[1] && !facts.some((item) => item.role === "date" && /дата\s+договор/i.test(item.label))) {
         facts.push(makeFact(doc, kind, docNumber, "date", "Дата договора", signed[1], fragment));
       }
@@ -305,7 +306,7 @@ function inherit(facts: Fact[], text: string): Fact[] {
     const next: Fact = { ...fact };
     if (fact.role === "transport") {
       delete next.item;
-    } else if (!next.item && singleNamed && (fact.role === "quantity" || fact.role === "line_total" || fact.role === "unit_price" || fact.role === "date")) {
+    } else if (!next.item && singleNamed && !isStatusValue(singleNamed.raw) && (fact.role === "quantity" || fact.role === "line_total" || fact.role === "unit_price" || fact.role === "date")) {
       next.item = singleNamed.raw;
     }
     if (!next.contract && contractToken && fact.role !== "contract_number") next.contract = contractToken;
@@ -340,11 +341,25 @@ function parseByRole(role: Role, raw: string, unitHint?: string): Parsed {
   return { kind: "text", norm: normText(raw) };
 }
 
+function parseStatements(text: string, hints: RoleHints): { role: Role; label: string; value: string; viaModel: boolean }[] {
+  const parts = text.split(/(?<=\.)\s+/).map((part) => part.trim()).filter(Boolean);
+  const sentences = parts.length > 1 ? parts : [text];
+  const found: { role: Role; label: string; value: string; viaModel: boolean }[] = [];
+  for (const sentence of sentences) {
+    const parsed = parseLine(sentence, hints);
+    if (parsed) found.push(parsed);
+  }
+  return found;
+}
+
 function parseLine(text: string, hints: RoleHints): { role: Role; label: string; value: string; viaModel: boolean } | null {
   const colon = text.match(/^(.{2,80}?)(?:\s*[:—–]\s+|\s+-\s+)(.+)$/);
   if (colon?.[1] && colon[2]) {
     const resolved = resolveRole(colon[1], colon[2], hints);
-    if (resolved) return { role: resolved.role, label: colon[1].trim(), value: colon[2].trim(), viaModel: resolved.viaModel };
+    if (resolved) {
+      const value = resolved.role === "counterparty" ? clipParty(colon[2].trim()) : colon[2].trim();
+      if (value) return { role: resolved.role, label: colon[1].trim(), value, viaModel: resolved.viaModel };
+    }
     if (colon[2].trim().length <= 40 && /страна|город|модель|произв/i.test(colon[1])) {
       return { role: "text", label: colon[1].trim(), value: colon[2].trim(), viaModel: false };
     }
@@ -358,6 +373,23 @@ function parseLine(text: string, hints: RoleHints): { role: Role; label: string;
   return null;
 }
 
+function isStatusValue(raw: string): boolean {
+  return /^(да|нет|yes|no|ja|nein|oui|non|s[iì]|sim|n[aã]o|tak|nie|evet|hay[ıi]r|是|否|завершен\w*|завершён\w*|выполнено|completed|done)$/i.test(raw.trim());
+}
+
+function isAmendmentDoc(name: string, text: string): boolean {
+  if (/допсоглашен|dopsoglash|amendment|addendum|avenant|nachtrag/i.test(name)) return true;
+  return /^[\s\S]{0,80}дополнительн\w*\s+соглашен/i.test(text);
+}
+
+function dateKind(label: string): "deadline" | "delivery" | "payment" | "signed" | "any" {
+  if (/срок|deadline|lieferfrist|d[eé]lai|delai|consegna|plazo|dostaw|leverterm|teslim|交货期/i.test(label)) return "deadline";
+  if (/фактическ|передач|при[её]м|отгруз|shipment|date of (?:delivery|receipt)|получен/i.test(label)) return "delivery";
+  if (/плат[её]ж|оплат|payment|paid/i.test(label)) return "payment";
+  if (/дата\s+договор|contract\s+date|заключ/i.test(label)) return "signed";
+  return "any";
+}
+
 function partySide(text: string): "supplier" | "buyer" | "any" {
   if (/поставщик|исполнител|продавец|supplier|vendor|lieferant|fournisseur|fornitore|proveedor|fornecedor|dostawca|leverancier|tedarikçi|供应商/i.test(text)) return "supplier";
   if (/заказчик|покупател|плательщик|customer|buyer|kunde|acheteur|cliente|comprador|odbiorca|koper|alıcı|买方/i.test(text)) return "buyer";
@@ -366,6 +398,11 @@ function partySide(text: string): "supplier" | "buyer" | "any" {
 
 function isService(fact: Fact): boolean {
   return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|fracht|vervoer|nakliye|installation|instal|montage|montaje|montaggio|monta[zż]|training|schulung|formation|formazione|formaci[oó]n|szkol|eğitim|egitim|commissioning|inbetriebnahme|mise en service|inbedrijf|puesta en marcha|avviamento|rozruch|devreye|certificat|zertifiz|aarding|uziem|toprak|运输|安装|培训|调试|认证|接地/i.test(`${fact.item ?? ""} ${fact.label}`);
+}
+
+function isBlanketTotal(fact: Fact): boolean {
+  if (fact.item || productCodes(`${fact.label} ${fact.item ?? ""}`).length) return false;
+  return /^(?:стоимость|сумма|итого|всего|total)(?![\p{L}])/iu.test(fact.label) && /оборудован|переданн|поставленн|отгруженн|всего|итого/i.test(fact.label);
 }
 
 function isTotalRow(fact: Fact): boolean {
@@ -393,8 +430,10 @@ function mentionsItem(item: string, source: Fact): boolean {
     return true;
   }
   const blob = `${source.fragment.text} ${source.fragment.rowLabel ?? ""} ${source.docName} ${source.item ?? ""}`;
+  const identity = `${source.item ?? ""} ${source.fragment.rowLabel ?? ""}`;
   const codes = productCodes(item);
-  if (codes.length && codes.some((code) => blob.toUpperCase().includes(code))) return true;
+  if (codes.length && codes.some((code) => (source.item ? identity : blob).toUpperCase().includes(code))) return true;
+  if (codes.length && source.item && productCodes(identity).length && codes.some((code) => blob.toUpperCase().includes(code))) return false;
   const number = item.match(/\d{3,}/)?.[0];
   if (number && new RegExp(`(^|\\D)${number}(\\D|$)`).test(blob)) return true;
   const links: { report: RegExp; doc: RegExp }[] = [
@@ -414,9 +453,13 @@ function isReturnDoc(fact: Fact): boolean {
   return /возврат/i.test(fact.docName) || /^\s*акт возврата/i.test(fact.docText.slice(0, 180));
 }
 
+function isShipmentDoc(fact: Fact): boolean {
+  return fact.docKind === "waybill" || fact.docKind === "act" || isReturnDoc(fact) || /реестр/i.test(fact.docName);
+}
+
 function quantityFocus(label: string): "stock" | "received" | "contract" | "hours" | "any" {
   if (/оприходован|warehouse|lager|entrepôt|entrepot|magazzino|almacén|almacen|armazém|armazem|magazyn|depo|仓库/i.test(label)) return "stock";
-  if (/за вычетом возврата|принят|получен|accepted|received|geaccepteerd|aceito|less returns|angenommen|abzüglich|abzuglich|accept[eé]|d[eé]duction|menos devol|menos devoluç|al netto|pomniejsz|minus retour|iade|扣除退/i.test(label)) return "received";
+  if (/за вычетом возврата|принят|получен|поставлен|отгруж|accepted|received|geaccepteerd|aceito|less returns|angenommen|abzüglich|abzuglich|accept[eé]|d[eé]duction|menos devol|menos devoluç|al netto|pomniejsz|minus retour|iade|扣除退|shipped/i.test(label)) return "received";
   if (/по договору|under the contract|per contract|laut vertrag|selon le contrat|secondo il contratto|según el contrato|segun el contrato|conforme o contrato|wg umowy|volgens contract|sözleşmeye|sozlesmeye|按合同/i.test(label)) return "contract";
   if (/час|продолжительн|^объем$|^объём$|^volume$|^volumen$|^umfang$|^omvang$|^hacim$|^hours?$|^stunden$|^heures$|^ore$|^horas$|^godziny$|^uren$|^saat$|^工时$/i.test(label)) return "hours";
   return "any";
@@ -522,7 +565,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     }
   }
   if (focused === "received") {
-    const deliveries = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
+    const deliveries = pool.filter((source) => isShipmentDoc(source));
     const detailed = deliveries.filter((source) => !/реестр/i.test(source.docName));
     pool = detailed.length ? detailed : deliveries;
   }
@@ -537,14 +580,14 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     if (stated.length) pool = stated;
   }
   if (fact.role === "unit_price") {
-    const amended = pool.filter((source) => /допсоглашен/i.test(source.docName));
-    const contractual = pool.filter((source) => source.docKind === "contract" || /спецификац|договор|допсоглашен/i.test(source.docName));
+    const amended = pool.filter((source) => isAmendmentDoc(source.docName, source.docText));
+    const contractual = pool.filter((source) => source.docKind === "contract" || /спецификац|договор|допсоглашен|dopsoglash/i.test(source.docName));
     if (amended.length) pool = amended;
     else if (contractual.length) pool = contractual;
   }
   if (fact.role === "date" && /срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(fact.label)) {
     const stated = pool.filter((source) => source.label === "Срок поставки");
-    const amended = (stated.length ? stated : pool).filter((source) => /допсоглашен/i.test(source.docName));
+    const amended = (stated.length ? stated : pool).filter((source) => isAmendmentDoc(source.docName, source.docText));
     if (amended.length) pool = amended;
     else if (stated.length) pool = stated;
   }
@@ -556,8 +599,11 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     else if (performed.length) pool = performed;
     else if (calculated.length) pool = calculated;
     else pool = pool.filter((source) => source.docKind !== "invoice" && source.docKind !== "contract");
-  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*(?:ндс|vat\b)|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
-    const shipped = pool.filter((source) => source.docKind === "waybill" || source.docKind === "act" || isReturnDoc(source));
+  } else if (fact.role === "line_total" && /оплач|уплач|\bpaid\b|amount paid/i.test(fact.label)) {
+    const payments = pool.filter((source) => source.docKind === "payment");
+    if (payments.length) pool = payments;
+  } else if (fact.role === "line_total" && /с\s*ндс|принят|получ|поставлен|отгруж|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*(?:ндс|vat\b)|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`)) {
+    const shipped = pool.filter((source) => isShipmentDoc(source));
     if (shipped.length) pool = shipped;
   }
   pool = pool.filter((source) => !isTotalRow(source));
@@ -626,6 +672,8 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
       const sameBasis = pool.filter((source) => source.basis === fact.basis);
       if (sameBasis.length) pool = sameBasis;
     }
+    const detailed = pool.filter((source) => !isBlanketTotal(source));
+    if (detailed.length) pool = detailed;
     let total = 0n;
     const parts: Fact[] = [];
     for (const source of pool) {
@@ -837,15 +885,22 @@ function confirms(report: Fact, source: Fact): boolean {
   if (report.role === "item_name" && !sameItem(report.raw, source.raw)) return false;
   if (report.role === "text" && !similarText(report.label, source.label)) return false;
   if ((report.role === "inn" || report.role === "counterparty") && partySide(report.label) !== "any") {
-    const got = partySide(`${source.label} ${source.fragment.text}`);
+    const labeled = partySide(source.label);
+    const got = labeled !== "any" ? labeled : partySide(source.fragment.text);
     if (got === "any" && !/договор/i.test(source.docName)) return false;
     if (got !== "any" && got !== partySide(report.label)) return false;
   }
   if (report.role === "date" && /дата\s+договор|contract\s+date|vertragsdatum|date\s+du\s+contrat|data\s+del\s+contratto|fecha\s+del\s+contrato|data\s+do\s+contrato|data\s+umowy|contractdatum|sözleşme\s+tarihi|合同日期/i.test(report.label)) {
-    if (/срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(source.label) || source.docKind !== "contract" || /допсоглашен/i.test(source.docName)) return false;
+    if (/срок|delivery|deadline|liefer|délai|delai|consegna|plazo|dostaw|lever|teslim|交货/i.test(source.label) || source.docKind !== "contract" || isAmendmentDoc(source.docName, source.docText)) return false;
+  }
+  if (report.role === "date") {
+    const wanted = dateKind(report.label);
+    const got = dateKind(`${source.label} ${source.fragment.columnHeader ?? ""}`);
+    if (wanted !== "any" && got !== wanted) return false;
   }
   if (needsItem(report.role) && report.item && !mentionsItem(report.item, source)) return false;
-  if (!report.item && (report.role === "quantity" || report.role === "unit_price")) {
+  if (!report.item && (report.role === "quantity" || report.role === "unit_price" || report.role === "line_total")) {
+    const genericTotal = /^(?:итого|всего|total|summe|insgesamt|gesamt|suma|totale|toplam|totaal|razem|zusammen|合计|总计)(?![\p{L}])/iu.test(report.label);
     const words = normText(report.label).split(" ").filter((word) => word.length > 5 && !/договор|поставк|оборудован|количеств|стоимост|учетом|изменен/.test(word));
     const blob = normText(`${source.label} ${source.item ?? ""} ${source.fragment.text}`);
     const mentioned = (word: string) => {
@@ -853,7 +908,10 @@ function confirms(report: Fact, source: Fact): boolean {
       const stem = word.slice(0, 5);
       return stem.length >= 5 && blob.split(" ").some((part) => part.length >= 5 && (part.includes(stem) || word.includes(part.slice(0, 5))));
     };
-    if (words.length && !words.some(mentioned) && !similarText(report.label, source.label)) return false;
+    const paid = report.role === "line_total" && /оплач|уплач|paid/.test(normText(report.label));
+    const paidSource = paid && source.docKind === "payment" && /плат|payment|сумм|amount|tutar|bedrag/.test(blob);
+    if (!genericTotal && words.length && !words.some(mentioned) && !similarText(report.label, source.label) && !paidSource) return false;
+    if (!genericTotal && !words.length && paid && !paidSource) return false;
   }
   if (report.role === "quantity" && report.parsed.kind === "quantity" && source.parsed.kind === "quantity") {
     if (!sameUnit(report.parsed.unit, source.parsed.unit) && scaleToUnit(source.parsed.minor, source.parsed.unit, report.parsed.unit, `${report.item ?? ""} ${source.item ?? ""}`, kitFactors([source.docText, report.docText])) == null) return false;

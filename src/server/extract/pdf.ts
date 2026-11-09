@@ -31,7 +31,7 @@ export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
       const glyphs = glyphsOf(content.items, viewport.width, viewport.height);
-      const lines = groupLines(glyphs);
+      const lines = joinWrapped(groupLines(glyphs));
       const pageText = lines.map((line) => line.text).join(" ").replace(/\s+/g, " ").trim();
       if (pageText.length >= 20) {
         lines.forEach((line, index) => {
@@ -124,6 +124,32 @@ function glyphsOf(items: unknown[], pageWidth: number, pageHeight: number): Glyp
     });
   }
   return glyphs;
+}
+
+function joinWrapped(lines: { text: string; box: Box; tokens: { text: string; box: Box }[] }[]): { text: string; box: Box; tokens: { text: string; box: Box }[] }[] {
+  const joined: { text: string; box: Box; tokens: { text: string; box: Box }[] }[] = [];
+  for (const line of lines) {
+    const prev = joined[joined.length - 1];
+    if (prev && continuesLine(prev.text, line.text)) {
+      prev.text = `${prev.text} ${line.text}`.replace(/\s+/g, " ").trim();
+      prev.box = union([prev.box, line.box]);
+      prev.tokens = [...prev.tokens, ...line.tokens];
+      continue;
+    }
+    joined.push({ text: line.text, box: line.box, tokens: [...line.tokens] });
+  }
+  return joined;
+}
+
+function continuesLine(prev: string, next: string): boolean {
+  const previous = prev.trim();
+  const following = next.trim();
+  if (!previous || !following || /[.!?][»"”']?$/.test(previous)) return false;
+  if (/^\d+\.\s/.test(following)) return false;
+  if (/^[\p{Ll}\d]/u.test(following)) return true;
+  const opened = (previous.match(/«/g) ?? []).length;
+  const closed = (previous.match(/»/g) ?? []).length;
+  return opened > closed;
 }
 
 function groupLines(glyphs: Glyph[]): { text: string; box: Box; tokens: { text: string; box: Box }[] }[] {

@@ -23,16 +23,42 @@ const WORD_NUMBER: Record<string, number> = {
   trois: 3, drei: 3, tres: 3, tre: 3, trzy: 3, drie: 3, üç: 3, uc: 3,
 };
 
-/** A delivery line such as "1 Дозатор ДЭ-100 шт. 5 18 500,00 92 500,00 18 500,00 111 000,00". */
+const SHIPMENT_UNIT = "шт\\.?|компл\\.?|час\\.?|усл\\.?|pcs\\.?|pieces?|hours?|service|stk\\.?|szt\\.?|pz\\.?|ud\\.?|adet";
+const SHIPMENT_AMOUNT = "\\d{1,3}(?:[ \\u00A0]\\d{3})+(?:[.,]\\d{2})?|\\d{1,3}(?:,\\d{3})+(?:\\.\\d{2})?|\\d+[.,]\\d{2}";
+
+/** A delivery line: name then unit then quantity, or name then quantity then unit, followed by at least a price and an amount. */
+const PIECE_UNIT = "шт\\.?|pcs\\.?|pieces?|stk\\.?|szt\\.?|pz\\.?|ud\\.?|adet";
+
 export function parseShipmentRow(text: string): ShipmentRow | null {
   const compact = text.replace(/\s+/g, " ").trim();
-  const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(шт\.?|компл\.?|час\.?|усл\.?|pcs\.?|pieces?|hours?|service|stk\.?|szt\.?|pz\.?|ud\.?|adet)\s+(\d{1,4})\s+(.+)$/i);
-  if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null;
-  const amounts = match[4].match(/\d{1,3}(?:[ \u00A0]\d{3})*,\d{2}|\d{1,3}(?:,\d{3})+\.\d{2}/g) ?? [];
+  if ((compact.match(/qty|quantity|price|description|\bunit\b|кол-?во|цена|наименован|единиц/gi) ?? []).length >= 2) return null;
+  const unitThenQty = compact.match(new RegExp(`^(?:\\d+\\s+)?(.+?)\\s+(${SHIPMENT_UNIT})\\s+(\\d{1,4})\\s+(.+)$`, "i"));
+  const qtyThenUnit = compact.match(new RegExp(`^(?:\\d+\\s+)?(.+?)\\s+(?<![-\\d\\p{L}])(\\d{1,4})\\s+(${PIECE_UNIT})\\s+(.+)$`, "iu"));
+  const parsed = [
+    qtyThenUnit?.[1] && qtyThenUnit[2] && qtyThenUnit[3] && qtyThenUnit[4]
+      ? shipmentFrom(qtyThenUnit[1], qtyThenUnit[3], qtyThenUnit[2], qtyThenUnit[4])
+      : null,
+    unitThenQty?.[1] && unitThenQty[2] && unitThenQty[3] && unitThenQty[4]
+      ? shipmentFrom(unitThenQty[1], unitThenQty[2], unitThenQty[3], unitThenQty[4])
+      : null,
+  ];
+  return parsed.find((row) => row != null) ?? null;
+}
+
+function shipmentFrom(itemRaw: string, unit: string, qty: string, tail: string): ShipmentRow | null {
+  if (/^\d{3}(?!\d)/.test(tail)) return null;
+  const amounts = tail.match(new RegExp(SHIPMENT_AMOUNT, "g")) ?? [];
   const gross = amounts[amounts.length - 1];
-  const item = match[1].trim();
+  const item = itemRaw.trim();
   if (!gross || amounts.length < 2 || item.length < 3 || /^(итого|всего)\b/i.test(item)) return null;
-  return { item, quantity: `${match[3]} ${match[2]}`, unit: match[2], gross };
+  return { item, quantity: `${qty} ${unit}`, unit, gross };
+}
+
+/** A party name ends where the next party's role begins. */
+export function clipParty(value: string): string {
+  const cut = value.search(/(?:^|[\s.»"”])(?:получател\w*|заказчик\w*|покупател\w*|плательщик\w*|грузополучател\w*|грузоотправител\w*|исполнител\w*|поставщик\w*|представител\w*|customer|buyer|supplier|vendor|recipient|consignee|payer)\b/i);
+  const sliced = cut > 0 ? value.slice(0, cut) : value;
+  return sliced.replace(/[\s.;,]+$/g, "").trim();
 }
 
 /** "Цена договора ... составляет 1 842 960,00 руб." The contract price is the largest amount in that sentence. */

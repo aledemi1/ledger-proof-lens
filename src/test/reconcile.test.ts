@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -270,5 +270,41 @@ describe("document reconciliation", () => {
 
   it("writes the acceptance files", async () => {
     await writeAcceptanceFixtures();
+  });
+
+  it("reconciles a fresh pack with an amendment, a shipment and separate work", async () => {
+    const dir = path.resolve("Sverko_1_QA_2026-11-09");
+    const names = [
+      "01_Otchet_KP47.xlsx",
+      "02_Zhurnal_rabot.xlsx",
+      "03_Dogovor_KP47.docx",
+      "04_Dopsoglashenie_1.docx",
+      "05_Nakladnaya_147.pdf",
+      "06_Akt_obucheniya_149.pdf",
+      "07_Platezh_917.pdf",
+    ];
+    const docs = await Promise.all(names.map(async (name) => prepare(name, readFileSync(path.join(dir, name)), name.startsWith("01"))));
+    const report = docs[0];
+    if (!report) throw new Error("нет отчёта");
+    const checks = byName(reconcile(report, docs.slice(1), []));
+    expect(checks["Номер договора"]?.status).toBe("match");
+    expect(checks["Поставщик"]?.status).toBe("match");
+    expect(checks["Договорный срок поставки"]?.status).toBe("mismatch");
+    expect(checks["Договорный срок поставки"]?.sourceValue).toContain("30.10.2026");
+    expect(checks["Фактическая дата поставки"]?.status).toBe("match");
+    expect(checks["Количество поставленных анализаторов АВ-10"]?.status).toBe("mismatch");
+    expect(checks["Количество поставленных анализаторов АВ-10"]?.discrepancy).toBe("+2 шт.");
+    expect(checks["Стоимость поставленных анализаторов АВ-10"]?.status).toBe("mismatch");
+    expect(checks["Стоимость поставленных анализаторов АВ-10"]?.discrepancy).toBe("+36 000 ₽");
+    expect(checks["Продолжительность обучения работе с оборудованием"]?.status).toBe("mismatch");
+    expect(checks["Продолжительность обучения работе с оборудованием"]?.discrepancy).toBe("+2 час");
+    expect(checks["Стоимость перевозки оборудования"]?.status).toBe("match");
+    expect(checks["Оплачено по договору"]?.status).toBe("match");
+    expect(checks["Гарантийный срок анализаторов АВ-10"]?.status).toBe("match");
+    expect(checks["Ввод оборудования в эксплуатацию завершён"]?.status).toBe("not_found");
+    expect(checks["Количество участников обучения"]?.status).toBe("match");
+    const counts = { match: 0, mismatch: 0, not_found: 0, needs_review: 0 };
+    for (const check of Object.values(checks)) counts[check.status as keyof typeof counts] += 1;
+    expect(counts).toEqual({ match: 7, mismatch: 4, not_found: 1, needs_review: 0 });
   });
 });
