@@ -7,6 +7,7 @@ import { fill } from "@/i18n/fill";
 import { useCopy } from "@/i18n/messages";
 import { useLocale } from "@/i18n/use-locale";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
+import { PrivacySection } from "@/components/landing/PrivacySection";
 
 const SPEEDUP = 2;
 
@@ -113,6 +114,7 @@ export function LandingSections() {
           </table>
         </div>
       </section>
+      <PrivacySection />
       <section className="grid gap-8 border-b border-border py-12 lg:grid-cols-[1fr_1.4fr]">
         <div>
           <h2 className="text-2xl font-semibold sm:text-3xl">{t.faq}</h2>
