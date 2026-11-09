@@ -35,6 +35,7 @@ use the editor.
 - Reviewer verdicts are stored separately from automatic `CheckResult.status`; never let a reviewer action change the automatic status.
 - Highlights for uploaded files come only from anchors or coordinates the extractor actually produced. If only a page and a quote are known, show those and do not invent a box. Never store user file contents in localStorage.
 - Before editing, sync with the remote if the branch is behind and the worktree is clean. Commit and push a requested change when it is done; do not commit secrets.
+- After a significant change to behavior, architecture, setup, or operating rules, update README in the same change so the document stays the current description of the product.
 
 - Keep route-aware navigation in AppShell: homepage uses a compact top bar and review workspaces use an icon rail to reserve space for evidence.
 - Landing evidence previews are filtered views of synthetic pages obtained through auditService, with existing evidence anchors; do not duplicate document values.

@@ -14,7 +14,7 @@ import {
 } from "./db";
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
-import { classifyLabels, refineWithModel } from "./llm";
+import { classifyLabels, refineWithModel, reviewPackWithModel } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import { duplicateNames, reconcile, unknownLabels } from "./reconcile";
@@ -164,6 +164,7 @@ export async function processSession(sessionId: string, replace = false): Promis
   }
   try {
     checks = await refineWithModel(checks, reportDoc, supporting);
+    checks = await reviewPackWithModel(checks, reportDoc, supporting);
   } catch {
     // Rules stay in place when the model is unavailable.
   }

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels, compareLinkedValues, refineWithModel } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
 import type { CheckResult } from "@/types/audit";
 import type { ReadDocument } from "@/server/model";
@@ -163,11 +163,100 @@ describe("linked quote is compared in code", () => {
     expect(untouched?.sourceValue).toBeNull();
   });
 
+  it("reviews the whole pack without reopening a settled row", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const support = doc("Накладная.pdf", "f1", "Передано 10 шт. Стоимость партии 7 200 руб.");
+    const report = doc("Отчет.xlsx", "r1", "12 шт");
+    const open = reviewCheck("c1", "Стоимость", "8 000 ₽", "r1");
+    open.status = "not_found";
+    open.explanation = "В прочитанном комплекте нет подтверждения.";
+    const settled = reviewCheck("c2", "Количество", "12 шт", "r2");
+    settled.status = "match";
+    settled.explanation = "Источник подтверждает количество.";
+    settled.discrepancy = null;
+    const bodies: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(String(init.body));
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    links: [
+                      { checkId: "c1", supportFragmentId: "Накладная.pdf:f1", quote: "7 200 руб." },
+                      { checkId: "c2", supportFragmentId: "Накладная.pdf:f1", quote: "10 шт" },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    const [linked, untouched] = await reviewPackWithModel([open, settled], report, [support]);
+    expect(bodies[0]).toContain("всего комплекта");
+    expect(linked?.status).toBe("mismatch");
+    expect(linked?.discrepancy).toBe("+800 ₽");
+    expect(linked?.evidenceReferences[0]?.documentId).toBe("Накладная.pdf");
+    expect(untouched?.status).toBe("match");
+    expect(untouched?.discrepancy).toBeNull();
+    expect(untouched?.explanation).toContain("Автоматический статус не изменён");
+  });
+
+  it("does not treat a contract price as a completed payment", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const support = doc("Договор.docx", "f1", "Стоимость заказа — 50 000 рублей.");
+    const report = doc("Отчет.xlsx", "r1", "50 000 ₽");
+    const open = reviewCheck("c1", "Оплачено за октябрь", "50 000 ₽", "r1");
+    open.status = "not_found";
+    open.explanation = "В прочитанном комплекте нет подтверждения.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      links: [{ checkId: "c1", supportFragmentId: "Договор.docx:f1", quote: "50 000 рублей" }],
+                    }),
+                  },
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    const [linked] = await reviewPackWithModel([open], report, [support]);
+    expect(linked?.status).toBe("needs_review");
+    expect(linked?.explanation).toContain("не закрыт");
+  });
+
   it("accepts equal quantities from the quote", () => {
     expect(compareLinkedValues("20 шт", "20 шт.")?.status).toBe("match");
     expect(compareLinkedValues("20 шт", "18 шт")?.discrepancy).toBe("+2 шт.");
     expect(compareLinkedValues("25.10.2026", "30.10.2026")?.status).toBe("mismatch");
     expect(compareLinkedValues("да", "выполнено")).toBeNull();
+    expect(compareLinkedValues("10 шт.", "Блок контроля БК-8 — 10 шт")?.status).toBe("match");
+    expect(compareLinkedValues("40", "35")?.status).toBe("mismatch");
+    expect(compareLinkedValues("18", "фактическая продолжительность — 16 часов")?.discrepancy).toBe("+2 час");
+    expect(compareLinkedValues("36,000.00", "36 000,00")?.status).toBe("match");
+    expect(compareLinkedValues("36,000.00", "Предоставление конференц-зала 2 18 000,00 36 000,00")?.status).toBe("match");
+    expect(compareLinkedValues("15,000.00", "Аренда комплекта оборудования 2 6 500,00 13 000,00")?.discrepancy).toBe("+2 000 ₽");
   });
 });
 
