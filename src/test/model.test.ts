@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, refineWithModel } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
+import type { CheckResult } from "@/types/audit";
+import type { ReadDocument } from "@/server/model";
 
 async function prepare(name: string, buffer: Buffer, isReport: boolean): Promise<PreparedDoc> {
   const read = await readFile(name, buffer);
@@ -110,6 +112,79 @@ describe("language model labels", () => {
     expect(calls).toHaveLength(2);
   });
 });
+
+describe("linked quote is compared in code", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("turns a quoted amount into a mismatch and ignores a quote that is not in the file", async () => {
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const support = doc("Акт_9.pdf", "f1", "Начислено к оплате 1 400 000,00 руб. за поставку.");
+    const report = doc("Отчет.xlsx", "r1", "1 450 000,00 ₽");
+    const open = reviewCheck("c1", "К оплате по акту", "1 450 000,00 ₽", "r1");
+    const invented = reviewCheck("c3", "К оплате по акту", "1 450 000,00 ₽", "r1");
+    const settled = reviewCheck("c2", "Номер договора", "45-2026", "r2");
+    settled.status = "match";
+    settled.explanation = "Совпадает по правилам.";
+    vi.stubGlobal(
+      "fetch",
+      answer({
+        links: [
+          { checkId: "c1", supportFragmentId: "Акт_9.pdf:f1", quote: "1 400 000,00 руб." },
+          { checkId: "c1", supportFragmentId: "Акт_9.pdf:f1", quote: "9 999 999 руб." },
+          { checkId: "c3", supportFragmentId: "Акт_9.pdf:f1", quote: "9 999 999 руб." },
+          { checkId: "c2", supportFragmentId: "Акт_9.pdf:f1", quote: "1 400 000,00 руб." },
+        ],
+      }),
+    );
+    const [linked, skipped, untouched] = await refineWithModel([open, invented, settled], report, [support]);
+    expect(linked?.status).toBe("mismatch");
+    expect(linked?.discrepancy).toBe("+50 000 ₽");
+    expect(linked?.evidenceReferences[0]?.documentId).toBe("Акт_9.pdf");
+    expect(linked?.evidenceReferences[0]?.locationInDocument).toBe("f1");
+    expect(linked?.explanation).toContain("сервер сверил");
+    expect(skipped?.status).toBe("needs_review");
+    expect(skipped?.sourceValue).toBeNull();
+    expect(untouched?.status).toBe("match");
+    expect(untouched?.sourceValue).toBeNull();
+  });
+
+  it("accepts equal quantities from the quote", () => {
+    expect(compareLinkedValues("20 шт", "20 шт.")?.status).toBe("match");
+    expect(compareLinkedValues("20 шт", "18 шт")?.discrepancy).toBe("+2 шт.");
+    expect(compareLinkedValues("25.10.2026", "30.10.2026")?.status).toBe("mismatch");
+    expect(compareLinkedValues("да", "выполнено")).toBeNull();
+  });
+});
+
+function reviewCheck(id: string, fieldName: string, reportValue: string, anchor: string): CheckResult {
+  return {
+    id,
+    fieldName,
+    reportValue,
+    sourceValue: null,
+    discrepancy: null,
+    status: "needs_review",
+    severity: "medium",
+    explanation: "Формулировка не сопоставлена однозначно. Для смыслового сравнения нужен ключ языковой модели либо ручная проверка.",
+    evidenceReferences: [],
+    reportReference: { documentId: "Отчет.xlsx", pageNumber: 0, sourceText: reportValue, locationInDocument: anchor, locationLabel: "ячейка" },
+    reviewerStatus: "pending",
+    reviewerComment: "",
+  };
+}
+
+function doc(name: string, anchor: string, text: string): PreparedDoc {
+  const read: ReadDocument = {
+    fragments: [{ id: anchor, text, pageNumber: 1, locationLabel: "Стр. 1", anchor, shape: "line" }],
+    preview: { kind: "none", reason: "тест" },
+    pageCount: 1,
+    text,
+    warnings: [],
+  };
+  return { id: name, name, sha256: name, read, isReport: name.startsWith("Отчет") };
+}
 
 describe.runIf(process.env["SVERKO_LIVE_AI"] === "1")("live language model", () => {
   it("classifies the laptop labels and finds both discrepancies", async () => {
