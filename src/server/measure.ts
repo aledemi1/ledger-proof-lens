@@ -1,5 +1,6 @@
 import {
   normText,
+  parseDecimal,
   parseContractToken,
   parseDate,
   parseMoney,
@@ -163,11 +164,64 @@ export function convertMoney(minor: bigint, from: VatBasis, to: VatBasis): bigin
   return null;
 }
 
-/** Report boundary: "состояние на 31.10.2025" or "за октябрь 2025". */
+/** "1 Масса порошка 2 500 г 2 Цена ... 4 000 ₽/кг" from a flattened indicator table. */
+export function parseIndicatorRows(text: string, allowSingle = false): { label: string; value: string; unit: string }[] {
+  const compact = text.replace(/\s+/g, " ").trim();
+  const header = compact.match(/^.*?(?:№\s*)?показател\w*\s+значен\w*(?:\s+\S+)?\s+/i);
+  const source = header ? compact.slice(header[0].length) : compact;
+  const chunks = source.split(/(?<=^|\s)(?=\d{1,2}\s+(?!шт|час|ч(?:\s|$)|мес|₽|руб|кг|км|г(?:\s|$)|мин|чел|м(?:\s|$))\p{L})/u).map((part) => part.trim()).filter(Boolean);
+  const rows = chunks.map(parseIndicatorChunk).filter((row): row is { label: string; value: string; unit: string } => row != null);
+  if (rows.length < 2 && !header && !allowSingle) return [];
+  return rows;
+}
+
+/** One numbered indicator row, used after a table header on a previous line. */
+export function parseIndicatorLine(text: string): { label: string; value: string; unit: string } | null {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!/^\d{1,2}\s+\p{L}/u.test(compact)) return null;
+  return parseIndicatorRows(compact, true)[0] ?? null;
+}
+
+function parseIndicatorChunk(chunk: string): { label: string; value: string; unit: string } | null {
+  const body = chunk.replace(/^\d{1,2}\s+/, "").trim();
+  if (!body) return null;
+  const numeric = body.match(/^(.+?)\s+(\d[\d\s\u00A0]*(?:[.,]\d+)?)\s+([^\d\s][^\s]{0,16})$/u);
+  if (numeric?.[1] && numeric[2] && numeric[3] && numeric[1].trim().length >= 2) {
+    return { label: numeric[1].trim(), value: numeric[2].trim(), unit: numeric[3].trim() };
+  }
+  const party = body.match(/^(.+?)\s+((?:ООО|АО|ПАО|ЗАО|ИП)\s+.+)$/u);
+  if (party?.[1] && party[2] && party[1].trim().length >= 2) return { label: party[1].trim(), value: party[2].trim(), unit: "" };
+  const token = body.match(/^(.+?)\s+((?:[A-ZА-ЯЁ]{1,8}[-\s]?)?\d{0,4}[A-ZА-ЯЁ]{0,4}-\d{1,4}\/\d{2,4}|\d{2}\.\d{2}\.\d{4})$/u);
+  if (token?.[1] && token[2] && token[1].trim().length >= 2) return { label: token[1].trim(), value: token[2].trim(), unit: "" };
+  return null;
+}
+
+/** A goods line whose unit sits in the header: "Весы ЛВ-200 4 25 000 100 000". */
+export function parseBareShipment(text: string, header: string): ShipmentRow | null {
+  if (!/кол|qty|quantity|menge|количество/i.test(header) || !/цен|сумм|price|amount|стоим/i.test(header)) return null;
+  const compact = text.replace(/\s+/g, " ").trim();
+  const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(\d{1,4})\s+(\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})\s+(\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})$/);
+  if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null;
+  const item = match[1].trim();
+  if (item.length < 3 || /^(итого|всего)\b/i.test(item)) return null;
+  const unit = header.match(/шт\.?|кг|pcs\.?|pieces?/i)?.[0] ?? "шт.";
+  return { item, quantity: `${match[2]} ${unit}`, unit, gross: match[4] };
+}
+
+export function statedTolerance(text: string): bigint | null {
+  const match = text.match(/абсолютн\p{L}*\s+допуск\p{L}*\s+(\d+[.,]\d+)\s*(?:₽|руб)/iu);
+  if (!match?.[1]) return null;
+  return parseDecimal(match[1]);
+}
+
+/** Report boundary: "состояние на 31.10.2025", "01.10.2025–31.10.2025" or "за октябрь 2025". */
 export function periodEnd(text: string): string | null {
   const explicit = text.match(/состояни[ея]\s+на\s+(\d{2}\.\d{2}\.\d{4})/i);
   const explicitDate = explicit?.[1] ? parseDate(explicit[1]) : null;
   if (explicitDate) return explicitDate;
+  const range = text.match(/(\d{2}\.\d{2}\.\d{4})\s*[–—-]\s*(\d{2}\.\d{2}\.\d{4})/);
+  const rangeEnd = range?.[2] ? parseDate(range[2]) : null;
+  if (rangeEnd) return rangeEnd;
   const month = text.match(/за\s+(январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*\s+(\d{4})/i);
   if (!month?.[1] || !month[2]) return null;
   const names = ["январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"];
@@ -183,7 +237,13 @@ export function documentDate(text: string): string | null {
 }
 
 export function blankSignature(text: string): boolean {
-  return /подпис|получил|принял/i.test(text) && /_{3,}/.test(text);
+  if (/подпис|получил|принял/i.test(text) && /_{3,}/.test(text)) return true;
+  return text.split(/\n/).some((line) => {
+    const trimmed = line.trim();
+    if (!/подпис/i.test(trimmed) || trimmed.length > 80) return false;
+    const after = trimmed.replace(/^.*подпис\w*[:\s]*/i, "").replace(/[_\s.—–-]/g, "");
+    return after.length < 3;
+  });
 }
 
 export function contractMentioned(text: string, token: string): boolean {

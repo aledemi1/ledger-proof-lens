@@ -20,8 +20,8 @@ const ROLE_RULES: { role: Role; re: RegExp }[] = [
   { role: "counterparty", re: /поставщик|контрагент|исполнитель|покупатель|заказчик|грузоотправитель|грузополучатель|supplier|vendor|customer|buyer|lieferant|kunde|fournisseur|acheteur|fornitore|cliente|proveedor|comprador|fornecedor|dostawca|odbiorca|leverancier|koper|tedarikçi|alıcı|供应商|买方/i },
   { role: "transport", re: /транспорт|доставк|перевоз|transport|delivery|shipping|fracht|lieferung|livraison|trasporto|transporte|przewóz|przewoz|vervoer|nakliye|运输/i },
   { role: "unit_price", re: /цена|тариф|стоимость\s+единиц|за\s+единиц|unit\s*price|\bprice\b|\brate\b|\bprijs\b|\btarif|\btariff|\btarief\b|preis|prix|precio|prezzo|preço|preco|cena jedn|\bcena\b|stukprijs|taryfa|birim fiyat|\bfiyat\b|\bpre[cç]o\b|费率|单价/i },
-  { role: "quantity", re: /кол-?во|количество|поставлено|число\s+единиц|объ[её]м|продолжительн|длительност|duration|quantity|qty|volume|volumen|umfang|omvang|hacim|accepted|received|geaccepteerd|angenommen|akzeptiert|abzüglich|abzuglich|accept[eé]|d[eé]duction|aceptado|aceito|aceite|accettato|przyj[eę]t|ontvangen|kabul|wareneingang|eingang|entrada|entr[eé]e|przych[oó]d|przychod|\breceipt\b|\bbalance\b|\bhours\b|\bkm\b|menge|cantidad|quantité|quantite|quantità|quantita|quantidade|ilość|ilosc|hoeveelheid|miktar|数量|体积|验收|已收|приход|остаток/i },
-  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|insgesamt|gesamt|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*(?:ндс|vat\b)|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
+  { role: "quantity", re: /кол-?во|количество|поставлено|число\s+(?:единиц|поставок|накладн\w*|отгрузок)|участник|слушател|объ[её]м|продолжительн|длительност|duration|quantity|qty|volume|volumen|umfang|omvang|hacim|accepted|received|geaccepteerd|angenommen|akzeptiert|abzüglich|abzuglich|accept[eé]|d[eé]duction|aceptado|aceito|aceite|accettato|przyj[eę]t|ontvangen|kabul|wareneingang|eingang|entrada|entr[eé]e|przych[oó]d|przychod|\breceipt\b|\bbalance\b|\bhours\b|\bkm\b|menge|cantidad|quantité|quantite|quantità|quantita|quantidade|ilość|ilosc|hoeveelheid|miktar|数量|体积|验收|已收|приход|остаток|масса|длина/i },
+  { role: "line_total", re: /стоимость|сумма|итого|всего|(^|[^\p{L}])ндс(?=[^\p{L}]|$)|(^|[^\p{L}])с\s*ндс|(^|[^\p{L}])без\s*ндс|amount|total|summe|insgesamt|gesamt|suma|totale|montant|importo|importe|betrag|bedrag|tutar|金额|合计|不含|含|without|excluding|excl\.?|including|incl\.?|ohne|zonder|netto|brutto|\bbez\b|\bkwota\b|z\s*(?:ндс|vat\b)|hors\s|avec\s|\bcom\s|con\s|sin\s|hari[cç]|dahil|\bmet\s|mit\s*(?:ндс|mwst|vat)|senza|sem\s|(^|[^\p{L}])value(?=[^\p{L}]|$)/iu },
   { role: "date", re: /(^|[^\p{L}])(дата|date|datum|fecha|data|tarih\w*|日期)(?=[^\p{L}]|$)/iu },
   { role: "item_name", re: /наименование|номенклатур|товар|оборудован|услуг|description|bezeichnung|désignation|designation|denominazione|denomina|descrizione|descrição|descricao|nazwa|benaming|omschrijving|açıklama|aciklama|名称|品名|(?<![\p{L}])item(?!\s*code)/iu },
 ];
@@ -39,8 +39,9 @@ export const headerWord = {
 export function detectRole(label: string): Role | null {
   const s = label.trim();
   if (!s) return null;
-  for (const rule of ROLE_RULES) if (rule.re.test(s)) return rule.role;
-  return null;
+  const hits = ROLE_RULES.filter((rule) => rule.re.test(s)).map((rule) => rule.role);
+  if (hits.includes("line_total") && hits.includes("transport") && /стоим|сумм|итого|всего|ндс|цена/i.test(s)) return "line_total";
+  return hits[0] ?? null;
 }
 
 export function normText(value: string): string {
@@ -116,8 +117,9 @@ export function parseQuantity(raw: string, unitHint?: string): { minor: bigint; 
   if (!token) return null;
   const minor = parseDecimal(token.num);
   if (minor == null) return null;
-  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|м2|м3|месяц\w*|мес\.?|мг|mg|компл\.?|набор\w*|час\.?|чел\w*|усл\.?|уп\.?|л|pcs\.?|pieces?|stk\.?|st(?:ü|ue)ck|hours?|hrs\.?|months?|service|м(?![\p{L}]))/iu);
-  const unit = cleanupUnit(unitMatch?.[1] ?? unitHint ?? "шт.");
+  const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|км|мм|мин(?:ут\w*)?|метр\w*|м2|м3|месяц\w*|мес\.?|мг|mg|г|компл\.?|набор\w*|час\.?|ч(?![\p{L}])|чел\w*|усл\.?|уп\.?|л|pcs\.?|pieces?|stk\.?|st(?:ü|ue)ck|hours?|hrs\.?|months?|service|м(?![\p{L}]))/iu);
+  const laterUnit = !unitMatch && token.rest.match(/(час\w*|мин(?:ут\w*)?|кг|км|мм|метр\w*|г|м(?![\p{L}])|чел\w*|месяц\w*|мес\.?)/iu)?.[1];
+  const unit = cleanupUnit(unitMatch?.[1] ?? laterUnit ?? unitHint ?? "шт.");
   return { minor, unit };
 }
 
@@ -127,11 +129,16 @@ function cleanupUnit(unit: string): string {
   if (u.startsWith("ед")) return "ед.";
   if (u.startsWith("уп")) return "уп.";
   if (u.startsWith("компл") || u.startsWith("набор") || /^set$|^kit$/.test(u)) return "компл.";
-  if (u.startsWith("час") || /^hours?|^hrs|^std|^uur|^saat/.test(u)) return "час";
+  if (u.startsWith("час") || /акад|академическ/.test(u) || u === "ч" || u === "h" || /^hours?|^hrs|^std|^uur|^saat/.test(u)) return "час";
   if (u.startsWith("месяц") || u.startsWith("мес") || /^months?|^monat|^mois|^mesi|^mes(?:es)?|^ay\b|^miesi|^maand/.test(u)) return "месяц";
   if (u.startsWith("чел") || /^people|^persons?|^personas|^persone|^personnes|^os[oó]b|^osoby|^personne|^personen|^menschen|^kişi|^kisi|^人/.test(u)) return "чел.";
   if (u.startsWith("усл") || /^service|^dienst|^hizmet|^服务/.test(u)) return "усл.";
   if (u.startsWith("мг") || u === "mg") return "мг";
+  if (u === "кг" || u.startsWith("кг") || u === "kg") return "кг";
+  if (u.startsWith("км") || u === "km") return "км";
+  if (u.startsWith("мин") || u === "min" || u.startsWith("minute")) return "мин";
+  if (u === "г" || u === "g") return "г";
+  if (u.startsWith("метр") || u === "м" || u === "m") return "м";
   return unit.trim();
 }
 
@@ -151,7 +158,7 @@ const MONTHS: Record<string, string> = {
 };
 
 export function isQuantityUnit(unit: string): boolean {
-  return /шт|компл|набор|час|месяц|^мес\.?$|чел|усл|мг|^mg$|pcs|piece|stk|st(?:ü|ue)ck|szt|pi[eè]ce|unid|adet|pz\b|stuk|hours?|hrs|std|uur|saat|months?|monat|mois|mesi|meses|ay\b|miesi|maand|service|dienst|hizmet|people|person|os[oó]b|menschen|kişi|kisi|服务|件|个|^km$|^км$/i.test(unit.trim());
+  return /шт|компл|набор|час|^ч$|мин|месяц|^мес\.?$|чел|усл|мг|^mg$|^г$|^g$|^м$|^m$|км|km|pcs|piece|stk|st(?:ü|ue)ck|szt|pi[eè]ce|unid|adet|pz\b|stuk|hours?|hrs|std|uur|saat|months?|monat|mois|mesi|meses|ay\b|miesi|maand|service|dienst|hizmet|people|person|os[oó]b|menschen|kişi|kisi|服务|件|个/i.test(unit.trim());
 }
 
 export function isMoneyUnit(unit: string): boolean {
@@ -199,7 +206,7 @@ export type VatBasis = "net" | "gross" | "tax" | "unknown";
 /** Whether a money label is the net amount, the gross amount, or the tax itself. */
 export function vatBasis(label: string): VatBasis {
   const text = label.toLowerCase().replace(/ё/g, "е");
-  if (/^ндс\b|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|^vat\b|^nds\b|mwst|tva|\biva\b|\bbtw\b|\bkdv\b|增值税|税额/.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|\bbez\b|mit\s|met\s|avec\s|\bcon\s|\bcom\s|不含|含/.test(text)) return "tax";
+  if (/(^|[^\p{L}\p{N}])ндс(?=[^\p{L}\p{N}]|$)|сумма\s+ндс|в\s+т\.?\s*ч\.?\s*ндс|(^|[^\p{L}])vat(?=[^\p{L}]|$)|(^|[^\p{L}])nds(?=[^\p{L}]|$)|mwst|tva|(^|[^\p{L}])iva(?=[^\p{L}]|$)|(^|[^\p{L}])btw(?=[^\p{L}]|$)|(^|[^\p{L}])kdv(?=[^\p{L}]|$)|增值税|税额/iu.test(text) && !/без\s*ндс|с\s*ндс|excl|incl|netto|sin\s|hors\s|sem\s|hari[cç]|haric|dahil|without|ohne|zonder|senza|(^|[^\p{L}])bez(?=[^\p{L}]|$)|mit\s|met\s|avec\s|(^|[^\p{L}])con(?=[^\p{L}]|$)|(^|[^\p{L}])com(?=[^\p{L}]|$)|不含|含/iu.test(text)) return "tax";
   if (/без\s*ндс|без\s+налога|excl\.?\s*vat|without|excluding|ohne|zonder|\bbez\b|netto|sin\s|hors\s|senza|sem\s|excl\.?\s*btw|hari[cç]|haric|不含/.test(text)) return "net";
   if (/с\s*ндс|включая\s+ндс|incl\.?\s*vat|including|avec\s|\bcom\s|con\s|brutto|\bmet\s|mit\s+(?:mwst|ндс|nds|vat)|z\s*(?:ндс|nds|vat\b)|ttc|dahil|含/.test(text) && !/不含|zonder|without|ohne|sin\s|sem\s|hors\s|excl|hari[cç]|haric|senza|\bbez\b/.test(text)) return "gross";
   return "unknown";
@@ -210,8 +217,14 @@ export function productCodes(value: string): string[] {
   return [...new Set(found)];
 }
 
+const HOMOGLYPHS: Record<string, string> = { с: "c", к: "k", а: "a", е: "e", о: "o", р: "p", х: "x", м: "m", т: "t", н: "h", в: "b", у: "y" };
+
+export function normalizeToken(value: string): string {
+  return value.replace(/[\s№.]/g, "").toLowerCase().replace(/[скаеорхмтнву]/g, (char) => HOMOGLYPHS[char] ?? char);
+}
+
 export function sameToken(a: string, b: string): boolean {
-  return a.replace(/[\s№]/g, "").toLowerCase() === b.replace(/[\s№]/g, "").toLowerCase();
+  return normalizeToken(a) === normalizeToken(b);
 }
 
 function groupInt(value: bigint): string {
