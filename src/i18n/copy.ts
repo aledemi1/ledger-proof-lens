@@ -16,6 +16,7 @@ export interface Copy {
   landing: {
     kicker: string; title: string; titleMuted: string; lead: string; openDemo: string; newCheck: string; sample: string; reportAndSources: string; demoData: string; indicator: string; inReport: string; loadingSample: string; allResults: string; source: string; inDocument: string; difference: string; sourceFragment: string;
     step1: string; step1text: string; step2: string; step2text: string; step3: string; step3text: string;
+    privacyKicker: string; privacyTitle: string; privacyLead: string; privacyRu: string; privacyRuText: string; privacyOther: string; privacyOtherText: string; privacyHold: string; privacyHoldText: string;
     forLeaders: string; savingsTitle: string; savingsLead: string; savingsNote: string; reports: string; hoursManual: string; hoursWith: string; rate: string; hoursMonth: string; saveMonth: string; saveYear: string; fte: string; pieces: string; hours: string;
     why: string; whyTitle: string;
     b1: string; b1t: string; b2: string; b2t: string; b3: string; b3t: string; b4: string; b4t: string;

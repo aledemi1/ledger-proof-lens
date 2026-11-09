@@ -31,7 +31,14 @@ function answer(content: unknown) {
 }
 
 describe("language model labels", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env["SVERKO_PRIVACY"];
+  });
+
+  function withoutMask() {
+    process.env["SVERKO_PRIVACY"] = "off";
+  }
 
   it("leaves unknown labels for manual review without a model", async () => {
     const { report, supporting } = await laptopSet();
@@ -77,6 +84,7 @@ describe("language model labels", () => {
   });
 
   it("keeps only known ids and allowed roles from the answer", async () => {
+    withoutMask();
     vi.stubGlobal(
       "fetch",
       answer({
@@ -97,6 +105,7 @@ describe("language model labels", () => {
   });
 
   it("retries without temperature when the model rejects it", async () => {
+    withoutMask();
     const calls: unknown[] = [];
     vi.stubGlobal(
       "fetch",
@@ -114,9 +123,13 @@ describe("language model labels", () => {
 });
 
 describe("linked quote is compared in code", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env["SVERKO_PRIVACY"];
+  });
 
   it("turns a quoted amount into a mismatch and ignores a quote that is not in the file", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
     process.env["AI_API_KEY"] = "test";
     process.env["AI_BASE_URL"] = "https://model.test/v1";
     process.env["AI_MODEL"] = "test-model";

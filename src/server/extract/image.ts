@@ -35,6 +35,6 @@ export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
     preview: { kind: "image", width, height },
     pageCount: 1,
     text: fragments.map((fragment) => fragment.text).join("\n"),
-    warnings: ["Текст распознан моделью gpt-5.4. Координаты строк не размечены: модель возвращает только текст."],
+    warnings: recognized.lines.some((line) => line.box) ? [] : ["Текст распознан локально. Координаты строк есть только там, где распознаватель их вернул."],
   };
 }

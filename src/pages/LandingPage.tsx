@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, FileText, GitCompareArrows, ClipboardCheck, ArrowUpRight, Check, CircleAlert, Link2 } from "lucide-react";
+import { ArrowRight, FileText, GitCompareArrows, ClipboardCheck, ArrowUpRight, Check, CircleAlert, Link2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkProvider, SyntheticPage } from "@/components/audit/SyntheticDocument";
 import { useAuditSession } from "@/hooks/useAudit";
@@ -52,6 +52,18 @@ export function LandingPage() {
         </div>
       </section>
       <section className="mt-7 border-b border-border pb-7"><div className="grid gap-5 sm:grid-cols-3">{[{ Icon: FileText, title: t.landing.step1, text: t.landing.step1text }, { Icon: GitCompareArrows, title: t.landing.step2, text: t.landing.step2text }, { Icon: ClipboardCheck, title: t.landing.step3, text: t.landing.step3text }].map(({ Icon, title, text }) => <div key={title} className="flex gap-3"><Icon className="mt-1 size-5 shrink-0 text-primary" /><div><h2 className="text-sm font-semibold">{title}</h2><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{text}</p></div></div>)}</div></section>
+      <section aria-labelledby="data-privacy" className="border-b border-border py-8">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-panel sm:p-6">
+          <p className="flex items-center gap-2 text-sm font-medium text-primary"><ShieldCheck className="size-4" /> {t.landing.privacyKicker}</p>
+          <h2 id="data-privacy" className="mt-2 text-2xl font-semibold">{t.landing.privacyTitle}</h2>
+          <p className="mt-3 max-w-3xl leading-relaxed text-muted-foreground">{t.landing.privacyLead}</p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <div><h3 className="text-sm font-semibold">{t.landing.privacyRu}</h3><p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.landing.privacyRuText}</p></div>
+            <div><h3 className="text-sm font-semibold">{t.landing.privacyOther}</h3><p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.landing.privacyOtherText}</p></div>
+            <div><h3 className="text-sm font-semibold">{t.landing.privacyHold}</h3><p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{t.landing.privacyHoldText}</p></div>
+          </div>
+        </div>
+      </section>
       <LandingSections />
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5 text-xs text-muted-foreground"><span>{t.landing.footer}</span><span>{t.landing.footerNote}</span></footer>
     </div>

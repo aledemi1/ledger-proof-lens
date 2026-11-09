@@ -1,6 +1,7 @@
 import type { CheckResult, CheckStatus, Severity } from "@/types/audit";
 import { aiConfig } from "./env";
 import type { PreparedDoc, RoleHints, UnknownLabel } from "./reconcile";
+import { maskTexts, unmaskText } from "./privacy";
 import { formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
 interface Proposal {
@@ -212,9 +213,10 @@ async function requestLinks(
 }
 
 async function chatJson(config: AiConfig, system: string, data: unknown): Promise<unknown> {
+  const masked = await maskTexts([JSON.stringify(data)]);
   const messages = [
     { role: "system", content: system },
-    { role: "user", content: JSON.stringify(data) },
+    { role: "user", content: masked.texts[0] ?? "{}" },
   ];
   let response = await post(config, { model: config.model, temperature: 0, response_format: { type: "json_object" }, messages });
   if (response.status === 400 && /temperature/i.test(await response.clone().text())) {
@@ -222,7 +224,8 @@ async function chatJson(config: AiConfig, system: string, data: unknown): Promis
   }
   if (!response.ok) throw new Error(`модель ответила ${response.status}`);
   const payload = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-  const content = (payload.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "");
+  const raw = (payload.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "");
+  const content = await unmaskText(raw, masked.mapping);
   return JSON.parse(content) as unknown;
 }
 
