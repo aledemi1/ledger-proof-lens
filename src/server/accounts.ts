@@ -1,5 +1,6 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { mailConfigured, publicOrigin, sendMail, verificationLetter } from "./mail";
 import { all, get, run, tokenHash } from "./store";
 
 const scrypt = promisify(scryptCallback);
@@ -48,30 +49,73 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(hash, expected);
 }
 
-export async function createAccount(email: string, password: string, role: AccountRole): Promise<Account> {
+export async function createAccount(email: string, password: string, role: AccountRole, verified = true): Promise<Account> {
   if (!validEmail(email) || !validPassword(password) || (role !== "admin" && role !== "user")) {
     throw new AccountError("invalid", "Укажите почту и пароль не короче 8 символов");
   }
   const existing = await get<{ id: string }>("SELECT id FROM users WHERE email = ?", [email]);
   if (existing) throw new AccountError("duplicate", "Такой аккаунт уже есть");
   const account: Account = { id: `usr_${randomBytes(8).toString("hex")}`, email, role };
-  await run("INSERT INTO users (id, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)", [
-    account.id,
-    email,
-    await hashPassword(password),
-    role,
-    new Date().toISOString(),
-  ]);
+  const createdAt = new Date().toISOString();
+  await run(
+    "INSERT INTO users (id, email, password_hash, role, created_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?)",
+    [account.id, email, await hashPassword(password), role, createdAt, verified ? createdAt : null],
+  );
   return account;
 }
 
-export async function loginAccount(email: string, password: string): Promise<Account | null> {
-  const row = await get<{ id: string; email: string; role: string; password_hash: string }>(
-    "SELECT id, email, role, password_hash FROM users WHERE email = ?",
+export async function sendRegistrationEmail(userId: string, email: string, request: Request): Promise<void> {
+  const raw = randomBytes(32).toString("base64url");
+  const expires = new Date(Date.now() + 48 * 3600_000).toISOString();
+  await run(
+    "INSERT INTO email_verification_tokens (id, user_id, token_hash, expires_at, used_at) VALUES (?, ?, ?, ?, NULL)",
+    [`evt_${randomBytes(8).toString("hex")}`, userId, sha256(raw), expires],
+  );
+  const letter = verificationLetter(`${publicOrigin(request)}/verify-email?token=${encodeURIComponent(raw)}`);
+  try {
+    await sendMail({ to: email, ...letter });
+  } catch (error) {
+    await run("DELETE FROM email_verification_tokens WHERE user_id = ?", [userId]);
+    await run("DELETE FROM users WHERE id = ?", [userId]);
+    throw error;
+  }
+}
+
+export async function confirmEmail(rawToken: string): Promise<Account> {
+  const token = rawToken.trim();
+  if (token.length < 16) throw new AccountError("invalid", "Ссылка подтверждения недействительна");
+  const row = await get<{ id: string; user_id: string; expires_at: string; used_at: string | null }>(
+    "SELECT id, user_id, expires_at, used_at FROM email_verification_tokens WHERE token_hash = ?",
+    [sha256(token)],
+  );
+  if (!row || row.used_at || row.expires_at < new Date().toISOString()) {
+    throw new AccountError("invalid", row?.used_at ? "Ссылка уже использована" : "Ссылка подтверждения недействительна");
+  }
+  const now = new Date().toISOString();
+  await run("UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL", [now, row.user_id]);
+  await run("UPDATE email_verification_tokens SET used_at = ? WHERE id = ?", [now, row.id]);
+  const account = await get<{ id: string; email: string; role: string }>(
+    "SELECT id, email, role FROM users WHERE id = ?",
+    [row.user_id],
+  );
+  if (!account || (account.role !== "admin" && account.role !== "user")) {
+    throw new AccountError("invalid", "Аккаунт не найден");
+  }
+  return account;
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export async function loginAccount(email: string, password: string): Promise<Account | "unverified" | null> {
+  const row = await get<{ id: string; email: string; role: string; password_hash: string; email_verified_at: string | null }>(
+    "SELECT id, email, role, password_hash, email_verified_at FROM users WHERE email = ?",
     [email],
   );
   if (!row || !(await verifyPassword(password, row.password_hash))) return null;
   if (row.role !== "admin" && row.role !== "user") return null;
+  if (mailConfigured() && row.role !== "admin" && !row.email_verified_at) return "unverified";
   return { id: row.id, email: row.email, role: row.role };
 }
 

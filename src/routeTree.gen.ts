@@ -14,6 +14,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AuditsIndexRouteImport } from './routes/audits.index'
 import { Route as AuditsIdIndexRouteImport } from './routes/audits.$id.index'
 import { Route as AuditsIdConclusionRouteImport } from './routes/audits.$id.conclusion'
@@ -43,6 +44,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuditsIndexRoute = AuditsIndexRouteImport.update({
   id: '/audits/',
   path: '/audits/',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/audits': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id': typeof AuditsIdIndexRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/new': typeof NewRoute
   '/register': typeof RegisterRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/audits/': typeof AuditsIndexRoute
   '/audits/$id/conclusion': typeof AuditsIdConclusionRoute
   '/audits/$id/': typeof AuditsIdIndexRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/register'
+    | '/verify-email'
     | '/audits/'
     | '/audits/$id/conclusion'
     | '/audits/$id/'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/register'
+    | '/verify-email'
     | '/audits'
     | '/audits/$id/conclusion'
     | '/audits/$id'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/new'
     | '/register'
+    | '/verify-email'
     | '/audits/'
     | '/audits/$id/conclusion'
     | '/audits/$id/'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NewRoute: typeof NewRoute
   RegisterRoute: typeof RegisterRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   AuditsIndexRoute: typeof AuditsIndexRoute
   AuditsIdConclusionRoute: typeof AuditsIdConclusionRoute
   AuditsIdIndexRoute: typeof AuditsIdIndexRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/audits/': {
       id: '/audits/'
       path: '/audits'
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NewRoute: NewRoute,
   RegisterRoute: RegisterRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   AuditsIndexRoute: AuditsIndexRoute,
   AuditsIdConclusionRoute: AuditsIdConclusionRoute,
   AuditsIdIndexRoute: AuditsIdIndexRoute,

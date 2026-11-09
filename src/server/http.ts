@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { mailConfigured } from "./mail";
 import fs from "node:fs";
 import path from "node:path";
 import type { Decision, DocumentType, EvidenceReference, ReviewerStatus } from "@/types/audit";
@@ -7,11 +8,13 @@ import {
   accountFromToken,
   changePassword,
   closeAuthSession,
+  confirmEmail,
   createAccount,
   listAccounts,
   loginAccount,
   normalizeEmail,
   openAuthSession,
+  sendRegistrationEmail,
   setAccountRole,
   type Account,
   type AccountRole,
@@ -55,6 +58,7 @@ export async function handleApi(request: Request): Promise<Response> {
 
 async function authApi(request: Request, parts: string[]): Promise<Response> {
   if (parts[2] === "register" && request.method === "POST") return register(request);
+  if (parts[2] === "verify-email" && request.method === "POST") return verifyEmail(request);
   if (parts[2] === "login" && request.method === "POST") return login(request);
   if (parts[2] === "logout" && request.method === "POST") return logout(request);
   if (parts[2] === "me" && request.method === "GET") {
@@ -69,7 +73,17 @@ async function register(request: Request): Promise<Response> {
   const body = await readJson<{ email?: string; password?: string }>(request);
   if (!body) return json({ error: "Некорректный запрос" }, 400);
   try {
-    const account = await createAccount(normalizeEmail(String(body.email ?? "")), String(body.password ?? ""), "user");
+    const email = normalizeEmail(String(body.email ?? ""));
+    const account = await createAccount(email, String(body.password ?? ""), "user", !mailConfigured());
+    if (mailConfigured()) {
+      try {
+        await sendRegistrationEmail(account.id, email, request);
+      } catch {
+        console.error("[auth] verification email failed");
+        return json({ error: "Не удалось отправить письмо. Попробуйте ещё раз." }, 502);
+      }
+      return json({ pending: true, email }, 202);
+    }
     const token = await openAuthSession(account.id);
     return json(account, 201, authCookie(token, request));
   } catch (error) {
@@ -78,10 +92,24 @@ async function register(request: Request): Promise<Response> {
   }
 }
 
+async function verifyEmail(request: Request): Promise<Response> {
+  const body = await readJson<{ token?: string }>(request);
+  if (!body?.token) return json({ error: "Ссылка подтверждения недействительна" }, 400);
+  try {
+    const account = await confirmEmail(body.token);
+    const token = await openAuthSession(account.id);
+    return json(account, 200, authCookie(token, request));
+  } catch (error) {
+    if (error instanceof AccountError) return json({ error: error.message }, 400);
+    throw error;
+  }
+}
+
 async function login(request: Request): Promise<Response> {
   const body = await readJson<{ email?: string; password?: string }>(request);
   if (!body) return json({ error: "Некорректный запрос" }, 400);
   const account = await loginAccount(normalizeEmail(String(body.email ?? "")), String(body.password ?? ""));
+  if (account === "unverified") return json({ error: "Сначала подтвердите почту по ссылке из письма" }, 403);
   if (!account) return json({ error: "Неверная почта или пароль" }, 401);
   const token = await openAuthSession(account.id);
   return json(account, 200, authCookie(token, request));

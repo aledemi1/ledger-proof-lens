@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { closeDb } from "@/server/db";
 import { handleApi } from "@/server/http";
+import { setMailSenderForTests } from "@/server/mail";
 import { run } from "@/server/store";
 
 async function register(email: string): Promise<string> {
@@ -61,5 +62,60 @@ describe("accounts", () => {
       }),
     );
     expect(demote.status).toBe(404);
+  });
+
+  it("sends a confirmation link and signs in only after it is opened", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-mail-"));
+    process.env["SMTP_HOST"] = "smtp.timeweb.ru";
+    process.env["SMTP_PORT"] = "465";
+    process.env["SMTP_SECURE"] = "true";
+    let body = "";
+    setMailSenderForTests(async (message) => {
+      body = message.text;
+    });
+    await closeDb();
+    try {
+      const created = await handleApi(
+        new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "new@example.com", password: "password123" }),
+        }),
+      );
+      expect(created.status).toBe(202);
+      expect(created.headers.get("set-cookie")).toBeNull();
+      const blocked = await handleApi(
+        new Request("http://localhost/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "new@example.com", password: "password123" }),
+        }),
+      );
+      expect(blocked.status).toBe(403);
+      const token = /token=([^\s]+)/.exec(body)?.[1];
+      if (!token) throw new Error("в письме нет ссылки");
+      const verified = await handleApi(
+        new Request("http://localhost/api/auth/verify-email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: decodeURIComponent(token) }),
+        }),
+      );
+      expect(verified.status).toBe(200);
+      expect(verified.headers.get("set-cookie")).toContain("sverko_auth=");
+      const again = await handleApi(
+        new Request("http://localhost/api/auth/verify-email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: decodeURIComponent(token) }),
+        }),
+      );
+      expect(again.status).toBe(400);
+    } finally {
+      delete process.env["SMTP_HOST"];
+      delete process.env["SMTP_PORT"];
+      delete process.env["SMTP_SECURE"];
+      setMailSenderForTests(null);
+    }
   });
 });

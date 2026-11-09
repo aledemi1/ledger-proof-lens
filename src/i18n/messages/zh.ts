@@ -138,7 +138,7 @@ export const zh: Copy = {
     footer: "Sverko · 报表核对",
     footerNote: "系统结论。人工决定。",
   },
-  auth: { loginTitle: "登录", loginLead: "核对与账户绑定。演示套件无需登录即可打开。", email: "邮箱", password: "密码", signingIn: "正在登录…", signIn: "登录", noAccount: "没有账户？", create: "创建", registerTitle: "新建账户", registerLead: "注册创建用户。管理员角色由现有管理员分配。", creating: "正在创建…", createAccount: "创建账户", haveAccount: "已有账户？", signInLink: "登录", badLogin: "登录失败", badRegister: "创建账户失败" },
+  auth: { loginTitle: "登录", loginLead: "核对与账户绑定。演示套件无需登录即可打开。", email: "邮箱", password: "密码", signingIn: "正在登录…", signIn: "登录", noAccount: "没有账户？", create: "创建", registerTitle: "新建账户", registerLead: "注册创建用户。管理员角色由现有管理员分配。", creating: "正在创建…", createAccount: "创建账户", haveAccount: "已有账户？", signInLink: "登录", badLogin: "登录失败", badRegister: "创建账户失败", sentTitle: "邮件已发送", sentLead: "请打开邮件中的链接以确认地址，然后再登录。", verifyTitle: "确认邮箱", verifyPending: "正在检查链接…", verifyOk: "邮箱已确认，可以打开核对。", verifyFail: "链接无效。", toAudits: "前往核对" },
   audits: { title: "核对", lead: "每次核对包含报表及用于比对的原始凭证", new: "新建核对", apiError: "演示核对仍可用；应用不会用演示数据替换已上传套件。", signIn: "登录", or: "或", createAccount: "创建账户", search: "按名称搜索", empty: "未找到核对。", loading: "加载中…", noReport: "未上传报表", report: "报表", primary: "份原始凭证" },
   neu: {
     title: "新建核对",

@@ -20,7 +20,15 @@ const SCHEMA = [
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    email_verified_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS auth_sessions (
     token_hash TEXT PRIMARY KEY,
@@ -164,6 +172,9 @@ async function open(): Promise<void> {
     await ensureColumn("sessions", "previous_id", "TEXT");
     await ensureColumn("sessions", "recheck", "TEXT");
     await ensureColumn("reviews", "source_json", "TEXT");
+    if (await ensureColumn("users", "email_verified_at", "TEXT")) {
+      await pool.query("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
+    }
     await importSqlite(pool);
     await ensureAdmin(
       async (sql, params = []) => {
@@ -187,6 +198,9 @@ async function open(): Promise<void> {
   ensureSqliteColumn(db, "sessions", "previous_id", "TEXT");
   ensureSqliteColumn(db, "sessions", "recheck", "TEXT");
   ensureSqliteColumn(db, "reviews", "source_json", "TEXT");
+  if (ensureSqliteColumn(db, "users", "email_verified_at", "TEXT")) {
+    db.exec("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
+  }
   await ensureAdmin(
     async (sql, params = []) => {
       db.prepare(sql).run(...(params as never[]));
@@ -288,16 +302,20 @@ function sqliteExclusive<T>(fn: () => T | Promise<T>): Promise<T> {
   return run;
 }
 
-function ensureSqliteColumn(db: DatabaseSync, table: string, name: string, definition: string): void {
+function ensureSqliteColumn(db: DatabaseSync, table: string, name: string, definition: string): boolean {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!columns.some((column) => column.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  if (columns.some((column) => column.name === name)) return false;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  return true;
 }
 
-async function ensureColumn(table: string, name: string, definition: string): Promise<void> {
+async function ensureColumn(table: string, name: string, definition: string): Promise<boolean> {
   const pool = pgPool;
-  if (!pool) return;
+  if (!pool) return false;
   const found = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2", [table, name]);
-  if (!found.rowCount) await pool.query(`ALTER TABLE ${quoteIdent(table)} ADD COLUMN ${quoteIdent(name)} ${definition}`);
+  if (found.rowCount) return false;
+  await pool.query(`ALTER TABLE ${quoteIdent(table)} ADD COLUMN ${quoteIdent(name)} ${definition}`);
+  return true;
 }
 
 function quoteIdent(value: string): string {
@@ -337,12 +355,11 @@ async function ensureAdmin(
   const salt = randomBytes(16).toString("hex");
   const hash = (await scrypt(password, salt, 32)) as Buffer;
   const id = `usr_${randomBytes(8).toString("hex")}`;
-  await execute("INSERT INTO users (id, email, password_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)", [
-    id,
-    email,
-    `scrypt$${salt}$${hash.toString("hex")}`,
-    new Date().toISOString(),
-  ]);
+  const createdAt = new Date().toISOString();
+  await execute(
+    "INSERT INTO users (id, email, password_hash, role, created_at, email_verified_at) VALUES (?, ?, ?, 'admin', ?, ?)",
+    [id, email, `scrypt$${salt}$${hash.toString("hex")}`, createdAt, createdAt],
+  );
 }
 
 async function importSqlite(pool: Pool): Promise<void> {

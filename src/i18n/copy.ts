@@ -28,7 +28,7 @@ export interface Copy {
     q1: string; a1: string; q2: string; a2: string; q3: string; a3: string; q4: string; a4: string;
     cta: string; ctaText: string; footer: string; footerNote: string;
   };
-  auth: { loginTitle: string; loginLead: string; email: string; password: string; signingIn: string; signIn: string; noAccount: string; create: string; registerTitle: string; registerLead: string; creating: string; createAccount: string; haveAccount: string; signInLink: string; badLogin: string; badRegister: string };
+  auth: { loginTitle: string; loginLead: string; email: string; password: string; signingIn: string; signIn: string; noAccount: string; create: string; registerTitle: string; registerLead: string; creating: string; createAccount: string; haveAccount: string; signInLink: string; badLogin: string; badRegister: string; sentTitle: string; sentLead: string; verifyTitle: string; verifyPending: string; verifyOk: string; verifyFail: string; toAudits: string };
   audits: { title: string; lead: string; new: string; apiError: string; signIn: string; or: string; createAccount: string; search: string; empty: string; loading: string; noReport: string; report: string; primary: string };
   neu: {
     title: string; lead: string; openDemo: string; guest: string; signIn: string; create: string;

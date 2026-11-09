@@ -13,6 +13,7 @@ export function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -24,9 +25,14 @@ export function RegisterPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as { error?: string; pending?: boolean };
     if (!response.ok) {
       setError(payload.error || t.auth.badRegister);
+      setBusy(false);
+      return;
+    }
+    if (response.status === 202 || payload.pending) {
+      setSent(true);
       setBusy(false);
       return;
     }
@@ -36,8 +42,9 @@ export function RegisterPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">{t.auth.registerTitle}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{t.auth.registerLead}</p>
+      <h1 className="text-2xl font-semibold tracking-tight">{sent ? t.auth.sentTitle : t.auth.registerTitle}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{sent ? t.auth.sentLead : t.auth.registerLead}</p>
+      {sent ? null : (
       <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">{t.auth.email}</Label>
@@ -50,6 +57,7 @@ export function RegisterPage() {
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={busy} className="w-full">{busy ? t.auth.creating : t.auth.createAccount}</Button>
       </form>
+      )}
       <p className="mt-4 text-sm text-muted-foreground">
         {t.auth.haveAccount} <Link to="/login" className="text-primary underline-offset-4 hover:underline">{t.auth.signInLink}</Link>
       </p>
