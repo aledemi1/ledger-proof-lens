@@ -69,21 +69,21 @@ async function chat(system: string, user: string): Promise<string> {
         method: "POST",
         signal: AbortSignal.timeout(120_000),
         headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-5.4", temperature: 0, response_format: { type: "json_object" }, messages }),
+        body: JSON.stringify({ model: config.model, temperature: 0, response_format: { type: "json_object" }, messages }),
       });
       if (response.status === 400) {
         response = await fetch(`${config.baseUrl}/chat/completions`, {
           method: "POST",
           signal: AbortSignal.timeout(120_000),
           headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-5.4", response_format: { type: "json_object" }, messages }),
+          body: JSON.stringify({ model: config.model, response_format: { type: "json_object" }, messages }),
         });
       }
       if (response.ok) {
         const payload = (await response.json()) as { choices?: { message?: { content?: string } }[] };
         return payload.choices?.[0]?.message?.content ?? "";
       }
-      last = `gpt-5.4 ответила ${response.status}: ${(await response.text()).slice(0, 300)}`;
+      last = `${config.model} ответила ${response.status}: ${(await response.text()).slice(0, 300)}`;
       if (response.status < 500 && response.status !== 429) break;
     } catch (error) {
       last = error instanceof Error ? error.message : "сбой сети";
