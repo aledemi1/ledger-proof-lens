@@ -15,7 +15,7 @@ import {
 } from "./db";
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
-import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies } from "./llm";
+import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { CheckResult, CheckStatus } from "@/types/audit";
@@ -144,18 +144,18 @@ export async function processSession(sessionId: string, replace = false): Promis
 
   await setStage(sessionId, "matching");
   const modelNotices: string[] = [];
-  let hints: RoleHints = new Map();
   const config = aiConfig();
-  const unknown = config ? unknownLabels([reportDoc, ...supporting]) : [];
-  if (config && unknown.length) {
+  let checks: CheckResult[] = [];
+  if (config) {
     try {
-      hints = await classifyLabels(config, unknown);
+      checks = findingsToChecks(await scanPackInTwoStages(reportDoc, supporting), reportDoc.id);
+      if (checks.length) modelNotices.push("Показатели сначала выделены по одному отчёту, затем сверены с первичными документами. Статус посчитан по цитатам, которые есть в файлах.");
     } catch (error) {
       const reason = error instanceof Error ? error.message : "нет ответа";
-      modelNotices.push(`Языковая модель не ответила (${reason}). Незнакомые подписи оставлены на ручную проверку.`);
+      modelNotices.push(`Полный просмотр не выполнен (${reason}). Результат посчитан правилами.`);
     }
   }
-  let checks = reconcile(reportDoc, supporting, fileErrors, hints);
+  if (!checks.length) checks = await ruleChecks(reportDoc, supporting, fileErrors, modelNotices);
   if (!checks.length) {
     await markFailed(
       sessionId,
@@ -163,12 +163,6 @@ export async function processSession(sessionId: string, replace = false): Promis
       fileErrors,
     );
     return;
-  }
-  try {
-    checks = await refineWithModel(checks, reportDoc, supporting);
-    checks = await reviewPackWithModel(checks, reportDoc, supporting);
-  } catch {
-    // Rules stay in place when the model is unavailable.
   }
   const notices = [
     ...modelNotices,
@@ -183,6 +177,68 @@ export async function processSession(sessionId: string, replace = false): Promis
     fileErrors,
     notices,
     incomplete: fileErrors.length > 0 || supporting.some((doc) => doc.read.warnings.length > 0),
+  });
+}
+
+async function ruleChecks(reportDoc: PreparedDoc, supporting: PreparedDoc[], fileErrors: { fileName: string; reason: string }[], notices: string[]): Promise<CheckResult[]> {
+  let hints: RoleHints = new Map();
+  const config = aiConfig();
+  const unknown = config ? unknownLabels([reportDoc, ...supporting]) : [];
+  if (config && unknown.length) {
+    try {
+      hints = await classifyLabels(config, unknown);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "нет ответа";
+      notices.push(`Языковая модель не ответила (${reason}). Незнакомые подписи оставлены на ручную проверку.`);
+    }
+  }
+  let checks = reconcile(reportDoc, supporting, fileErrors, hints);
+  try {
+    checks = await refineWithModel(checks, reportDoc, supporting);
+    checks = await reviewPackWithModel(checks, reportDoc, supporting);
+  } catch {
+    // Rules stay in place when the model is unavailable.
+  }
+  return checks;
+}
+
+function findingsToChecks(findings: PackFinding[], reportId: string): CheckResult[] {
+  return findings.map((finding, index) => {
+    const status: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" ? "needs_review" : "not_found";
+    const compared = status === "match" || status === "mismatch" ? compareLinkedValues(finding.reportValue, finding.sourceValue) : null;
+    const evidence = finding.sources.filter((source) => source.quoteFound).map((source) => {
+      const cut = source.fragmentId.indexOf(":");
+      return {
+        documentId: cut > 0 ? source.fragmentId.slice(0, cut) : source.fragmentId,
+        pageNumber: 0,
+        sourceText: source.quote.slice(0, 240),
+        ...(cut > 0 ? { locationInDocument: source.fragmentId.slice(cut + 1) } : {}),
+        ...(source.where ? { locationLabel: source.where } : {}),
+      };
+    });
+    const reportCut = finding.reportFragmentId.indexOf(":");
+    return {
+      id: `c${index + 1}`,
+      fieldName: finding.name,
+      reportValue: finding.reportValue,
+      sourceValue: finding.sourceValue || null,
+      discrepancy: status === "mismatch" ? (compared?.discrepancy ?? null) : null,
+      status,
+      severity: status === "mismatch" ? "high" : status === "match" ? "low" : "medium",
+      explanation: finding.sourceCount
+        ? `Сервер сверил «${finding.name}» с ${finding.sourceCount} цитатами из первичных документов.`
+        : `Для «${finding.name}» в первичных документах не найдена цитата, которая есть в указанном фрагменте.`,
+      evidenceReferences: evidence,
+      reportReference: {
+        documentId: reportCut > 0 ? finding.reportFragmentId.slice(0, reportCut) : reportId,
+        pageNumber: 0,
+        sourceText: (finding.reportQuote || finding.reportValue).slice(0, 240),
+        ...(reportCut > 0 ? { locationInDocument: finding.reportFragmentId.slice(reportCut + 1) } : {}),
+        ...(finding.reportWhere ? { locationLabel: finding.reportWhere } : {}),
+      },
+      reviewerStatus: "pending",
+      reviewerComment: "",
+    };
   });
 }
 
