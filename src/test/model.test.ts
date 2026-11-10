@@ -348,6 +348,76 @@ describe("full-pack discrepancy scan", () => {
     expect(findings[0]?.sourceWhere).toContain("Счёт.pdf");
     expect(findings[1]?.sourceQuoteFound).toBe(false);
   });
+
+  it("reads every comma-separated source", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const report = doc("Отчет.xlsx", "r1", "Итого 141 000 ₽");
+    const act = doc("Акт.pdf", "f1", "Общая сумма по акту: 49 000 рублей.");
+    const food = doc("Питание.pdf", "f2", "Итоговая стоимость: 59 500,00 рублей.");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              findings: [{
+                name: "Итого",
+                reportValue: "141 000 ₽",
+                reportFragmentId: "Отчет.xlsx:r1",
+                reportQuote: "141 000 ₽",
+                sourceCount: 2,
+                sources: "Акт.pdf:f1 | 49 000 рублей, Питание.pdf:f2 | 59 500,00 рублей",
+                sourceValue: "108 500 ₽",
+                relation: "different",
+              }],
+            }),
+          },
+        }],
+      }), { status: 200 })),
+    );
+    const [finding] = await scanPackForDiscrepancies(report, [act, food]);
+    expect(finding?.sourceCount).toBe(2);
+    expect(finding?.sources.map((source) => source.fragmentId)).toEqual(["Акт.pdf:f1", "Питание.pdf:f2"]);
+    expect(finding?.sources.every((source) => source.quoteFound)).toBe(true);
+  });
+
+  it("sums several quoted parts of one open row", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const report = doc("Отчет.xlsx", "r1", "141 000 ₽");
+    const act = doc("Акт.pdf", "f1", "Общая сумма по акту: 49 000 рублей.");
+    const food = doc("Питание.pdf", "f2", "Итоговая стоимость: 59 500,00 рублей.");
+    const print = doc("Печать.pdf", "f3", "Общая стоимость: 7 200,00 рублей.");
+    const open = reviewCheck("c1", "Итого подтверждённых расходов", "141 000 ₽", "r1");
+    open.status = "not_found";
+    open.explanation = "В прочитанном комплекте нет подтверждения.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              links: [{
+                checkId: "c1",
+                sourceCount: 3,
+                sources: "Акт.pdf:f1 | 49 000 рублей, Питание.pdf:f2 | 59 500,00 рублей, Печать.pdf:f3 | 7 200,00 рублей",
+              }],
+            }),
+          },
+        }],
+      }), { status: 200 })),
+    );
+    const [linked] = await reviewPackWithModel([open], report, [act, food, print]);
+    expect(linked?.status).toBe("mismatch");
+    expect(linked?.discrepancy).toBe("+25 300 ₽");
+    expect(linked?.evidenceReferences).toHaveLength(3);
+    expect(linked?.explanation).toContain("3 источников");
+  });
 });
 
 describe.runIf(process.env["SVERKO_LIVE_AI"] === "1")("live language model", () => {
