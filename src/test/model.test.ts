@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, type PackFinding } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
 import type { CheckResult } from "@/types/audit";
 import type { ReadDocument } from "@/server/model";
@@ -363,6 +363,30 @@ describe("full-pack discrepancy scan", () => {
     expect(findings[0]?.sourceQuoteFound).toBe(true);
     expect(findings[0]?.sourceWhere).toContain("Счёт.pdf");
     expect(findings[1]?.sourceQuoteFound).toBe(false);
+  });
+
+  it("asks for report indicators before the pack", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const report = doc("Отчет.xlsx", "r1", "Ночей проживания: 4");
+    const support = doc("Счёт.pdf", "f1", "Гостиница подтверждает 3 оплаченные ночи");
+    let step = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        step += 1;
+        const content = step === 1
+          ? JSON.stringify({ indicators: [{ name: "Ночей проживания", reportValue: "4", reportFragmentId: "Отчет.xlsx:r1", reportQuote: "Ночей проживания: 4" }] })
+          : JSON.stringify({ findings: [{ name: "Ночей проживания", reportValue: "4", reportFragmentId: "Отчет.xlsx:r1", reportQuote: "Ночей проживания: 4", sourceCount: 1, sources: "Счёт.pdf:f1 | 3 оплаченные ночи", relation: "different" }] });
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }),
+    );
+    const findings = await scanPackInTwoStages(report, [support]);
+    expect(step).toBe(2);
+    expect(findings[0]?.name).toBe("Ночей проживания");
+    expect(findings[0]?.relation).toBe("different");
   });
 
   it("reads every comma-separated source", async () => {
