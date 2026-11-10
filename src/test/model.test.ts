@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, type PackFinding } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
 import type { CheckResult } from "@/types/audit";
 import type { ReadDocument } from "@/server/model";
@@ -417,6 +417,73 @@ describe("full-pack discrepancy scan", () => {
     expect(linked?.discrepancy).toBe("+25 300 ₽");
     expect(linked?.evidenceReferences).toHaveLength(3);
     expect(linked?.explanation).toContain("3 источников");
+  });
+});
+
+describe("pack finding judge", () => {
+  const finding = (patch: Partial<PackFinding>): PackFinding => ({
+    name: "Итого",
+    reportValue: "141 000 ₽",
+    reportFragmentId: "r",
+    reportQuote: "141 000 ₽",
+    reportWhere: "Отчет",
+    sourceCount: 2,
+    sources: [],
+    sourceValue: "",
+    sourceFragmentId: "",
+    sourceQuote: "",
+    sourceWhere: "",
+    relation: "same",
+    reportQuoteFound: true,
+    sourceQuoteFound: true,
+    ...patch,
+  });
+
+  it("sums verified parts and ignores the model's own verdict", () => {
+    const judged = judgePackFinding(finding({
+      sources: [
+        { fragmentId: "a", quote: "49 000 рублей", value: "", where: "Акт", quoteFound: true },
+        { fragmentId: "b", quote: "59 500,00 рублей", value: "", where: "Питание", quoteFound: true },
+        { fragmentId: "c", quote: "7 200,00 рублей", value: "", where: "Печать", quoteFound: true },
+      ],
+    }));
+    expect(judged.relation).toBe("different");
+    expect(judged.sourceValue).toBe("115 700 ₽");
+  });
+
+  it("splits a prose date range into start and end", () => {
+    const quote = "Семинар проведён 21 и 22 октября 2025 года.";
+    const start = judgePackFinding(finding({
+      name: "Дата начала семинара",
+      reportValue: "21.10.2025",
+      sources: [{ fragmentId: "a", quote, value: "", where: "Акт", quoteFound: true }],
+    }));
+    const end = judgePackFinding(finding({
+      name: "Дата окончания семинара",
+      reportValue: "22.10.2025",
+      sources: [{ fragmentId: "a", quote, value: "", where: "Акт", quoteFound: true }],
+    }));
+    expect(start.relation).toBe("same");
+    expect(end.relation).toBe("same");
+  });
+
+  it("reads a tariff inside a sentence", () => {
+    const judged = judgePackFinding(finding({
+      name: "Договорный тариф",
+      reportValue: "6,35",
+      sources: [{ fragmentId: "a", quote: "окончательная цена 6,35 рубля за кВт·ч", value: "", where: "Условия", quoteFound: true }],
+    }));
+    expect(judged.relation).toBe("same");
+  });
+
+  it("drops an operation from another month", () => {
+    const judged = judgePackFinding(finding({
+      name: "Возврат переплаты, полученный в октябре",
+      reportValue: "11 000 ₽",
+      sources: [{ fragmentId: "a", quote: "03.11.2025 возврат 11 000 ₽", value: "", where: "Выписка", quoteFound: true }],
+    }));
+    expect(judged.relation).toBe("different");
+    expect(judged.sourceValue).toBe("0");
   });
 });
 
