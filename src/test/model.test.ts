@@ -120,6 +120,22 @@ describe("language model labels", () => {
     expect(hints.get("отпущено")).toBe("quantity");
     expect(calls).toHaveLength(2);
   });
+
+  it("sends the request again when the model returns broken JSON", async () => {
+    withoutMask();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        const content = calls === 1 ? "{\"labels\":[{\"id\":\"l1\",\"role\":" : "{\"labels\":[{\"id\":\"l1\",\"role\":\"quantity\"}]}";
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }),
+    );
+    const hints = await classifyLabels(config, [{ label: "Отпущено", sample: "18" }]);
+    expect(hints.get("отпущено")).toBe("quantity");
+    expect(calls).toBe(2);
+  });
 });
 
 describe("linked quote is compared in code", () => {
