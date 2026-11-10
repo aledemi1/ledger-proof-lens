@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
 import type { CheckResult } from "@/types/audit";
 import type { ReadDocument } from "@/server/model";
@@ -287,6 +287,68 @@ function doc(name: string, anchor: string, text: string): PreparedDoc {
   };
   return { id: name, name, sha256: name, read, isReport: name.startsWith("Отчет") };
 }
+
+describe("full-pack discrepancy scan", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env["SVERKO_PRIVACY"];
+  });
+
+  it("keeps a quoted source and marks an invented quote", async () => {
+    process.env["SVERKO_PRIVACY"] = "off";
+    process.env["AI_API_KEY"] = "test";
+    process.env["AI_BASE_URL"] = "https://model.test/v1";
+    process.env["AI_MODEL"] = "test-model";
+    const report = doc("Отчет.xlsx", "r1", "Ночей проживания: 4");
+    const support = doc("Счёт.pdf", "f1", "Гостиница подтверждает 3 оплаченные ночи");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        expect(String(init.body)).toContain("первичные документы");
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    findings: [
+                      {
+                        name: "Ночей проживания",
+                        reportValue: "4",
+                        reportFragmentId: "Отчет.xlsx:r1",
+                        reportQuote: "4",
+                        sourceValue: "3",
+                        sourceFragmentId: "Счёт.pdf:f1",
+                        sourceQuote: "3 оплаченные ночи",
+                        relation: "different",
+                      },
+                      {
+                        name: "Выдумка",
+                        reportValue: "9",
+                        reportFragmentId: "Отчет.xlsx:r1",
+                        reportQuote: "9",
+                        sourceValue: "8",
+                        sourceFragmentId: "Счёт.pdf:f1",
+                        sourceQuote: "восемь ночей",
+                        relation: "different",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+    const findings = await scanPackForDiscrepancies(report, [support]);
+    expect(findings[0]?.relation).toBe("different");
+    expect(findings[0]?.sourceQuoteFound).toBe(true);
+    expect(findings[0]?.sourceWhere).toContain("Счёт.pdf");
+    expect(findings[1]?.sourceQuoteFound).toBe(false);
+  });
+});
 
 describe.runIf(process.env["SVERKO_LIVE_AI"] === "1")("live language model", () => {
   it("classifies the laptop labels and finds both discrepancies", async () => {
