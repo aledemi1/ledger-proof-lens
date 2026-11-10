@@ -135,6 +135,12 @@ export const apiAuditService: AuditService = {
     emit();
     return session;
   },
+  async findIndicator(sessionId, input) {
+    if (await isDemo(sessionId)) throw new AuditApiError("Демонстрационный комплект не изменяется. Пропущенный показатель можно добавить в своей проверке.", 400);
+    const check = await request<CheckResult>(`/api/audits/${sessionId}/indicators`, { method: "POST", body: JSON.stringify(input) });
+    emit();
+    return check;
+  },
   async deleteDraft(sessionId) {
     if (await isDemo(sessionId)) return;
     await request(`/api/audits/${sessionId}`, { method: "DELETE" });

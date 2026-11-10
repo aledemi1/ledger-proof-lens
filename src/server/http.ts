@@ -38,7 +38,7 @@ import {
 import { loadEnv } from "./env";
 import { fileExtension, validateFile } from "./extract/index";
 import { dataDir } from "./paths";
-import { enqueue, enqueueRebuild, sha256, whenRebuildQueued } from "./process";
+import { enqueue, enqueueRebuild, findSelectedIndicator, sha256, whenRebuildQueued } from "./process";
 
 const TYPES = new Set(["unknown", "act", "invoice", "waybill", "contract", "payment", "other", "report"]);
 
@@ -195,6 +195,7 @@ async function auditsApi(request: Request, parts: string[], user: Account): Prom
   if (parts[3] === "documents" && request.method === "POST") return addDocuments(request, id);
   if (parts[3] === "files" && parts[4] && request.method === "GET") return fileResponse(id, parts[4]);
   if (parts[3] === "checks" && parts[4] && parts[5] === "review" && request.method === "POST") return review(request, id, parts[4]);
+  if (parts[3] === "indicators" && request.method === "POST") return addIndicator(request, id);
   if (parts[3] === "decision" && request.method === "POST") return decision(request, id);
   if (parts[3] === "reviews" && parts[4] === "reset" && request.method === "POST") {
     await clearReviews(id);
@@ -327,6 +328,18 @@ async function addDocuments(request: Request, sessionId: string): Promise<Respon
   await whenRebuildQueued(sessionId);
   void job;
   return json(await readSession(sessionId), 200);
+}
+
+async function addIndicator(request: Request, sessionId: string): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as { text?: unknown; anchor?: unknown } | null;
+  const text = typeof body?.text === "string" ? body.text : "";
+  const anchor = typeof body?.anchor === "string" && body.anchor.trim() ? body.anchor.trim() : null;
+  try {
+    return json(await findSelectedIndicator(sessionId, text, anchor), 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось проверить показатель";
+    return json({ error: message }, 400);
+  }
 }
 
 async function review(request: Request, sessionId: string, checkId: string): Promise<Response> {

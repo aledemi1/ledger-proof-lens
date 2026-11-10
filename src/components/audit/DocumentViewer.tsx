@@ -15,6 +15,8 @@ interface Props {
   /** Reference to scroll to and outline. Ignored when it belongs to another document. */
   focus: EvidenceReference | null;
   onMarkClick?: (mark: DocMark) => void;
+  /** A word or cell the reviewer selected in this document after the automatic pass. */
+  onTextSelect?: (selection: { text: string; anchor: string | null }) => void;
   /** Rendered between the toolbar and the page, e.g. the report-versus-source comparison. */
   banner?: ReactNode;
   /** Replaces the file name in the toolbar, e.g. with a document switcher. */
@@ -119,7 +121,19 @@ export function DocumentViewer(p: Props) {
 
       {p.banner}
 
-      <div ref={isGrid ? undefined : scrollRef} className={isGrid ? "relative min-h-0 flex-1 overflow-hidden" : "document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3"}>
+      <div
+        ref={isGrid ? undefined : scrollRef}
+        onMouseUp={(event) => {
+          if (!p.onTextSelect) return;
+          const selection = window.getSelection();
+          const selected = selection && !selection.isCollapsed ? selection.toString() : "";
+          const host = event.target instanceof Element ? event.target.closest("[data-anchor]") : null;
+          const text = (selected || host?.textContent || "").replace(/\s+/g, " ").trim();
+          if (text.length < 1 || text.length > 180) return;
+          p.onTextSelect({ text, anchor: host?.getAttribute("data-anchor") ?? null });
+        }}
+        className={isGrid ? "relative min-h-0 flex-1 overflow-hidden" : "document-scroll relative min-h-0 flex-1 overflow-auto bg-muted/70 p-3"}
+      >
         {!doc ? (
           <Empty text={p.emptyText ?? t.work.pickDocument} />
         ) : doc.preview.kind === "none" ? (

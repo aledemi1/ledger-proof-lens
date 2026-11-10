@@ -161,6 +161,9 @@ export const mockAuditService: AuditService = {
     write(store);
     return draft.session;
   },
+  async findIndicator() {
+    throw new Error("Демонстрационный комплект не изменяется. Пропущенный показатель можно добавить в своей проверке.");
+  },
   async deleteDraft(sessionId) {
     const store = read();
     store.drafts = store.drafts.filter((d) => d.session.id !== sessionId);

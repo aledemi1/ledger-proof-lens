@@ -317,6 +317,14 @@ export async function saveOutcome(input: {
   });
 }
 
+export async function appendCheck(sessionId: string, check: CheckResult): Promise<void> {
+  const row = await get<{ n: number | string | null }>("SELECT COALESCE(MAX(position), -1) AS n FROM checks WHERE session_id = ?", [sessionId]);
+  const position = Number(row?.n ?? -1) + 1;
+  const stored: CheckResult = { ...check, reviewerStatus: "pending", reviewerComment: "" };
+  delete stored.reviewedAt;
+  await run("INSERT INTO checks (id, session_id, position, payload) VALUES (?, ?, ?, ?)", [check.id, sessionId, position, JSON.stringify(stored)]);
+}
+
 export async function saveReview(sessionId: string, checkId: string, status: ReviewerStatus, comment: string, source?: EvidenceReference | null): Promise<void> {
   const exists = await get<{ id: string }>("SELECT id FROM checks WHERE id = ? AND session_id = ?", [checkId, sessionId]);
   if (!exists) throw new Error("Показатель не найден");

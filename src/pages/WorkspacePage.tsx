@@ -80,6 +80,26 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
   const issues = visibleGroups.map((group) => group.primary);
   const firstIssue = checks.find(isIssue) ?? checks[0];
   const [selectedId, setSelectedId] = useState<string>(firstIssue?.id ?? "");
+  const [picked, setPicked] = useState<{ text: string; anchor: string | null } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchPicked = async () => {
+    if (!picked) return;
+    if (session.isDemo) {
+      toast.message(t.work.demoLocked);
+      return;
+    }
+    setSearching(true);
+    try {
+      const check = await auditService.findIndicator(session.id, picked);
+      setPicked(null);
+      setSelectedId(check.id);
+      toast.success(t.work.checked);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : t.work.checkFailed);
+    } finally {
+      setSearching(false);
+    }
+  };
   const [sourceId, setSourceId] = useState<string | null>(firstIssue?.evidenceReferences[0]?.documentId ?? sources[0]?.id ?? null);
   const [evIdx, setEvIdx] = useState(0);
 
@@ -292,8 +312,15 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
               </PopoverContent>
             </Popover>
           </div>
+          {picked && (
+            <div className="no-print flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-xs">
+              <span className="min-w-0 flex-1 truncate text-muted-foreground" title={picked.text}>{t.work.pickToCheck}: <b className="text-foreground">{picked.text}</b></span>
+              <Button size="sm" className="h-7" disabled={searching} onClick={() => void searchPicked()}>{searching ? t.work.checking : fill(t.work.checkThis, { text: picked.text.slice(0, 40) })}</Button>
+              <Button size="sm" variant="ghost" className="h-7" disabled={searching} onClick={() => setPicked(null)}>{t.common.cancel}</Button>
+            </div>
+          )}
           <div className="min-h-0 flex-1">
-            <DocumentViewer doc={report} marks={reportMarks} focus={selected?.reportReference ?? null} onMarkClick={onReportMark} emptyText={t.work.noReport} />
+            <DocumentViewer doc={report} marks={reportMarks} focus={selected?.reportReference ?? null} onMarkClick={onReportMark} onTextSelect={setPicked} emptyText={t.work.noReport} />
           </div>
         </section>
 

@@ -198,11 +198,11 @@ export async function listReportIndicators(report: PreparedDoc): Promise<{ name:
   return rows.flatMap((row) => {
     if (!row || typeof row !== "object") return [];
     const item = row as Record<string, unknown>;
-    const name = textOf(item.name);
-    const value = textOf(item.reportValue);
+    const name = textOf(item["name"]);
+    const value = textOf(item["reportValue"]);
     if (!name || !value) return [];
-    const fragment = fragments.get(textOf(item.reportFragmentId));
-    const quote = textOf(item.reportQuote);
+    const fragment = fragments.get(textOf(item["reportFragmentId"]));
+    const quote = textOf(item["reportQuote"]);
     if (fragment && quote && !containsQuote(fragment.text, quote)) return [];
     return [{ name, value }];
   });

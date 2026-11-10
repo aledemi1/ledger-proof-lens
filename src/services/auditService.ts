@@ -22,6 +22,7 @@ export interface AuditService {
   setReviewerDecision(sessionId: string, decision: Decision | null, comment?: string): Promise<AuditSession>;
   createDraft(input: NewDraftInput): Promise<AuditSession>;
   addDocuments(sessionId: string, files: File[]): Promise<AuditSession>;
+  findIndicator(sessionId: string, input: { text: string; anchor?: string | null }): Promise<CheckResult>;
   deleteDraft(sessionId: string): Promise<void>;
   getConclusion(sessionId: string): Promise<AuditConclusion | null>;
   /** Notifies subscribers after any mutation. Returns unsubscribe. */

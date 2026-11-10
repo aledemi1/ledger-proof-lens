@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import os from "node:os";
 import {
+  appendCheck,
   checkCount,
   documentBuffers,
   keepPreviousResult,
@@ -14,9 +15,10 @@ import {
 } from "./db";
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
-import { classifyLabels, refineWithModel, reviewPackWithModel } from "./llm";
+import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
+import type { CheckResult, CheckStatus } from "@/types/audit";
 import { duplicateNames, reconcile, unknownLabels } from "./reconcile";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
@@ -190,6 +192,63 @@ async function readOne(id: string, name: string, buffer: Buffer, sha256Value: st
   const read = await readFile(name, buffer);
   await saveDocumentRead({ id, pageCount: read.pageCount, preview: read.preview });
   return { id, name, sha256: sha256Value, read, isReport };
+}
+
+/** Looks up one indicator the reviewer selected after the automatic pass. Does not change existing checks. */
+export async function findSelectedIndicator(sessionId: string, text: string, anchor: string | null): Promise<CheckResult> {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (trimmed.length < 1 || trimmed.length > 180) throw new Error("Выделите короткий фрагмент показателя");
+  const files = await documentBuffers(sessionId);
+  const reportFile = files.find((file) => file.row.role === "report");
+  if (!reportFile) throw new Error("В проверке нет отчёта");
+  const report = await prepareQuiet(reportFile.row.id, reportFile.row.name, reportFile.buffer, reportFile.row.sha256, true);
+  const supporting: PreparedDoc[] = [];
+  for (const file of files) {
+    if (file.row.role !== "supporting") continue;
+    try {
+      supporting.push(await prepareQuiet(file.row.id, file.row.name, file.buffer, file.row.sha256, false));
+    } catch {
+      // One unreadable file does not block the search through the rest.
+    }
+  }
+  const findings = await scanPackForDiscrepancies(report, supporting, "", [{ name: trimmed, value: trimmed }]);
+  const finding = findings.find((item) => item.name === trimmed) ?? findings[0];
+  const status: CheckStatus = finding?.relation === "same" ? "match" : finding?.relation === "different" ? "mismatch" : finding?.relation === "unclear" ? "needs_review" : "not_found";
+  const compared = finding && (status === "match" || status === "mismatch") ? compareLinkedValues(trimmed, finding.sourceValue) : null;
+  const evidence = (finding?.sources ?? []).filter((source) => source.quoteFound).map((source) => {
+    const cut = source.fragmentId.indexOf(":");
+    return {
+      documentId: cut > 0 ? source.fragmentId.slice(0, cut) : source.fragmentId,
+      pageNumber: 0,
+      sourceText: source.quote.slice(0, 240),
+      ...(cut > 0 ? { locationInDocument: source.fragmentId.slice(cut + 1) } : {}),
+      ...(source.where ? { locationLabel: source.where } : {}),
+    };
+  });
+  const check: CheckResult = {
+    id: `user-${crypto.randomUUID()}`,
+    fieldName: trimmed,
+    reportValue: trimmed,
+    sourceValue: finding?.sourceValue || null,
+    discrepancy: compared?.discrepancy ?? null,
+    status,
+    severity: status === "mismatch" ? "high" : status === "match" ? "low" : "medium",
+    explanation: finding?.sourceCount
+      ? `Проверяющий выделил «${trimmed}» после разбора. Сервер нашёл ${finding.sourceCount} источников и сверил их с выделенным текстом.`
+      : `Проверяющий выделил «${trimmed}» после разбора. В первичных документах подтверждение не найдено.`,
+    evidenceReferences: evidence,
+    reportReference: { documentId: report.id, pageNumber: 0, sourceText: trimmed, ...(anchor ? { locationInDocument: anchor } : {}) },
+    reviewerStatus: "pending",
+    reviewerComment: "",
+  };
+  await appendCheck(sessionId, check);
+  return check;
+}
+
+async function prepareQuiet(id: string, name: string, buffer: Buffer, sha256Value: string, isReport: boolean): Promise<PreparedDoc> {
+  const problem = validateFile(name, buffer, isReport ? "report" : "supporting");
+  if (problem) throw new Error(problem);
+  return { id, name, sha256: sha256Value, read: await readFile(name, buffer), isReport };
 }
 
 export function sha256(buffer: Buffer): string {
