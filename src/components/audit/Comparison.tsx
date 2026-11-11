@@ -16,11 +16,13 @@ import { checkTitle, groupIssues, groupMatches } from "@/lib/findings";
 import { readingAgainst } from "@/lib/reading";
 import { evidencePlace } from "@/lib/format";
 import { countByStatus, marksFor, statusOrder, type DocMark } from "@/lib/marks";
+import { formatExplanation } from "@/lib/explanations";
 import { duplicateFileNames, formatNotice } from "@/lib/notices";
 import { cn } from "@/lib/utils";
 import { fill } from "@/i18n/fill";
 import { categoryText, severityText, statusText } from "@/i18n/labels";
 import { useCopy } from "@/i18n/messages";
+import { useLocale } from "@/i18n/use-locale";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, AuditSession, CheckResult, CheckStatus } from "@/types/audit";
 
@@ -50,6 +52,7 @@ export function Comparison({
   editable: boolean;
 }) {
   const t = useCopy();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [fragmentQuery, setFragmentQuery] = useState("");
@@ -97,7 +100,7 @@ export function Comparison({
       )}
       {open && (
         <div className="mt-1.5 space-y-1.5 pb-1">
-          <p className="rounded-md bg-muted px-2.5 py-1.5 text-[13px] leading-relaxed text-foreground/85">{check.explanation}</p>
+          <p className="rounded-md bg-muted px-2.5 py-1.5 text-[13px] leading-relaxed text-foreground/85">{formatExplanation(check.explanation, locale)}</p>
           {editable && (
             <form
               className="flex flex-wrap items-center gap-2"

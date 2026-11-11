@@ -1,4 +1,5 @@
 import type { CheckResult, CheckStatus, EvidenceReference, Severity } from "@/types/audit";
+import { appendNote } from "../lib/explanations";
 import type { Box, Fragment, ReadDocument } from "./model";
 import {
   blankSignature,
@@ -316,7 +317,7 @@ export function noteModel(check: CheckResult, fact: Fact, sources: Fact[]): Chec
   const list = [...labels].map((label) => `«${label}»`).join(", ");
   return {
     ...check,
-    explanation: `${check.explanation} Языковая модель определила смысл подписи ${list}; значения разобраны и сравнены кодом.`,
+    explanation: appendNote(check.explanation, { code: "model_labels", labels: list }),
   };
 }
 
@@ -654,10 +655,9 @@ export function preferNewer(parts: Fact[]): { kept: Fact[]; older: Fact[] } {
   return { kept: dated.filter((part) => part.operationDate === newest), older };
 }
 
-export function dateNote(older: Fact[]): string {
+export function earlierDocuments(older: Fact[]): string {
   if (!older.length) return "";
-  const listed = older.map((part) => `${part.docName}${part.operationDate ? ` от ${part.operationDate.split("-").reverse().join(".")}` : ""}`).join(", ");
-  return ` Более новый документ имеет приоритет. Более ранние не вошли в расчёт: ${listed}.`;
+  return older.map((part) => `${part.docName}${part.operationDate ? ` (${part.operationDate.split("-").reverse().join(".")})` : ""}`).join(", ");
 }
 
 export function additiveShipments(parts: Fact[]): boolean {

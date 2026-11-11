@@ -1,4 +1,5 @@
 import { fill } from "@/i18n/fill";
+import { formatExplanation, statusExplanation } from "@/lib/explanations";
 import type { Locale } from "@/i18n/locales";
 import { copy } from "@/i18n/messages";
 import type {
@@ -39,20 +40,7 @@ export function computeRecommendation(checks: CheckResult[]): Recommendation {
   return "accept";
 }
 
-function summarize(c: CheckResult): string {
-  switch (c.status) {
-    case "mismatch":
-      return `Значение в отчёте (${c.reportValue}) не совпадает с первичным документом (${c.sourceValue})${c.discrepancy ? `, расхождение ${c.discrepancy}` : ""}.`;
-    case "not_found":
-      return `Подтверждающий документ для значения ${c.reportValue} не найден.`;
-    case "needs_review":
-      return "Автоматическая проверка не дала однозначного результата, требуется ручная проверка.";
-    default:
-      return "Совпадает.";
-  }
-}
-
-export function buildFindings(checks: CheckResult[], documents: AuditDocument[]): Finding[] {
+export function buildFindings(checks: CheckResult[], documents: AuditDocument[], locale: Locale = "ru"): Finding[] {
   const name = (id: string) => documents.find((d) => d.id === id)?.name ?? id;
   return checks.filter(isIssue).map((c) => ({
     checkId: c.id,
@@ -61,7 +49,7 @@ export function buildFindings(checks: CheckResult[], documents: AuditDocument[])
     sourceValue: c.sourceValue,
     status: c.status,
     severity: c.severity,
-    summary: c.explanation.trim() ? c.explanation : summarize(c),
+    summary: formatExplanation(c.explanation, locale) || statusExplanation(c, locale),
     evidence: c.evidenceReferences.map((e) => ({
       documentId: e.documentId,
       documentName: name(e.documentId),
@@ -94,7 +82,7 @@ export function buildConclusionText(session: AuditSession, stats: ConclusionStat
 
 export function buildConclusion(session: AuditSession, documents: AuditDocument[], locale: Locale = "ru"): AuditConclusion {
   const stats = computeStats(session.checks);
-  const findings = buildFindings(session.checks, documents);
+  const findings = buildFindings(session.checks, documents, locale);
   const recommendation = computeRecommendation(session.checks);
   return {
     sessionId: session.id,

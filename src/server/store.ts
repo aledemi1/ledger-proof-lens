@@ -279,14 +279,37 @@ async function open(): Promise<void> {
   );
 }
 
-function poolOptions(url: string): ConstructorParameters<typeof Pool>[0] {
-  const ssl = /sslmode=(require|verify-ca|verify-full|prefer)/i.test(url);
-  const connectionString = url.replace(/([?&])sslmode=[^&]*&/i, "$1").replace(/([?&])sslmode=[^&]*$/i, "");
+type PoolConfig = NonNullable<ConstructorParameters<typeof Pool>[0]>;
+
+/** TLS options for a Postgres URL. Any sslmode other than disable verifies the server certificate. */
+export function poolOptions(url: string): PoolConfig {
+  const query = url.split("#")[0]?.split("?")[1] ?? "";
+  const params = new Map(query.split("&").filter(Boolean).map((part) => {
+    const [key, ...rest] = part.split("=");
+    return [key?.toLowerCase() ?? "", rest.join("=")] as const;
+  }));
+  const mode = params.get("sslmode")?.toLowerCase();
+  const connectionString = stripQuery(url, ["sslmode", "sslrootcert"]);
+  if (!mode || mode === "disable") return { connectionString, max: 10 };
+  const root = params.get("sslrootcert") ? decodeURIComponent(params.get("sslrootcert") ?? "") : process.env["PGSSLROOTCERT"]?.trim();
+  const ca = root && fs.existsSync(root) ? fs.readFileSync(root) : undefined;
   return {
     connectionString,
     max: 10,
-    ...(ssl ? { ssl: { rejectUnauthorized: false } } : {}),
+    ssl: { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
   };
+}
+
+function stripQuery(url: string, names: string[]): string {
+  const hashAt = url.indexOf("#");
+  const base = hashAt === -1 ? url : url.slice(0, hashAt);
+  const [head, query] = base.split("?");
+  if (!query || !head) return url;
+  const kept = query.split("&").filter((part) => {
+    const key = part.split("=")[0]?.toLowerCase();
+    return key && !names.includes(key);
+  });
+  return kept.length ? `${head}?${kept.join("&")}` : head;
 }
 
 function toPg(sql: string): string {

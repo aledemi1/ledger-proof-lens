@@ -5,7 +5,11 @@ import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
 import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
+import type { Locale } from "@/i18n/locales";
+import { formatExplanation } from "@/lib/explanations";
 import type { CheckResult } from "@/types/audit";
+
+const said = (explanation: CheckResult["explanation"] | undefined, locale: Locale = "ru") => formatExplanation(explanation, locale);
 import type { ReadDocument } from "@/server/model";
 
 async function prepare(name: string, buffer: Buffer, isReport: boolean): Promise<PreparedDoc> {
@@ -69,7 +73,9 @@ describe("language model labels", () => {
     expect(qty?.status).toBe("mismatch");
     expect(qty?.discrepancy).toBe("+2 шт.");
     expect(qty?.evidenceReferences[0]?.documentId).toBe("Накладная_52.xlsx");
-    expect(qty?.explanation).toContain("Языковая модель определила смысл подписи");
+    expect(said(qty?.explanation)).toContain("Языковая модель определила смысл подписи");
+    expect(said(qty?.explanation, "en")).toContain("language model");
+    expect(said(qty?.explanation, "zh")).not.toContain("Языковая модель");
     const total = field(checks, "К оплате по акту");
     expect(total?.status).toBe("mismatch");
     expect(total?.discrepancy).toBe("+50 000 ₽");
@@ -172,7 +178,8 @@ describe("linked quote is compared in code", () => {
     expect(linked?.discrepancy).toBe("+50 000 ₽");
     expect(linked?.evidenceReferences[0]?.documentId).toBe("Акт_9.pdf");
     expect(linked?.evidenceReferences[0]?.locationInDocument).toBe("f1");
-    expect(linked?.explanation).toContain("сервер сверил");
+    expect(said(linked?.explanation)).toContain("сервер сверил");
+    expect(said(linked?.explanation, "de")).toContain("Server");
     expect(skipped?.status).toBe("needs_review");
     expect(skipped?.sourceValue).toBeNull();
     expect(untouched?.status).toBe("match");
@@ -224,7 +231,7 @@ describe("linked quote is compared in code", () => {
     expect(linked?.evidenceReferences[0]?.documentId).toBe("Накладная.pdf");
     expect(untouched?.status).toBe("match");
     expect(untouched?.discrepancy).toBeNull();
-    expect(untouched?.explanation).toContain("Автоматический статус не изменён");
+    expect(said(untouched?.explanation)).toContain("Автоматический статус не изменён");
   });
 
   it("does not treat a contract price as a completed payment", async () => {
@@ -259,7 +266,7 @@ describe("linked quote is compared in code", () => {
     );
     const [linked] = (await reviewPackWithModel([open], report, [support])).checks;
     expect(linked?.status).toBe("needs_review");
-    expect(linked?.explanation).toContain("не закрыт");
+    expect(said(linked?.explanation)).toContain("не закрыт");
   });
 
   it("accepts equal quantities from the quote", () => {
@@ -456,7 +463,8 @@ describe("full-pack discrepancy scan", () => {
     expect(linked?.status).toBe("mismatch");
     expect(linked?.discrepancy).toBe("+25 300 ₽");
     expect(linked?.evidenceReferences).toHaveLength(3);
-    expect(linked?.explanation).toContain("3 источников");
+    expect(said(linked?.explanation)).toContain("3 источников");
+    expect(said(linked?.explanation, "en")).toContain("3 sources");
   });
 });
 

@@ -3,6 +3,7 @@ import { aiConfig } from "./env";
 import { packCharLimit, packFragmentSlice, scanCharLimit, scanFragmentSlice } from "./llm/limits";
 import { reconcile, type PreparedDoc, type RoleHints, type UnknownLabel } from "./reconcile";
 import { chatJson, type AiConfig } from "./llm/chat";
+import { appendNote, keepsAutomaticStatus, wantsModelLink } from "../lib/explanations";
 import { formatScaled, formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
 interface Proposal {
@@ -64,7 +65,7 @@ export async function classifyLabels(config: AiConfig, labels: UnknownLabel[]): 
 export async function refineWithModel(checks: CheckResult[], report: PreparedDoc, supporting: PreparedDoc[]): Promise<CheckResult[]> {
   const config = aiConfig();
   if (!config) return checks;
-  const pending = checks.filter((check) => check.status === "needs_review" && check.explanation.includes("языковой модели"));
+  const pending = checks.filter((check) => check.status === "needs_review" && wantsModelLink(check.explanation));
   if (!pending.length) return checks;
   const reportFragments = report.read.fragments.filter((fragment) => pending.some((check) => check.reportReference?.locationInDocument === fragment.anchor));
   const supportFragments = supporting.flatMap((doc) =>
@@ -95,7 +96,7 @@ export async function refineWithModel(checks: CheckResult[], report: PreparedDoc
   } catch {
     return checks.map((check) =>
       pending.some((item) => item.id === check.id)
-        ? { ...check, explanation: `${check.explanation} Запрос к модели не выполнен, оставлено ограничение.` }
+        ? { ...check, explanation: appendNote(check.explanation, { code: "model_unavailable" }) }
         : check,
     );
   }
@@ -577,10 +578,10 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
   const compared = compareLinkedValues(check.reportValue, proposal.quote);
   const settled = check.status === "match" || check.status === "mismatch";
   if (settled) {
-    if (!compared || compared.status === check.status || check.explanation.includes("Автоматический статус не изменён")) return check;
+    if (!compared || compared.status === check.status || keepsAutomaticStatus(check.explanation)) return check;
     return {
       ...check,
-      explanation: `${check.explanation} Модель указала другой фрагмент в «${support.document}»: «${proposal.quote.slice(0, 180)}». Автоматический статус не изменён.`,
+      explanation: appendNote(check.explanation, { code: "model_other", document: support.document, quote: proposal.quote.slice(0, 180) }),
     };
   }
   if (compared && !settled && compared.status === "match" && quoteCannotConfirm(check, support, proposal.quote)) {
@@ -588,12 +589,11 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
       ...check,
       status: "needs_review",
       sourceValue: proposal.quote,
-      explanation: `Модель указала фрагмент в «${support.document}»: «${proposal.quote}». Это не документ о совершённой операции, поэтому автоматический статус не закрыт.`,
+      explanation: [{ code: "model_not_operation", document: support.document, quote: proposal.quote }],
       evidenceReferences: [evidence],
     };
   }
   if (compared) {
-    const difference = compared.discrepancy ? ` Разница ${compared.discrepancy} (отчёт минус источник).` : "";
     return {
       ...check,
       status: compared.status,
@@ -601,7 +601,7 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
       sourceValue: compared.sourceValue,
       discrepancy: compared.discrepancy,
       ...(compared.unit ? { unit: compared.unit } : {}),
-      explanation: `Модель указала фрагмент в «${support.document}», сервер сверил значение отчёта ${check.reportValue} с цитатой «${proposal.quote}».${difference}`,
+      explanation: [{ code: "model_compared", document: support.document, report: check.reportValue, quote: proposal.quote, ...(compared.discrepancy ? { difference: compared.discrepancy } : {}) }],
       evidenceReferences: [evidence],
     };
   }
@@ -611,7 +611,7 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
       ...check,
       status: "needs_review",
       sourceValue: proposal.quote,
-      explanation: `Модель указала фрагмент в «${support.document}», но сервер не смог разобрать цитату «${proposal.quote}» как то же значение, что в отчёте. Нужна ручная проверка.`,
+      explanation: [{ code: "model_unparsed", document: support.document, quote: proposal.quote }],
       evidenceReferences: [evidence],
     };
   }
@@ -621,7 +621,7 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
     severity: "low",
     sourceValue: proposal.quote,
     discrepancy: null,
-    explanation: `Модель указала фрагмент в «${support.document}». Сервер проверил, что цитата есть в этом фрагменте и совпадает со значением отчёта.`,
+    explanation: [{ code: "model_match", document: support.document }],
     evidenceReferences: [evidence],
   };
 }
@@ -682,18 +682,18 @@ function applySummedQuotes(check: CheckResult, verified: { proposal: Proposal; s
       ...check,
       status: "needs_review",
       sourceValue: listed,
-      explanation: `Модель указала ${verified.length} источников: ${listed}. Сервер не закрыл строку по этой сумме.`,
+      explanation: [{ code: "model_sum_open", count: verified.length, listed }],
       evidenceReferences: evidence,
     };
   }
   if (settled) {
-    if (summed.status === check.status || check.explanation.includes("Автоматический статус не изменён")) return check;
+    if (summed.status === check.status || keepsAutomaticStatus(check.explanation)) return check;
     return {
       ...check,
-      explanation: `${check.explanation} Модель указала ${verified.length} источников: ${listed}. Автоматический статус не изменён.`,
+      explanation: appendNote(check.explanation, { code: "model_sum_kept", count: verified.length, listed }),
     };
   }
-  const difference = summed.discrepancy ? ` Разница ${summed.discrepancy} (отчёт минус сумма источников).` : "";
+  const difference = summed.discrepancy ?? "";
   return {
     ...check,
     status: summed.status,
@@ -701,7 +701,7 @@ function applySummedQuotes(check: CheckResult, verified: { proposal: Proposal; s
     sourceValue: summed.sourceValue,
     discrepancy: summed.discrepancy,
     ...(summed.unit ? { unit: summed.unit } : {}),
-    explanation: `Модель указала ${verified.length} источников: ${listed}. Сервер сложил их и сверил с ${check.reportValue}.${difference}`,
+    explanation: [{ code: "model_summed", count: verified.length, listed, report: check.reportValue, ...(difference ? { difference } : {}) }],
     evidenceReferences: evidence,
   };
 }

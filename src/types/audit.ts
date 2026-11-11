@@ -1,6 +1,62 @@
 /** Core domain models for Sverko. Shared by the mock service and the future API client. */
 
 export type CheckStatus = "match" | "mismatch" | "not_found" | "needs_review";
+
+/** One sentence of a check explanation. Document names and amounts stay in the fields; the sentence is translated at display time. */
+export type CheckNote =
+  | { code: "legacy"; text: string }
+  | { code: "order_closed" }
+  | { code: "order_open" }
+  | { code: "blank_signature"; label: string; report: string }
+  | { code: "payment_purpose"; number: string; contract: string }
+  | { code: "completion_letter"; label: string }
+  | { code: "completion_missing"; label: string }
+  | { code: "shipment_count"; count: number; names: string }
+  | { code: "shipment_none" }
+  | { code: "remainder"; value: string }
+  | { code: "report_vs_doc"; report: string; document: string; source: string }
+  | { code: "values_disagree"; label: string; parts: string; report: string }
+  | { code: "quantity_collected"; net: boolean; parts: string; total: string }
+  | { code: "money_disagree"; label: string; parts: string; report: string }
+  | { code: "money_collected"; net: boolean; parts: string; total: string }
+  | { code: "newer_document"; earlier: string }
+  | { code: "formula_blank"; label: string }
+  | { code: "exact_text" }
+  | { code: "partial_read_value"; label: string; detail: string }
+  | { code: "text_seen"; value: string; documents: string }
+  | { code: "damaged_field"; document: string; label: string }
+  | { code: "needs_model"; label: string }
+  | { code: "not_found_role"; label: string; value: string; ask: "transport" | "money" | "quantity" | "date" | "other" }
+  | { code: "item_listed"; value: string }
+  | { code: "conflict"; label: string; parts: string; report: string }
+  | { code: "source_confirms"; label: string }
+  | { code: "not_found"; label: string }
+  | { code: "within_tolerance"; label: string }
+  | { code: "mismatch_detail"; report: string; document: string; source: string; label: string; delta?: string }
+  | { code: "shipments_total"; parts: string; total: string; askMore: boolean }
+  | { code: "model_labels"; labels: string }
+  | { code: "model_unavailable" }
+  | { code: "model_other"; document: string; quote: string }
+  | { code: "model_not_operation"; document: string; quote: string }
+  | { code: "model_compared"; document: string; report: string; quote: string; difference?: string }
+  | { code: "model_unparsed"; document: string; quote: string }
+  | { code: "model_match"; document: string }
+  | { code: "model_sum_open"; count: number; listed: string }
+  | { code: "model_sum_kept"; count: number; listed: string }
+  | { code: "model_summed"; count: number; listed: string; report: string; difference?: string }
+  | { code: "cited"; name: string; count: number }
+  | { code: "cite_missing"; name: string }
+  | { code: "selected_found"; text: string; count: number }
+  | { code: "selected_missing"; text: string }
+  | { code: "edited_unparsed"; value: string }
+  | { code: "edited_match"; value: string }
+  | { code: "edited_diff"; value: string; source: string; delta?: string }
+  | { code: "fallback_mismatch"; report: string; source: string; delta?: string }
+  | { code: "fallback_missing"; value: string }
+  | { code: "fallback_review" }
+  | { code: "fallback_match" };
+
+export type CheckExplanation = CheckNote[] | string;
 export type Severity = "high" | "medium" | "low";
 /** Reviewer verdict — stored separately from the automatic CheckStatus. */
 export type ReviewerStatus = "pending" | "confirmed" | "verified";
@@ -104,7 +160,8 @@ export interface CheckResult {
   discrepancy: string | null;
   status: CheckStatus;
   severity: Severity;
-  explanation: string;
+  /** Codes rendered in the interface language. A stored sentence stays as written. */
+  explanation: CheckExplanation;
   evidenceReferences: EvidenceReference[];
   /** Where the value sits in the main report. */
   reportReference?: EvidenceReference;

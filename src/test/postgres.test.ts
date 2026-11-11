@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { newDb } from "pg-mem";
 import type { Pool } from "pg";
 import { insertDocument, insertSession, readSession, saveOutcome } from "@/server/db";
-import { adminStats, all, closeDb, run, useTestPool } from "@/server/store";
+import { adminStats, all, closeDb, poolOptions, run, useTestPool } from "@/server/store";
 import type { CheckResult } from "@/types/audit";
 
 const real = process.env["SVERKO_TEST_POSTGRES"] === "1";
@@ -78,5 +78,22 @@ describe("postgres store", () => {
       expect(stats.checks).toBeGreaterThan(0);
       expect(stats.checksByStatus.some((row) => row.status === "match")).toBe(true);
     }
+  });
+});
+
+describe("postgres tls", () => {
+  it("verifies the server certificate when the url asks for tls", () => {
+    expect(poolOptions("postgres://localhost/sverko").ssl).toBeUndefined();
+    expect(poolOptions("postgres://db.example/sverko?sslmode=disable").ssl).toBeUndefined();
+    expect(poolOptions("postgres://db.example/sverko?sslmode=require")).toMatchObject({
+      connectionString: "postgres://db.example/sverko",
+      ssl: { rejectUnauthorized: true },
+    });
+    expect(poolOptions("postgres://db.example/sverko?sslmode=verify-full&application_name=sverko").connectionString).toBe("postgres://db.example/sverko?application_name=sverko");
+    const dir = mkdtempSync(path.join(tmpdir(), "sverko-ca-"));
+    const caPath = path.join(dir, "ca.pem");
+    writeFileSync(caPath, "CERT");
+    const secured = poolOptions(`postgres://db.example/sverko?sslmode=verify-full&sslrootcert=${encodeURIComponent(caPath)}`);
+    expect(secured.ssl).toMatchObject({ rejectUnauthorized: true, ca: Buffer.from("CERT") });
   });
 });

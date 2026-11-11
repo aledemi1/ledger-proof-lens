@@ -227,8 +227,8 @@ function findingsToChecks(findings: PackFinding[], docs: PreparedDoc[]): CheckRe
       status,
       severity: status === "mismatch" ? "high" : status === "match" ? "low" : "medium",
       explanation: finding.sourceCount
-        ? `Сервер сверил «${finding.name}» с ${finding.sourceCount} цитатами из первичных документов.`
-        : `Для «${finding.name}» в первичных документах не найдена цитата, которая есть в указанном фрагменте.`,
+        ? [{ code: "cited", name: finding.name, count: finding.sourceCount }]
+        : [{ code: "cite_missing", name: finding.name }],
       evidenceReferences: evidence,
       reportReference,
       reviewerStatus: "pending",
@@ -278,8 +278,8 @@ export async function findSelectedIndicator(sessionId: string, text: string, anc
     status,
     severity: status === "mismatch" ? "high" : status === "match" ? "low" : "medium",
     explanation: finding?.sourceCount
-      ? `Проверяющий выделил «${trimmed}» после разбора. Сервер нашёл ${finding.sourceCount} источников и сверил их с выделенным текстом.`
-      : `Проверяющий выделил «${trimmed}» после разбора. В первичных документах подтверждение не найдено.`,
+      ? [{ code: "selected_found", text: trimmed, count: finding.sourceCount }]
+      : [{ code: "selected_missing", text: trimmed }],
     evidenceReferences: evidence,
     reportReference: anchor ? evidenceFromFragment(docs, `${report.id}:${anchor}`, trimmed) : { documentId: report.id, pageNumber: 0, sourceText: trimmed },
     reviewerStatus: "pending",

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mailConfigured } from "../mail";
 import fs from "node:fs";
 import path from "node:path";
+import { appendNote } from "../../lib/explanations";
 import type { CheckResult, Decision, DocumentType, EvidenceReference, ReviewerStatus } from "@/types/audit";
 import {
   AccountError,
@@ -265,7 +266,7 @@ export function revisedCheck(check: CheckResult, value: string): CheckResult {
   if (left == null || right == null) {
     next.status = "needs_review";
     next.discrepancy = null;
-    next.explanation = `${check.explanation} В отчёт записано «${value}». Сравнить с источником как число не удалось.`;
+    next.explanation = appendNote(check.explanation, { code: "edited_unparsed", value });
     return next;
   }
   const same = left === right;
@@ -273,8 +274,8 @@ export function revisedCheck(check: CheckResult, value: string): CheckResult {
   next.status = same ? "match" : "mismatch";
   next.discrepancy = same ? null : formatSigned(left - right, suffix);
   next.explanation = same
-    ? `В отчёт записано значение источника: ${value}. Расхождение снято.`
-    : `В отчёт записано ${value}. Источник по-прежнему ${check.sourceValue}. ${next.discrepancy ? `Разница ${next.discrepancy}.` : ""}`;
+    ? [{ code: "edited_match", value }]
+    : [{ code: "edited_diff", value, source: check.sourceValue ?? "", ...(next.discrepancy ? { delta: next.discrepancy } : {}) }];
   return next;
 }
 

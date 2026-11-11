@@ -1,4 +1,4 @@
-import type { CheckResult, CheckStatus, EvidenceReference, Severity } from "@/types/audit";
+import type { CheckNote, CheckResult, CheckStatus, EvidenceReference, Severity } from "@/types/audit";
 import type { Box, Fragment, ReadDocument } from "./model";
 import {
   blankSignature,
@@ -88,7 +88,7 @@ import {
   collapseSameDocument,
   distinctAmounts,
   preferNewer,
-  dateNote,
+  earlierDocuments,
   additiveShipments,
   cleanupComparable,
   isReturnDoc,
@@ -109,7 +109,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
   discrepancy: string | null;
   status: CheckStatus;
   severity: Severity;
-  explanation: string;
+  explanation: CheckNote[];
   evidenceReferences: EvidenceReference[];
   unit?: string;
 } | null {
@@ -129,9 +129,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: same ? "match" : "mismatch",
         severity: same ? "low" : "high",
-        explanation: same
-          ? "Принятое количество закрывает заказ по договору."
-          : "Принятое количество меньше заказанного по договору, поэтому заказ ещё не закрыт.",
+        explanation: [{ code: same ? "order_closed" : "order_open" }],
         evidenceReferences: [...ordered.slice(0, 1), ...received.slice(0, 2), ...returned.slice(0, 1)].map((source) => reference(source.documentId, source.fragment, source.raw)),
       };
     }
@@ -145,7 +143,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `В отчёте для «${fact.label}» указано «${fact.raw}», но в документе строка подписи не заполнена (оставлено место для подписи). Это не подтверждает и не опровергает подлинность.`,
+        explanation: [{ code: "blank_signature", label: fact.label, report: fact.raw }],
         evidenceReferences: docs.slice(0, 2).map((source) => reference(source.documentId, source.fragment, source.fragment.text.slice(0, 180))),
       };
     }
@@ -159,7 +157,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `Сумма платежа № ${number} есть в комплекте, но его назначение не содержит договор ${fact.parsed.token}. Отнести платеж к этому договору по одному только отчету нельзя.`,
+        explanation: [{ code: "payment_purpose", number, contract: fact.parsed.token }],
         evidenceReferences: [reference(payment.id, payment.fragment, payment.text.slice(0, 180))],
       };
     }
@@ -177,7 +175,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
           discrepancy: null,
           status: "needs_review",
           severity: "medium",
-          explanation: `«${fact.label}» отмечено как завершенное, но подтверждающий протокол или акт с этим идентификатором не найден. Письмо о готовности не заменяет итоговый документ.`,
+          explanation: [{ code: "completion_letter", label: fact.label }],
           evidenceReferences: [],
         };
       }
@@ -186,7 +184,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: "not_found",
         severity: "high",
-        explanation: `Для «${fact.label}» в комплекте нет акта или протокола. Счет или переписка сами по себе не подтверждают выполнение.`,
+        explanation: [{ code: "completion_missing", label: fact.label }],
         evidenceReferences: [],
       };
     }
@@ -263,8 +261,8 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "medium",
       explanation: shipments.length
-        ? `В комплекте ${shipments.length} постав${shipments.length === 1 ? "ка" : "ки"}: ${shipments.map((doc) => doc.name).join(", ")}. Повтор одного файла не считается второй поставкой.`
-        : "Накладная поставки в комплекте не найдена.",
+        ? [{ code: "shipment_count", count: shipments.length, names: shipments.map((doc) => doc.name).join(", ") }]
+        : [{ code: "shipment_none" }],
       evidenceReferences: shipments.slice(0, 3).map((doc) => reference(doc.id, doc.fragment, doc.text.slice(0, 180))),
       unit: "шт.",
     };
@@ -283,7 +281,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: same ? null : formatSigned(fact.parsed.minor - left, fact.parsed.unit),
         status: same ? "match" : "mismatch",
         severity: same ? "low" : "high",
-        explanation: `Остаток — это количество по договору минус принятое за период: ${formatScaled(left, fact.parsed.unit)}.`,
+        explanation: [{ code: "remainder", value: formatScaled(left, fact.parsed.unit) }],
         evidenceReferences: [...ordered.slice(0, 1), ...received.slice(0, 2)].map((source) => reference(source.documentId, source.fragment, source.raw)),
         unit: fact.parsed.unit,
       };
@@ -312,7 +310,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       discrepancy: same ? null : formatSigned(reportQuantity.minor - only.minor, reportQuantity.unit),
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "medium",
-      explanation: `В отчёте ${fact.raw}, в «${only.source.docName}» — ${only.source.raw}.`,
+      explanation: [{ code: "report_vs_doc", report: fact.raw, document: only.source.docName, source: only.source.raw }],
       evidenceReferences: [reference(only.source.documentId, only.source.fragment, only.source.raw)],
       unit: reportQuantity.unit,
     };
@@ -352,7 +350,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `По «${fact.label}» документы называют разные значения: ${disagreed.map((part) => `${part.raw} (${part.docName})`).join("; ")}. В отчёте указано ${fact.raw}. По комплекту нельзя выбрать одно из них.`,
+        explanation: [{ code: "values_disagree", label: fact.label, parts: disagreed.map((part) => `${part.raw} (${part.docName})`).join("; "), report: fact.raw }],
         evidenceReferences: disagreed.map((part) => reference(part.documentId, part.fragment, part.raw)),
         unit: fact.parsed.unit,
       };
@@ -372,8 +370,8 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "high",
       explanation: kept.length > 1
-        ? `Количество собрано по документам одной операции${fact.net ? " за вычетом возврата" : ""}: ${kept.map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, fact.parsed.unit)}.`
-        : `В отчёте ${fact.raw}, в «${kept[0]?.docName}» — ${kept[0]?.raw}.`,
+        ? [{ code: "quantity_collected", net: Boolean(fact.net), parts: kept.map((part) => `${part.raw} (${part.docName})`).join(", "), total: formatScaled(total, fact.parsed.unit) }]
+        : [{ code: "report_vs_doc", report: fact.raw, document: kept[0]?.docName ?? "", source: kept[0]?.raw ?? "" }],
       evidenceReferences: (fact.net ? collapsed : disagreed).map((part) => reference(part.documentId, part.fragment, part.raw)),
       unit: fact.parsed.unit,
     };
@@ -411,7 +409,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `По «${fact.label}» документы называют разные суммы: ${disagreedMoney.map((part) => `${part.raw} (${part.docName})`).join("; ")}. В отчёте указано ${fact.raw}. По комплекту нельзя выбрать одну из них.`,
+        explanation: [{ code: "money_disagree", label: fact.label, parts: disagreedMoney.map((part) => `${part.raw} (${part.docName})`).join("; "), report: fact.raw }],
         evidenceReferences: disagreedMoney.map((part) => reference(part.documentId, part.fragment, part.raw)),
         unit: "₽",
       };
@@ -432,7 +430,10 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       discrepancy: same ? null : formatSigned(fact.parsed.minor - total, "₽"),
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "high",
-      explanation: `Сумма собрана из строк одной операции${fact.net ? " за вычетом возврата" : ""}: ${moneyParts.slice(0, 8).map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, "₽")}.${dateNote(newer.older)}`,
+      explanation: [
+        { code: "money_collected", net: Boolean(fact.net), parts: moneyParts.slice(0, 8).map((part) => `${part.raw} (${part.docName})`).join(", "), total: formatScaled(total, "₽") },
+        ...(earlierDocuments(newer.older) ? [{ code: "newer_document" as const, earlier: earlierDocuments(newer.older) }] : []),
+      ],
       evidenceReferences: moneyParts.map((part) => reference(part.documentId, part.fragment, part.raw)),
       unit: "₽",
     };
@@ -449,7 +450,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       discrepancy: null,
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "medium",
-      explanation: `В отчёте ${fact.raw}, в «${primary.docName}» — ${primary.raw}.`,
+      explanation: [{ code: "report_vs_doc", report: fact.raw, document: primary.docName, source: primary.raw }],
       evidenceReferences: dates.map((source) => reference(source.documentId, source.fragment, source.raw)),
     };
   }
@@ -472,7 +473,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
       discrepancy: null,
       status: "needs_review",
       severity: "medium",
-      explanation: `В отчёте для «${fact.label}» формула без сохранённого результата. Пустое значение не принято за ноль. Откройте файл в редакторе и сохраните вычисленные значения.`,
+      explanation: [{ code: "formula_blank", label: fact.label }],
       evidenceReferences: [],
     });
   }
@@ -497,7 +498,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
     if (fact.role === "text") {
       const exact = sources.filter((source) => source.parsed.kind === "text" && fact.parsed.kind === "text" && source.parsed.norm === fact.parsed.norm);
       if (exact.length >= 1 && exact[0]) {
-        return matched(base, fact, exact.slice(0, 3), "Совпадает по точному тексту.");
+        return matched(base, fact, exact.slice(0, 3), { code: "exact_text" });
       }
     }
     if (blocked) {
@@ -510,7 +511,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `Подтверждение «${fact.label}» не найдено в прочитанных документах. Проверка неполная: ${why.join(" ")} В непрочитанном файле могло быть подтверждение.`,
+        explanation: [{ code: "partial_read_value", label: fact.label, detail: why.join(" ") }],
         evidenceReferences: [],
       });
     }
@@ -519,7 +520,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
       const hits = docs.filter((doc) => normText(doc.text).includes(norm));
       if (hits.length) {
         const evidence = hits.slice(0, 3).map((doc) => ({ ...fact, raw: fact.raw, docName: doc.name, docText: doc.text, documentId: doc.id, fragment: doc.fragment }));
-        return matched(base, fact, evidence, `«${fact.raw}» встречается в ${hits.map((doc) => doc.name).slice(0, 3).join(", ")}.`);
+        return matched(base, fact, evidence, { code: "text_seen", value: fact.raw, documents: hits.map((doc) => doc.name).slice(0, 3).join(", ") });
       }
     }
     const damaged = docs.filter((doc) => /поврежд|не\s*чита|стерт|смазан/i.test(doc.text));
@@ -533,7 +534,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `В «${relatedDamage[0]?.name ?? "документе"}» есть поле «${fact.label}», но значение не прочитано: документ сообщает о повреждении. План или договор не заменяют нечитаемый факт.`,
+        explanation: [{ code: "damaged_field", document: relatedDamage[0]?.name ?? "", label: fact.label }],
         evidenceReferences: relatedDamage.slice(0, 2).map((doc) => reference(doc.id, doc.fragment, doc.text.slice(0, 180))),
       });
     }
@@ -543,7 +544,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
         discrepancy: null,
         status: "needs_review",
         severity: "medium",
-        explanation: `Формулировка «${fact.label}» не сопоставлена однозначно. Для смыслового сравнения нужен ключ языковой модели (AI_API_KEY или LOVABLE_API_KEY) либо ручная проверка.`,
+        explanation: [{ code: "needs_model", label: fact.label }],
         evidenceReferences: [],
       });
     }
@@ -552,14 +553,14 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
       discrepancy: null,
       status: "not_found",
       severity: fact.role === "line_total" || fact.role === "quantity" || fact.role === "transport" ? "high" : "medium",
-      explanation: `В прочитанном комплекте нет подтверждения «${fact.label}» (${fact.raw}). ${askFor(fact.role)} Посторонние документы с другими операциями не использованы.`,
+      explanation: [{ code: "not_found_role", label: fact.label, value: fact.raw, ask: askRole(fact.role) }],
       evidenceReferences: [],
     });
   }
 
   if (fact.role === "item_name") {
     const listed = found.filter((source) => sameItem(fact.raw, source.raw));
-    if (listed.length) return matched(base, fact, listed, `«${fact.raw}» есть в перечне наименований первичных документов. Остальные строки этого перечня — другие позиции.`);
+    if (listed.length) return matched(base, fact, listed, { code: "item_listed", value: fact.raw });
   }
   if (canSum(fact.role, found)) {
     return summed(base, fact, found);
@@ -574,9 +575,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
       discrepancy: null,
       status: "needs_review",
       severity: "medium",
-      explanation: `По «${fact.label}» первичные документы противоречат друг другу: ${ordered
-        .map((source) => `${source.raw} (${source.docName})`)
-        .join("; ")}. В отчёте указано ${fact.raw}. Нужно уточнить, какой документ относится к этой операции.`,
+      explanation: [{ code: "conflict", label: fact.label, parts: ordered.map((source) => `${source.raw} (${source.docName})`).join("; "), report: fact.raw }],
       evidenceReferences: ordered.map((source) => reference(source.documentId, source.fragment, source.raw)),
     });
   }
@@ -584,7 +583,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
   const group = groups[0] ?? [];
   const same = valuesEqual(fact.parsed, group[0]?.parsed);
   const ordered = group.slice().sort((a, b) => rank(fact.role, a) - rank(fact.role, b));
-  if (same) return matched(base, fact, ordered, `Источник по той же операции подтверждает «${fact.label}».`);
+  if (same) return matched(base, fact, ordered, { code: "source_confirms", label: fact.label });
   const primary = ordered[0];
   if (!primary) {
     return finish(base, {
@@ -592,7 +591,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
       discrepancy: null,
       status: "not_found",
       severity: "medium",
-      explanation: `Подтверждение «${fact.label}» не найдено.`,
+      explanation: [{ code: "not_found", label: fact.label }],
       evidenceReferences: [],
     });
   }
@@ -601,7 +600,7 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
     const tolerance = statedTolerance(`${fact.docText}\n${primary.docText}`);
     const gap = fact.parsed.minor - primary.parsed.minor;
     if (tolerance != null && gap <= tolerance && gap >= -tolerance) {
-      return matched(base, fact, ordered, `Источник подтверждает «${fact.label}» в пределах указанного допуска.`);
+      return matched(base, fact, ordered, { code: "within_tolerance", label: fact.label });
     }
   }
   const mismatch = {
@@ -609,21 +608,21 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
     discrepancy: delta,
     status: "mismatch" as const,
     severity: (fact.role === "line_total" || fact.role === "quantity" || fact.role === "transport" || fact.role === "unit_price" ? "high" : "medium") as Severity,
-    explanation: `В отчёте ${fact.raw}, в «${primary.docName}» — ${primary.raw.replace(/\.$/, "")}${delta ? `. Разница ${delta} (отчёт минус первичный документ)` : ""}. Уточните «${fact.label}» и при необходимости запросите исправленный документ.`,
+    explanation: [{ code: "mismatch_detail", report: fact.raw, document: primary.docName, source: primary.raw.replace(/\.$/, ""), label: fact.label, ...(delta ? { delta } : {}) } satisfies CheckNote],
     evidenceReferences: ordered.map((source) => reference(source.documentId, source.fragment, source.raw)),
   };
   const unit = unitOf(fact.parsed);
   return finish(base, unit ? { ...mismatch, unit } : mismatch);
 }
 
-export function matched(base: Omit<CheckResult, "sourceValue" | "discrepancy" | "status" | "severity" | "explanation" | "evidenceReferences">, fact: Fact, sources: Fact[], why: string): CheckResult {
+export function matched(base: Omit<CheckResult, "sourceValue" | "discrepancy" | "status" | "severity" | "explanation" | "evidenceReferences">, fact: Fact, sources: Fact[], why: CheckNote): CheckResult {
   const primary = sources[0];
   return finish(base, {
     sourceValue: primary?.raw ?? fact.raw,
     discrepancy: null,
     status: "match",
     severity: "low",
-    explanation: why,
+    explanation: [why],
     evidenceReferences: sources.map((source) => reference(source.documentId, source.fragment, source.raw)),
   });
 }
@@ -643,7 +642,7 @@ export function summed(base: Omit<CheckResult, "sourceValue" | "discrepancy" | "
     discrepancy: same ? null : delta,
     status: same ? "match" : "mismatch",
     severity: same ? "low" : "high",
-    explanation: `Позиция складывается из поставок: ${parts}. Итого ${formatScaled(total, unit === "₽" ? "₽" : unit)}. Повтор одного и того же документа в сумму не входит.${same ? "" : " Уточните, все ли частичные поставки приложены."}`,
+    explanation: [{ code: "shipments_total", parts, total: formatScaled(total, unit === "₽" ? "₽" : unit), askMore: !same }],
     evidenceReferences: sources.map((source) => reference(source.documentId, source.fragment, source.raw, "слагаемое")),
   });
 }
@@ -775,12 +774,12 @@ export function uniqueRaws(facts: Fact[]): string[] {
   return out;
 }
 
-export function askFor(role: Role): string {
-  if (role === "transport") return "Запросите счёт, акт или платёжный документ на перевозку.";
-  if (role === "line_total" || role === "unit_price") return "Запросите акт, накладную или счёт по этой поставке.";
-  if (role === "quantity") return "Запросите накладную или акт с количеством по этой позиции.";
-  if (role === "date") return "Запросите документ с датой этой операции.";
-  return "Запросите первичный документ, в котором есть это значение.";
+export function askRole(role: Role): "transport" | "money" | "quantity" | "date" | "other" {
+  if (role === "transport") return "transport";
+  if (role === "line_total" || role === "unit_price") return "money";
+  if (role === "quantity") return "quantity";
+  if (role === "date") return "date";
+  return "other";
 }
 
 export function reference(documentId: string, fragment: Fragment, quote: string, note?: string): EvidenceReference {
@@ -835,7 +834,7 @@ export function finish(
     discrepancy: string | null;
     status: CheckStatus;
     severity: Severity;
-    explanation: string;
+    explanation: CheckNote[];
     evidenceReferences: EvidenceReference[];
     unit?: string;
   },
