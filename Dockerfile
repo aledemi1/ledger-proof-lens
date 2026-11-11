@@ -9,6 +9,10 @@ FROM oven/bun:1.4.2 AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 fonts-liberation \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 RUN set -eux; \
   ok=0; \
@@ -20,6 +24,9 @@ RUN set -eux; \
   test "$ok" -eq 1
 
 COPY . .
+# Timeweb может передать RUN_TESTS=0. По умолчанию образ сначала проходит typecheck и тесты.
+ARG RUN_TESTS=1
+RUN if [ "$RUN_TESTS" = "1" ]; then NODE_ENV=development bun run typecheck && NODE_ENV=development bun run test; fi
 RUN bun run build
 
 FROM python:3.12-slim-bookworm AS privacy

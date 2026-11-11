@@ -1,7 +1,8 @@
 import type { CheckResult, CheckStatus, Severity } from "@/types/audit";
 import { aiConfig } from "./env";
+import { packCharLimit, packFragmentSlice, scanCharLimit, scanFragmentSlice } from "./llm/limits";
 import { reconcile, type PreparedDoc, type RoleHints, type UnknownLabel } from "./reconcile";
-import { maskTexts, unmaskText } from "./privacy";
+import { chatJson, type AiConfig } from "./llm/chat";
 import { formatScaled, formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
 interface Proposal {
@@ -17,8 +18,6 @@ interface LinkedValue {
   discrepancy: string | null;
   sourceValue: string;
 }
-
-type AiConfig = { baseUrl: string; apiKey: string; model: string };
 
 const LABEL_ROLES: Role[] = ["quantity", "line_total", "unit_price", "transport", "date", "contract_number", "inn", "counterparty", "item_name"];
 
@@ -108,13 +107,23 @@ export async function refineWithModel(checks: CheckResult[], report: PreparedDoc
  * and a verbatim quote for rows the rules left open. Settled match and mismatch
  * stay as the algorithm computed them.
  */
-export async function reviewPackWithModel(checks: CheckResult[], report: PreparedDoc, supporting: PreparedDoc[]): Promise<CheckResult[]> {
+export interface ReviewedPack {
+  checks: CheckResult[];
+  truncated: boolean;
+  kept: number;
+  limit: number;
+}
+
+export async function reviewPackWithModel(checks: CheckResult[], report: PreparedDoc, supporting: PreparedDoc[]): Promise<ReviewedPack> {
+  const limit = packCharLimit();
+  const idle = { checks, truncated: false, kept: 0, limit };
   const config = aiConfig();
-  if (!config) return checks;
+  if (!config) return idle;
   const open = checks.filter((check) => check.status === "not_found" || check.status === "needs_review");
-  if (!open.length) return checks;
-  const support = packFragments(supporting);
-  if (!support.length) return checks;
+  if (!open.length) return idle;
+  const packed = packFragments(supporting);
+  const support = packed.fragments;
+  if (!support.length) return { ...idle, truncated: packed.truncated, kept: packed.kept };
   const proposals: Proposal[] = [];
   try {
     for (let offset = 0; offset < open.length; offset += 25) {
@@ -136,9 +145,9 @@ export async function reviewPackWithModel(checks: CheckResult[], report: Prepare
   } catch (error) {
     const reason = error instanceof Error ? error.message : "нет ответа";
     console.warn(`[review] второй проход не выполнен: ${reason}`);
-    return checks;
+    return { checks, truncated: packed.truncated, kept: packed.kept, limit };
   }
-  return checks.map((check) => applyQuotedLink(check, proposals, support));
+  return { checks: checks.map((check) => applyQuotedLink(check, proposals, support)), truncated: packed.truncated, kept: packed.kept, limit };
 }
 
 export interface PackSource {
@@ -166,10 +175,6 @@ export interface PackFinding {
   sourceQuoteFound: boolean;
 }
 
-/**
- * Experimental scan. The model itself lists report indicators and the values it
- * sees in the primary documents. It does not replace the rule reconciler.
- */
 /**
  * Asks the model which report rows should be checked, before any supporting
  * document is shown. The rule extractor is not used for this list.
@@ -208,11 +213,20 @@ export async function listReportIndicators(report: PreparedDoc): Promise<{ name:
   });
 }
 
+export interface PackScan {
+  findings: PackFinding[];
+  truncated: boolean;
+  kept: number;
+  limit: number;
+}
+
 /**
- * Two-step scan: the model first lists report indicators, then checks that
- * list against the whole pack. It does not replace the rule reconciler.
+ * Primary pass when a model key is set. The model names report indicators, then
+ * cites sources. processSession keeps this result when findings is not empty and
+ * falls back to reconcile when the list is empty or the model fails. The server
+ * assigns the status from quotes that are actually in the files.
  */
-export async function scanPackInTwoStages(report: PreparedDoc, supporting: PreparedDoc[]): Promise<PackFinding[]> {
+export async function scanPackInTwoStages(report: PreparedDoc, supporting: PreparedDoc[]): Promise<PackScan> {
   const listed = await listReportIndicators(report);
   const indicators = listed.length ? listed : reconcile(report, [], []).map((check) => ({ name: check.fieldName, value: check.reportValue }));
   return scanPackForDiscrepancies(report, supporting, "", indicators);
@@ -223,11 +237,13 @@ export async function scanPackForDiscrepancies(
   supporting: PreparedDoc[],
   extra = "",
   preset?: { name: string; value: string }[],
-): Promise<PackFinding[]> {
+): Promise<PackScan> {
   const config = aiConfig();
-  if (!config) return [];
   const reportFragments = scanFragments([report]);
   const sourceFragments = scanFragments(supporting);
+  const truncated = reportFragments.truncated || sourceFragments.truncated;
+  const active = sourceFragments.truncated ? sourceFragments : reportFragments;
+  if (!config) return { findings: [], truncated, kept: active.kept, limit: active.limit };
   const indicators = preset ?? reconcile(report, [], []).map((check) => ({ name: check.fieldName, value: check.reportValue }));
   const reportValues = new Map(indicators.map((item) => [normKey(item.name), item.value]));
   const parsed = (await chatJson(
@@ -264,21 +280,21 @@ export async function scanPackForDiscrepancies(
   )) as { findings?: unknown };
   const rows = Array.isArray(parsed.findings) ? parsed.findings : [];
   const fragments = new Map([...reportFragments.fragments, ...sourceFragments.fragments].map((item) => [item.id, item]));
-  return rows.flatMap((row) => {
+  const findings = rows.flatMap((row) => {
     if (!row || typeof row !== "object") return [];
     const item = row as Record<string, unknown>;
-    const name = textOf(item.name);
+    const name = textOf(item["name"]);
     if (!name) return [];
     const knownValue = reportValues.get(normKey(name));
-    const reportFragmentId = textOf(item.reportFragmentId);
-    const reportQuote = textOf(item.reportQuote);
+    const reportFragmentId = textOf(item["reportFragmentId"]);
+    const reportQuote = textOf(item["reportQuote"]);
     const reportFragment = fragments.get(reportFragmentId);
-    const relation = item.relation;
-    const parsedSources = readSourceList(item.sources);
+    const relation = relationOf(item["relation"]);
+    const parsedSources = readSourceList(item["sources"]);
     if (!parsedSources.length) {
-      const singleId = textOf(item.sourceFragmentId);
-      const singleQuote = textOf(item.sourceQuote);
-      if (singleId && singleQuote) parsedSources.push({ id: singleId, quote: singleQuote, value: textOf(item.sourceValue) });
+      const singleId = textOf(item["sourceFragmentId"]);
+      const singleQuote = textOf(item["sourceQuote"]);
+      if (singleId && singleQuote) parsedSources.push({ id: singleId, quote: singleQuote, value: textOf(item["sourceValue"]) });
     }
     const sources = parsedSources.map((source) => {
       const fragment = fragments.get(source.id);
@@ -293,21 +309,22 @@ export async function scanPackForDiscrepancies(
     const first = sources[0];
     return [{
       name,
-      reportValue: knownValue || textOf(item.reportValue),
+      reportValue: knownValue || textOf(item["reportValue"]),
       reportFragmentId,
       reportQuote,
       reportWhere: reportFragment ? `${reportFragment.document}, ${reportFragment.where}` : "",
       sourceCount: sources.length,
       sources,
-      sourceValue: textOf(item.sourceValue) || sources.map((source) => source.value || source.quote).filter(Boolean).join(", "),
+      sourceValue: textOf(item["sourceValue"]) || sources.map((source) => source.value || source.quote).filter(Boolean).join(", "),
       sourceFragmentId: first?.fragmentId ?? "",
       sourceQuote: first?.quote ?? "",
       sourceWhere: sources.map((source) => source.where).filter(Boolean).join(", "),
-      relation: relation === "same" || relation === "different" || relation === "missing" || relation === "unclear" ? relation : "unclear",
+      relation,
       reportQuoteFound: Boolean(reportFragment && containsQuote(reportFragment.text, reportQuote)),
       sourceQuoteFound: sources.length > 0 && sources.every((source) => source.quoteFound),
     }].map(judgePackFinding);
   });
+  return { findings, truncated, kept: reportFragments.kept + sourceFragments.kept, limit: active.limit };
 }
 
 const MONTHS: [RegExp, number][] = [
@@ -468,30 +485,33 @@ function textOf(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function scanFragments(docs: PreparedDoc[]): { fragments: { id: string; document: string; where: string; label: string; text: string }[]; truncated: boolean } {
+function relationOf(value: unknown): PackFinding["relation"] {
+  return value === "same" || value === "different" || value === "missing" || value === "unclear" ? value : "unclear";
+}
+
+function scanFragments(docs: PreparedDoc[]): { fragments: { id: string; document: string; where: string; label: string; text: string }[]; truncated: boolean; kept: number; limit: number } {
   const fragments: { id: string; document: string; where: string; label: string; text: string }[] = [];
+  const limit = scanCharLimit();
+  const sliceLimit = scanFragmentSlice();
   let used = 0;
-  let truncated = false;
   for (const doc of docs) {
     for (const fragment of doc.read.fragments) {
       if (fragment.shape === "title") continue;
       const text = fragment.text.replace(/\s+/g, " ").trim();
       if (text.length < 2) continue;
-      const slice = text.slice(0, 2_500);
-      if (used + slice.length > 150_000) {
-        truncated = true;
-        return { fragments, truncated };
-      }
+      const slice = text.slice(0, sliceLimit);
+      if (used + slice.length > limit) return { fragments, truncated: true, kept: used, limit };
       used += slice.length;
       const label = [fragment.rowLabel, fragment.label || fragment.columnHeader].filter(Boolean).join(" / ");
       fragments.push({ id: `${doc.id}:${fragment.id}`, document: doc.name, where: fragment.locationLabel, label, text: slice });
     }
   }
-  return { fragments, truncated };
+  return { fragments, truncated: false, kept: used, limit };
 }
 
-function packFragments(docs: PreparedDoc[]): PackFragment[] {
+function packFragments(docs: PreparedDoc[]): { fragments: PackFragment[]; truncated: boolean; kept: number; limit: number } {
   const chunks: PackFragment[] = [];
+  const sliceLimit = packFragmentSlice();
   for (const doc of docs) {
     for (const fragment of doc.read.fragments) {
       if (fragment.shape === "title") continue;
@@ -500,7 +520,7 @@ function packFragments(docs: PreparedDoc[]): PackFragment[] {
       chunks.push({
         id: `${doc.id}:${fragment.id}`,
         document: doc.name,
-        text: text.slice(0, 900),
+        text: text.slice(0, sliceLimit),
         documentId: doc.id,
         anchor: fragment.anchor,
         pageNumber: fragment.pageNumber,
@@ -509,14 +529,15 @@ function packFragments(docs: PreparedDoc[]): PackFragment[] {
       });
     }
   }
+  const limit = packCharLimit();
   let used = 0;
   const kept: PackFragment[] = [];
   for (const chunk of chunks) {
-    if (used + chunk.text.length > 60_000) break;
+    if (used + chunk.text.length > limit) return { fragments: kept, truncated: true, kept: used, limit };
     used += chunk.text.length;
     kept.push(chunk);
   }
-  return kept;
+  return { fragments: kept, truncated: false, kept: used, limit };
 }
 
 interface PackFragment {
@@ -690,7 +711,7 @@ function sumQuotedParts(reportValue: string, quotes: string[]): (LinkedValue & {
     const reportMoney = parseMoney(reportValue);
     const parts = quotes.map(quoteMoney);
     if (reportMoney == null || parts.some((part) => part == null)) return null;
-    const total = parts.reduce((sum, part) => sum + (part ?? 0n), 0n);
+    const total = parts.reduce((sum: bigint, part) => sum + (part ?? 0n), 0n);
     const same = reportMoney === total;
     return {
       status: same ? "match" : "mismatch",
@@ -739,10 +760,10 @@ function readSourceList(value: unknown): ListedSource[] {
     return value.flatMap((item) => {
       if (!item || typeof item !== "object") return [];
       const row = item as Record<string, unknown>;
-      const id = textOf(row.supportFragmentId) || textOf(row.sourceFragmentId) || textOf(row.id);
-      const quote = textOf(row.quote) || textOf(row.sourceQuote);
+      const id = textOf(row["supportFragmentId"]) || textOf(row["sourceFragmentId"]) || textOf(row["id"]);
+      const quote = textOf(row["quote"]) || textOf(row["sourceQuote"]);
       if (!id || !quote) return [];
-      return [{ id, quote, value: textOf(row.sourceValue) }];
+      return [{ id, quote, value: textOf(row["sourceValue"]) }];
     });
   }
   if (typeof value !== "string" || !value.trim()) return [];
@@ -846,7 +867,7 @@ async function requestLinks(
     ].join(" "),
     {
       report: report.slice(0, wholePack ? 25 : 40),
-      support: support.slice(0, wholePack ? 400 : 80).map((item) => ({ id: item.id, document: item.document, text: item.text.slice(0, wholePack ? 900 : 400) })),
+      support: support.slice(0, wholePack ? 800 : 120).map((item) => ({ id: item.id, document: item.document, text: item.text.slice(0, wholePack ? packFragmentSlice() : Math.min(4_000, packFragmentSlice())) })),
     },
     wholePack ? 120_000 : 45_000,
   )) as { links?: unknown };
@@ -854,12 +875,12 @@ async function requestLinks(
   return links.flatMap((link) => {
     if (!link || typeof link !== "object") return [];
     const row = link as Record<string, unknown>;
-    const checkId = textOf(row.checkId);
-    const reportFragmentId = textOf(row.reportFragmentId);
-    const sources = readSourceList(row.sources);
+    const checkId = textOf(row["checkId"]);
+    const reportFragmentId = textOf(row["reportFragmentId"]);
+    const sources = readSourceList(row["sources"]);
     if (!sources.length) {
-      const id = textOf(row.supportFragmentId) || textOf(row.sourceFragmentId);
-      const quote = textOf(row.quote) || textOf(row.sourceQuote);
+      const id = textOf(row["supportFragmentId"]) || textOf(row["sourceFragmentId"]);
+      const quote = textOf(row["quote"]) || textOf(row["sourceQuote"]);
       if (id && quote) sources.push({ id, quote, value: "" });
     }
     return sources.map((source) => ({
@@ -871,36 +892,3 @@ async function requestLinks(
   });
 }
 
-async function chatJson(config: AiConfig, system: string, data: unknown, timeoutMs = 45_000): Promise<unknown> {
-  const masked = await maskTexts([JSON.stringify(data)]);
-  const messages = [
-    { role: "system", content: system },
-    { role: "user", content: masked.texts[0] ?? "{}" },
-  ];
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let response = await post(config, { model: config.model, temperature: 0, response_format: { type: "json_object" }, messages }, timeoutMs);
-    if (response.status === 400 && /temperature/i.test(await response.clone().text())) {
-      response = await post(config, { model: config.model, response_format: { type: "json_object" }, messages }, timeoutMs);
-    }
-    if (!response.ok) throw new Error(`модель ответила ${response.status}`);
-    const payload = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-    const raw = (payload.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "");
-    const content = await unmaskText(raw, masked.mapping);
-    try {
-      return JSON.parse(content) as unknown;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("модель вернула не JSON");
-}
-
-async function post(config: AiConfig, body: unknown, timeoutMs = 45_000): Promise<Response> {
-  return fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}

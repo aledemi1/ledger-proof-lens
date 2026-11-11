@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/i18n/use-locale";
 import { setDemoLocale } from "@/mocks/demoLocale";
-import { AuditApiError } from "@/services/apiAuditService";
 import { auditService } from "@/services/auditService";
 import type { AuditDocument, AuditSession } from "@/types/audit";
 
@@ -19,7 +18,7 @@ export function useSessions() {
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Не удалось загрузить проверки";
       setError(message);
-      if (reason instanceof AuditApiError && reason.demos.length) setSessions(reason.demos);
+      setSessions((current) => current ?? []);
     }
   }, [locale]);
   useEffect(() => {

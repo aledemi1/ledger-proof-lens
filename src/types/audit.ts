@@ -123,6 +123,15 @@ export interface ReviewerDecision {
   decidedAt: string;
 }
 
+export type AuditNotice =
+  | { code: "duplicate_file"; name: string }
+  | { code: "partial_read" }
+  | { code: "model_two_stage" }
+  | { code: "model_failed"; reason: string }
+  | { code: "labels_failed"; reason: string }
+  | { code: "context_truncated"; kept: number; limit: number }
+  | { code: "legacy"; text: string };
+
 export interface AuditSession {
   id: string;
   title: string;
@@ -140,10 +149,10 @@ export interface AuditSession {
   processingStage?: ProcessingStage;
   processingError?: string;
   fileErrors?: { fileName: string; reason: string }[];
-  notices?: string[];
   incomplete?: boolean;
   /** How this run differs from an earlier check of the same subject. */
   recheck?: RecheckSummary;
+  notices?: AuditNotice[];
 }
 
 export interface RecheckSummary {

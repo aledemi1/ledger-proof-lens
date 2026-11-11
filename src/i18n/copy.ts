@@ -56,6 +56,14 @@ export interface Copy {
     excelField: string; excelReport: string; excelSource: string; excelStatus: string; excelDecision: string; excelComment: string; excelSources: string; excelDocument: string; excelPlace: string; sheetFindings: string; sheetEvidence: string; fileSuffix: string;
     decisionAccept: string; decisionRevise: string; findingsHeading: string; systemLine: string; reviewerLine: string; none: string;
   };
+  notices: {
+    duplicateFile: string;
+    partialRead: string;
+    modelTwoStage: string;
+    modelFailed: string;
+    labelsFailed: string;
+    contextTruncated: string;
+  };
   stats: { title: string; lead: string; users: string; audits: string; documents: string; checks: string; recent: string; empty: string; guest: string; loadFailed: string };
   inbox: { title: string; lead: string; empty: string; loadFailed: string; openFailed: string; refresh: string; unread: string; noText: string; notConfigured: string; attachments: string; back: string; pick: string; tooLarge: string };
   admin: { title: string; lead: string; forbidden: string; loadFailed: string; admin: string; user: string; makeUser: string; makeAdmin: string; newAccount: string; password: string; create: string; createFailed: string; roleFailed: string; changePassword: string; current: string; next: string; savePassword: string; passwordFailed: string };

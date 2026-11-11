@@ -118,7 +118,7 @@ export function parseQuantity(raw: string, unitHint?: string): { minor: bigint; 
   const minor = parseDecimal(token.num);
   if (minor == null) return null;
   const unitMatch = token.rest.match(/^(шт\.?|ед\.?|кг|т|км|мм|мин(?:ут\w*)?|метр\w*|м2|м3|месяц\w*|мес\.?|мг|mg|г|компл\.?|набор\w*|час\.?|ч(?![\p{L}])|чел\w*|усл\.?|уп\.?|л|pcs\.?|pieces?|stk\.?|st(?:ü|ue)ck|hours?|hrs\.?|months?|service|м(?![\p{L}]))/iu);
-  const laterUnit = !unitMatch && token.rest.match(/(час\w*|мин(?:ут\w*)?|кг|км|мм|метр\w*|г|м(?![\p{L}])|чел\w*|месяц\w*|мес\.?)/iu)?.[1];
+  const laterUnit = unitMatch ? undefined : token.rest.match(/(час\w*|мин(?:ут\w*)?|кг|км|мм|метр\w*|г|м(?![\p{L}])|чел\w*|месяц\w*|мес\.?)/iu)?.[1];
   const unit = cleanupUnit(unitMatch?.[1] ?? laterUnit ?? unitHint ?? "шт.");
   return { minor, unit };
 }

@@ -101,7 +101,8 @@ export async function confirmEmail(rawToken: string): Promise<Account> {
   if (!account || (account.role !== "admin" && account.role !== "user")) {
     throw new AccountError("invalid", "Аккаунт не найден");
   }
-  return account;
+  const role = account.role === "admin" ? "admin" : "user";
+  return { id: account.id, email: account.email, role };
 }
 
 function sha256(value: string): string {

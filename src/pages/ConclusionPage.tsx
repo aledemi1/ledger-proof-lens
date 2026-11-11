@@ -9,6 +9,7 @@ import { CheckStatusBadge, DemoBadge, ReviewerBadge, recommendationMeta } from "
 import { AwaitingProcessing } from "@/components/audit/AwaitingProcessing";
 import { useAuditSession } from "@/hooks/useAudit";
 import { fill } from "@/i18n/fill";
+import { formatNotice } from "@/lib/notices";
 import { recommendationText } from "@/i18n/labels";
 import { useCopy } from "@/i18n/messages";
 import { useLocale } from "@/i18n/use-locale";
@@ -150,7 +151,7 @@ export function ConclusionPage({ id }: { id: string }) {
 
         {(session.notices?.length || session.fileErrors?.length) ? (
           <p className="mt-4 text-sm text-muted-foreground">
-            {[...(session.notices ?? []), ...(session.fileErrors?.map((file) => `«${file.fileName}»: ${file.reason}`) ?? [])].join(" ")}
+            {[...(session.notices ?? []).map((notice) => formatNotice(notice, t)), ...(session.fileErrors?.map((file) => `«${file.fileName}»: ${file.reason}`) ?? [])].join(" ")}
           </p>
         ) : null}
 

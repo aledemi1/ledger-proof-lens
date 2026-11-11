@@ -89,13 +89,23 @@ const SCHEMA = [
 let opening: Promise<void> | undefined;
 let sqliteDb: DatabaseSync | undefined;
 let pgPool: Pool | undefined;
+let testPool: Pool | undefined;
 let mode: "sqlite" | "postgres" | undefined;
 let sqliteTail: Promise<void> = Promise.resolve();
 
 function databaseUrl(): string | undefined {
-  if (process.env["VITEST"]) return undefined;
+  if (process.env["VITEST"] && process.env["SVERKO_TEST_POSTGRES"] !== "1") return undefined;
   const value = process.env["DATABASE_URL"]?.trim();
   return value || undefined;
+}
+
+/** Points the next open() at an in-process Postgres stand-in. Tests only. */
+export function useTestPool(pool: Pool): void {
+  if (!process.env["VITEST"]) throw new Error("useTestPool is only available in tests");
+  testPool = pool;
+  opening = undefined;
+  pgPool = undefined;
+  mode = undefined;
 }
 
 export function ready(): Promise<void> {
@@ -211,6 +221,18 @@ export async function transaction<T>(fn: (query: Query) => Promise<T>): Promise<
 }
 
 async function open(): Promise<void> {
+  if (testPool) {
+    pgPool = testPool;
+    mode = "postgres";
+    for (const statement of SCHEMA) await testPool.query(statement);
+    await ensureColumn("sessions", "previous_id", "TEXT");
+    await ensureColumn("sessions", "recheck", "TEXT");
+    await ensureColumn("reviews", "source_json", "TEXT");
+    if (await ensureColumn("users", "email_verified_at", "TEXT")) {
+      await testPool.query("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
+    }
+    return;
+  }
   const url = databaseUrl();
   if (url) {
     const pool = new Pool(poolOptions(url));

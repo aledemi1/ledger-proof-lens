@@ -7,8 +7,20 @@ import { maskTexts, unmaskText } from "@/server/privacy";
 const python = path.resolve("third_party", ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 const ready = existsSync(python);
 
+describe("privacy stub", () => {
+  it("masks an email and restores it", async () => {
+    const masked = await maskTexts(["Письмо на ivan@example.com и снова ivan@example.com."]);
+    const text = masked.texts[0] ?? "";
+    expect(text.toLowerCase()).not.toContain("ivan@example.com");
+    expect(text).toContain("{{EMAIL_1}}");
+    expect(await unmaskText(text, masked.mapping)).toContain("ivan@example.com");
+  });
+});
+
 describe.skipIf(!ready)("local privacy bridge", () => {
   it("gives one label to the same Russian person and masks an English name", async () => {
+    process.env["SVERKO_PRIVACY_PYTHON"] = python;
+    process.env["SVERKO_PRIVACY_BRIDGE"] = path.resolve("scripts/privacy/mask_bridge.py");
     const masked = await maskTexts([
       "Поставщик ООО «Вектор Аналитика», ИНН 6083778353, Иван Петров.",
       "Подписал Иван Петров.",

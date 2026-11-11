@@ -6,12 +6,10 @@ import type { AuditService } from "./auditService";
 export class AuditApiError extends Error {
   status: number;
   files: { fileName: string; reason: string }[];
-  demos: AuditSession[];
-  constructor(message: string, status: number, files: { fileName: string; reason: string }[] = [], demos: AuditSession[] = []) {
+  constructor(message: string, status: number, files: { fileName: string; reason: string }[] = []) {
     super(message);
     this.status = status;
     this.files = files;
-    this.demos = demos;
   }
 }
 
@@ -45,13 +43,8 @@ async function isDemo(id: string): Promise<boolean> {
 export const apiAuditService: AuditService = {
   async listSessions() {
     const demos = (await mockAuditService.listSessions()).filter((session) => session.isDemo);
-    try {
-      const remote = await request<AuditSession[]>("/api/audits");
-      return [...remote, ...demos].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    } catch (error) {
-      if (error instanceof AuditApiError) error.demos = demos;
-      throw error;
-    }
+    const remote = await request<AuditSession[]>("/api/audits");
+    return [...remote, ...demos].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
   async getSession(id) {
     if (await isDemo(id)) return mockAuditService.getSession(id);

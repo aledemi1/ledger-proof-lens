@@ -15,10 +15,11 @@ import {
 } from "./db";
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
+import { evidenceFromFragment } from "./evidence";
 import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
-import type { CheckResult, CheckStatus } from "@/types/audit";
+import type { AuditNotice, CheckResult, CheckStatus } from "@/types/audit";
 import { reconcile, unknownLabels, withoutDuplicates } from "./reconcile";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
@@ -144,16 +145,20 @@ export async function processSession(sessionId: string, replace = false): Promis
 
   await setStage(sessionId, "matching");
   const separated = withoutDuplicates(reportDoc, supporting);
-  const modelNotices: string[] = [];
+  const docs = [reportDoc, ...separated.unique];
+  const modelNotices: AuditNotice[] = [];
   const config = aiConfig();
   let checks: CheckResult[] = [];
+  // A non-empty two-stage scan is the result. Rules run when the key is missing, the model fails, or the scan returns nothing.
   if (config) {
     try {
-      checks = findingsToChecks(await scanPackInTwoStages(reportDoc, separated.unique), reportDoc.id);
-      if (checks.length) modelNotices.push("Показатели сначала выделены по одному отчёту, затем сверены с первичными документами. Статус посчитан по цитатам, которые есть в файлах.");
+      const scan = await scanPackInTwoStages(reportDoc, separated.unique);
+      checks = findingsToChecks(scan.findings, docs);
+      if (scan.truncated) modelNotices.push({ code: "context_truncated", kept: scan.kept, limit: scan.limit });
+      if (checks.length) modelNotices.push({ code: "model_two_stage" });
     } catch (error) {
       const reason = error instanceof Error ? error.message : "нет ответа";
-      modelNotices.push(`Полный просмотр не выполнен (${reason}). Результат посчитан правилами.`);
+      modelNotices.push({ code: "model_failed", reason });
     }
   }
   if (!checks.length) checks = await ruleChecks(reportDoc, separated.unique, fileErrors, modelNotices);
@@ -165,11 +170,11 @@ export async function processSession(sessionId: string, replace = false): Promis
     );
     return;
   }
-  const notices = [
+  const notices: AuditNotice[] = [
     ...modelNotices,
-    ...separated.duplicates.map((doc) => `«${doc.name}» повторяет уже учтённый файл и не увеличивает суммы.`),
+    ...separated.duplicates.map((doc) => ({ code: "duplicate_file" as const, name: doc.name })),
   ];
-  if (fileErrors.length) notices.unshift("Проверка неполная: часть подтверждающих файлов не прочитана. Найденные результаты сохранены.");
+  if (fileErrors.length) notices.unshift({ code: "partial_read" });
   if (!replace && (await checkCount(sessionId)) > 0) return;
   await saveOutcome({
     sessionId,
@@ -177,11 +182,11 @@ export async function processSession(sessionId: string, replace = false): Promis
     checks,
     fileErrors,
     notices,
-    incomplete: fileErrors.length > 0 || supporting.some((doc) => doc.read.warnings.length > 0),
+    incomplete: fileErrors.length > 0 || notices.some((notice) => notice.code === "context_truncated") || supporting.some((doc) => doc.read.warnings.length > 0),
   });
 }
 
-async function ruleChecks(reportDoc: PreparedDoc, supporting: PreparedDoc[], fileErrors: { fileName: string; reason: string }[], notices: string[]): Promise<CheckResult[]> {
+async function ruleChecks(reportDoc: PreparedDoc, supporting: PreparedDoc[], fileErrors: { fileName: string; reason: string }[], notices: AuditNotice[]): Promise<CheckResult[]> {
   let hints: RoleHints = new Map();
   const config = aiConfig();
   const unknown = config ? unknownLabels([reportDoc, ...supporting]) : [];
@@ -190,34 +195,29 @@ async function ruleChecks(reportDoc: PreparedDoc, supporting: PreparedDoc[], fil
       hints = await classifyLabels(config, unknown);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "нет ответа";
-      notices.push(`Языковая модель не ответила (${reason}). Незнакомые подписи оставлены на ручную проверку.`);
+      notices.push({ code: "labels_failed", reason });
     }
   }
   let checks = reconcile(reportDoc, supporting, fileErrors, hints);
   try {
     checks = await refineWithModel(checks, reportDoc, supporting);
-    checks = await reviewPackWithModel(checks, reportDoc, supporting);
+    const reviewed = await reviewPackWithModel(checks, reportDoc, supporting);
+    checks = reviewed.checks;
+    if (reviewed.truncated) notices.push({ code: "context_truncated", kept: reviewed.kept, limit: reviewed.limit });
   } catch {
     // Rules stay in place when the model is unavailable.
   }
   return checks;
 }
 
-function findingsToChecks(findings: PackFinding[], reportId: string): CheckResult[] {
+function findingsToChecks(findings: PackFinding[], docs: PreparedDoc[]): CheckResult[] {
+  const reportId = docs[0]?.id ?? "";
   return findings.map((finding, index) => {
     const status: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" ? "needs_review" : "not_found";
     const compared = status === "match" || status === "mismatch" ? compareLinkedValues(finding.reportValue, finding.sourceValue) : null;
-    const evidence = finding.sources.filter((source) => source.quoteFound).map((source) => {
-      const cut = source.fragmentId.indexOf(":");
-      return {
-        documentId: cut > 0 ? source.fragmentId.slice(0, cut) : source.fragmentId,
-        pageNumber: 0,
-        sourceText: source.quote.slice(0, 240),
-        ...(cut > 0 ? { locationInDocument: source.fragmentId.slice(cut + 1) } : {}),
-        ...(source.where ? { locationLabel: source.where } : {}),
-      };
-    });
-    const reportCut = finding.reportFragmentId.indexOf(":");
+    const evidence = finding.sources.filter((source) => source.quoteFound).map((source) => evidenceFromFragment(docs, source.fragmentId, source.quote, source.where));
+    const reportReference = evidenceFromFragment(docs, finding.reportFragmentId, finding.reportQuote || finding.reportValue, finding.reportWhere);
+    if (!reportReference.documentId) reportReference.documentId = reportId;
     return {
       id: `c${index + 1}`,
       fieldName: finding.name,
@@ -230,13 +230,7 @@ function findingsToChecks(findings: PackFinding[], reportId: string): CheckResul
         ? `Сервер сверил «${finding.name}» с ${finding.sourceCount} цитатами из первичных документов.`
         : `Для «${finding.name}» в первичных документах не найдена цитата, которая есть в указанном фрагменте.`,
       evidenceReferences: evidence,
-      reportReference: {
-        documentId: reportCut > 0 ? finding.reportFragmentId.slice(0, reportCut) : reportId,
-        pageNumber: 0,
-        sourceText: (finding.reportQuote || finding.reportValue).slice(0, 240),
-        ...(reportCut > 0 ? { locationInDocument: finding.reportFragmentId.slice(reportCut + 1) } : {}),
-        ...(finding.reportWhere ? { locationLabel: finding.reportWhere } : {}),
-      },
+      reportReference,
       reviewerStatus: "pending",
       reviewerComment: "",
     };
@@ -268,20 +262,13 @@ export async function findSelectedIndicator(sessionId: string, text: string, anc
       // One unreadable file does not block the search through the rest.
     }
   }
-  const findings = await scanPackForDiscrepancies(report, supporting, "", [{ name: trimmed, value: trimmed }]);
+  const scan = await scanPackForDiscrepancies(report, supporting, "", [{ name: trimmed, value: trimmed }]);
+  const findings = scan.findings;
   const finding = findings.find((item) => item.name === trimmed) ?? findings[0];
   const status: CheckStatus = finding?.relation === "same" ? "match" : finding?.relation === "different" ? "mismatch" : finding?.relation === "unclear" ? "needs_review" : "not_found";
   const compared = finding && (status === "match" || status === "mismatch") ? compareLinkedValues(trimmed, finding.sourceValue) : null;
-  const evidence = (finding?.sources ?? []).filter((source) => source.quoteFound).map((source) => {
-    const cut = source.fragmentId.indexOf(":");
-    return {
-      documentId: cut > 0 ? source.fragmentId.slice(0, cut) : source.fragmentId,
-      pageNumber: 0,
-      sourceText: source.quote.slice(0, 240),
-      ...(cut > 0 ? { locationInDocument: source.fragmentId.slice(cut + 1) } : {}),
-      ...(source.where ? { locationLabel: source.where } : {}),
-    };
-  });
+  const docs = [report, ...supporting];
+  const evidence = (finding?.sources ?? []).filter((source) => source.quoteFound).map((source) => evidenceFromFragment(docs, source.fragmentId, source.quote, source.where));
   const check: CheckResult = {
     id: `user-${crypto.randomUUID()}`,
     fieldName: trimmed,
@@ -294,7 +281,7 @@ export async function findSelectedIndicator(sessionId: string, text: string, anc
       ? `Проверяющий выделил «${trimmed}» после разбора. Сервер нашёл ${finding.sourceCount} источников и сверил их с выделенным текстом.`
       : `Проверяющий выделил «${trimmed}» после разбора. В первичных документах подтверждение не найдено.`,
     evidenceReferences: evidence,
-    reportReference: { documentId: report.id, pageNumber: 0, sourceText: trimmed, ...(anchor ? { locationInDocument: anchor } : {}) },
+    reportReference: anchor ? evidenceFromFragment(docs, `${report.id}:${anchor}`, trimmed) : { documentId: report.id, pageNumber: 0, sourceText: trimmed },
     reviewerStatus: "pending",
     reviewerComment: "",
   };

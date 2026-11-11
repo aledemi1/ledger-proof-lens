@@ -88,6 +88,7 @@ export async function listInbox(): Promise<InboxList> {
   if (!settings) return { configured: false, mailbox: "", unseen: 0, messages: [] };
   return withInbox(settings, async (client, mailbox) => {
     const status = await client.status("INBOX", { messages: true, unseen: true });
+    if (!status) return { configured: true, mailbox, unseen: 0, messages: [] };
     const total = status.messages ?? 0;
     if (total === 0) return { configured: true, mailbox, unseen: status.unseen ?? 0, messages: [] };
     const start = Math.max(1, total - LIST_LIMIT + 1);

@@ -217,7 +217,7 @@ describe("linked quote is compared in code", () => {
         );
       }),
     );
-    const [linked, untouched] = await reviewPackWithModel([open, settled], report, [support]);
+    const [linked, untouched] = (await reviewPackWithModel([open, settled], report, [support])).checks;
     expect(bodies[0]).toContain("всего комплекта");
     expect(linked?.status).toBe("mismatch");
     expect(linked?.discrepancy).toBe("+800 ₽");
@@ -257,7 +257,7 @@ describe("linked quote is compared in code", () => {
           ),
       ),
     );
-    const [linked] = await reviewPackWithModel([open], report, [support]);
+    const [linked] = (await reviewPackWithModel([open], report, [support])).checks;
     expect(linked?.status).toBe("needs_review");
     expect(linked?.explanation).toContain("не закрыт");
   });
@@ -358,7 +358,7 @@ describe("full-pack discrepancy scan", () => {
         );
       }),
     );
-    const findings = await scanPackForDiscrepancies(report, [support]);
+    const { findings } = await scanPackForDiscrepancies(report, [support]);
     expect(findings[0]?.relation).toBe("different");
     expect(findings[0]?.sourceQuoteFound).toBe(true);
     expect(findings[0]?.sourceWhere).toContain("Счёт.pdf");
@@ -383,7 +383,7 @@ describe("full-pack discrepancy scan", () => {
         return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
       }),
     );
-    const findings = await scanPackInTwoStages(report, [support]);
+    const { findings } = await scanPackInTwoStages(report, [support]);
     expect(step).toBe(2);
     expect(findings[0]?.name).toBe("Ночей проживания");
     expect(findings[0]?.relation).toBe("different");
@@ -418,7 +418,7 @@ describe("full-pack discrepancy scan", () => {
         }],
       }), { status: 200 })),
     );
-    const [finding] = await scanPackForDiscrepancies(report, [act, food]);
+    const [finding] = (await scanPackForDiscrepancies(report, [act, food])).findings;
     expect(finding?.sourceCount).toBe(2);
     expect(finding?.sources.map((source) => source.fragmentId)).toEqual(["Акт.pdf:f1", "Питание.pdf:f2"]);
     expect(finding?.sources.every((source) => source.quoteFound)).toBe(true);
@@ -452,7 +452,7 @@ describe("full-pack discrepancy scan", () => {
         }],
       }), { status: 200 })),
     );
-    const [linked] = await reviewPackWithModel([open], report, [act, food, print]);
+    const [linked] = (await reviewPackWithModel([open], report, [act, food, print])).checks;
     expect(linked?.status).toBe("mismatch");
     expect(linked?.discrepancy).toBe("+25 300 ₽");
     expect(linked?.evidenceReferences).toHaveLength(3);

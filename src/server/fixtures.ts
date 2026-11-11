@@ -5,7 +5,16 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import * as XLSX from "xlsx";
 
-const fontCandidates = ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/segoeui.ttf"];
+const fontCandidates = [
+  process.env["SVERKO_FONT"],
+  "C:/Windows/Fonts/arial.ttf",
+  "C:/Windows/Fonts/segoeui.ttf",
+  "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+  "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+  "/Library/Fonts/Arial.ttf",
+  "/System/Library/Fonts/Supplemental/Arial.ttf",
+].filter((item): item is string => Boolean(item));
 
 export function fontPath(): string {
   const found = fontCandidates.find((item) => existsSync(item));

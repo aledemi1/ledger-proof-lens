@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AuditDocument, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReviewerDecision, ReviewerStatus } from "@/types/audit";
+import { parseNotices } from "../lib/notice-codes";
+import type { AuditDocument, AuditNotice, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import { withUrls, type PreviewDraft } from "./model";
 import { dataDir } from "./paths";
 import { all, get, run, transaction, type Query, closeDb } from "./store";
@@ -140,7 +141,7 @@ export async function readSession(id: string): Promise<AuditSession | null> {
   if (row.error) session.processingError = row.error;
   if (Number(row.incomplete)) session.incomplete = true;
   if (row.file_errors) session.fileErrors = JSON.parse(row.file_errors) as { fileName: string; reason: string }[];
-  if (row.notices) session.notices = JSON.parse(row.notices) as string[];
+  if (row.notices) session.notices = parseNotices(JSON.parse(row.notices));
   if (row.recheck) session.recheck = JSON.parse(row.recheck) as RecheckSummary;
   const owner = await get<{ email: string }>("SELECT email FROM users WHERE id = ?", [row.owner]);
   if (owner?.email) session.ownerEmail = owner.email;
@@ -243,7 +244,7 @@ export async function saveOutcome(input: {
   reportDocumentId: string;
   checks: CheckResult[];
   fileErrors: { fileName: string; reason: string }[];
-  notices: string[];
+  notices: AuditNotice[];
   incomplete: boolean;
 }): Promise<void> {
   await transaction(async (query) => {

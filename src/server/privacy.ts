@@ -25,17 +25,20 @@ function pythonBin(): string {
 }
 
 function bridgePath(): string {
+  const configured = process.env["SVERKO_PRIVACY_BRIDGE"]?.trim();
+  if (configured) return path.resolve(configured);
   return path.resolve("scripts", "privacy", "mask_bridge.py");
 }
 
 /** Runs the local pii-mask / Presidio bridge. Refuses to continue if it cannot mask. */
 function runBridge(payload: unknown): Promise<unknown> {
   const python = pythonBin();
-  if (!existsSync(python) || !existsSync(bridgePath())) {
+  const bridge = bridgePath();
+  if (!existsSync(bridge) || (python.includes(path.sep) && !existsSync(python))) {
     return Promise.reject(new Error("локальная маскировка не установлена (python scripts/privacy/setup.py)"));
   }
   return new Promise((resolve, reject) => {
-    const child = spawn(python, [bridgePath()], { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(python, [bridge], { stdio: ["pipe", "pipe", "pipe"] });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     const timer = setTimeout(() => {
