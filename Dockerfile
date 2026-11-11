@@ -22,6 +22,22 @@ RUN set -eux; \
 COPY . .
 RUN bun run build
 
+FROM python:3.12-slim-bookworm AS privacy
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git gcc g++ \
+  && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+ENV XDG_CACHE_HOME=/opt/cache
+RUN pip install --no-cache-dir \
+    "pii-mask @ git+https://github.com/dewil/pii-mask.git" \
+    "presidio-analyzer>=2.2,<3" \
+    "presidio-anonymizer>=2.2,<3" \
+  && python -m spacy download en_core_web_sm
+COPY scripts/privacy/mask_bridge.py /tmp/mask_bridge.py
+RUN mkdir -p /opt/cache \
+  && printf '%s' '{"action":"mask","items":[{"id":"0","text":"Иван Петров, ИНН 7707083893, почта a@b.ru"}]}' | python /tmp/mask_bridge.py
+
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
@@ -36,6 +52,12 @@ RUN mkdir -p /data
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=privacy /opt/venv /opt/venv
+COPY --from=privacy /opt/cache /opt/cache
+COPY scripts/privacy/mask_bridge.py ./scripts/privacy/mask_bridge.py
+ENV SVERKO_PRIVACY_PYTHON=/opt/venv/bin/python
+ENV XDG_CACHE_HOME=/opt/cache
+ENV PATH=/opt/venv/bin:$PATH
 
 EXPOSE 8080
 

@@ -11,7 +11,6 @@ import { REPORT_EXTENSIONS, selectableDocTypes, SUPPORTING_EXTENSIONS } from "@/
 import { fileExt, formatSize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AuditApiError } from "@/services/apiAuditService";
-import { useAccount } from "@/hooks/useAccount";
 import { docText } from "@/i18n/labels";
 import { useCopy } from "@/i18n/messages";
 import { auditService } from "@/services/auditService";
@@ -26,7 +25,6 @@ interface Picked {
 
 export function NewAuditPage() {
   const navigate = useNavigate();
-  const account = useAccount();
   const t = useCopy();
   const [step, setStep] = useState(0);
   const [title, setTitle] = useState("");
@@ -98,17 +96,6 @@ export function NewAuditPage() {
         </Button>
       </div>
 
-      {account === null ? (
-        <div className="mt-6 border-y border-border bg-card p-5 text-sm">
-          <p>{t.neu.guest}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button asChild><Link to="/login">{t.neu.signIn}</Link></Button>
-            <Button asChild variant="outline"><Link to="/register">{t.neu.create}</Link></Button>
-          </div>
-        </div>
-      ) : (
-      <>
-      {/* Stepper */}
       <ol className="mt-6 grid grid-cols-3 gap-2">
         {t.neu.steps.map((s, i) => (
           <li key={s}>
@@ -252,8 +239,6 @@ export function NewAuditPage() {
           <Button disabled={busy} onClick={create}><PlayCircle /> {t.neu.start}</Button>
         )}
       </div>
-      </>
-      )}
     </div>
   );
 }

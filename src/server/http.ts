@@ -37,6 +37,7 @@ import {
 } from "./db";
 import { loadEnv } from "./env";
 import { InboxError, listInbox, readInbox } from "./inbox";
+import { adminStats } from "./store";
 import { fileExtension, validateFile } from "./extract/index";
 import { dataDir } from "./paths";
 import { enqueue, enqueueRebuild, findSelectedIndicator, sha256, whenRebuildQueued } from "./process";
@@ -52,9 +53,10 @@ export async function handleApi(request: Request): Promise<Response> {
   if (parts[1] === "admin") return adminApi(request, parts);
   if (parts[1] !== "audits") return json({ error: "Не найдено" }, 404);
 
-  const user = await accountFromToken(cookieValue(request.headers.get("cookie"), "sverko_auth"));
-  if (!user) return json({ error: "Войдите в аккаунт, чтобы открыть свои проверки" }, 401);
-  return auditsApi(request, parts, user);
+  const { actor, setCookie } = await actorOf(request);
+  const response = await auditsApi(request, parts, actor);
+  if (setCookie) response.headers.append("Set-Cookie", setCookie);
+  return response;
 }
 
 async function authApi(request: Request, parts: string[]): Promise<Response> {
@@ -145,6 +147,7 @@ async function adminApi(request: Request, parts: string[]): Promise<Response> {
   if (parts[2] === "users" && parts[3] && parts.length === 4 && request.method === "PATCH") return updateUser(request, parts[3]);
   if (parts[2] === "inbox" && parts.length === 3 && request.method === "GET") return inboxList();
   if (parts[2] === "inbox" && parts[3] && parts.length === 4 && request.method === "GET") return inboxLetter(parts[3]);
+  if (parts[2] === "stats" && parts.length === 3 && request.method === "GET") return json(await adminStats(), 200);
   return json({ error: "Не найдено" }, 404);
 }
 
@@ -410,6 +413,22 @@ async function fileResponse(sessionId: string, documentId: string): Promise<Resp
 async function canRead(id: string, user: Account): Promise<boolean> {
   const owner = await sessionOwner(id);
   return owner === user.id || user.role === "admin";
+}
+
+const GUEST_ID = /^gst_[a-f0-9]{32}$/;
+
+async function actorOf(request: Request): Promise<{ actor: Account; setCookie?: string }> {
+  const user = await accountFromToken(cookieValue(request.headers.get("cookie"), "sverko_auth"));
+  if (user) return { actor: user };
+  const existing = cookieValue(request.headers.get("cookie"), "sverko_guest");
+  if (existing && GUEST_ID.test(existing)) return { actor: { id: existing, email: "", role: "user" } };
+  const id = `gst_${randomBytes(16).toString("hex")}`;
+  return { actor: { id, email: "", role: "user" }, setCookie: guestCookie(id, request) };
+}
+
+function guestCookie(id: string, request: Request): string {
+  const secure = request.headers.get("x-forwarded-proto") === "https" ? "; Secure" : "";
+  return `sverko_guest=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure}`;
 }
 
 function authCookie(token: string, request: Request): string {

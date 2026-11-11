@@ -64,6 +64,24 @@ describe("accounts", () => {
     expect(demote.status).toBe(404);
   });
 
+  it("opens a review list without an account and keeps other reviews hidden", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-guest-"));
+    await closeDb();
+    const open = await handleApi(new Request("http://localhost/api/audits"));
+    expect(open.status).toBe(200);
+    const cookie = open.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain("sverko_guest=");
+    expect(await open.json()).toEqual([]);
+    await run(
+      "INSERT INTO sessions (id, owner, idempotency_key, title, created_at, status, stage) VALUES ('aud_other', 'usr_other', 'g-1', 'Чужая', ?, 'in_review', 'done')",
+      [new Date().toISOString()],
+    );
+    const hidden = await handleApi(new Request("http://localhost/api/audits/aud_other", { headers: { cookie: cookie.split(";")[0] ?? "" } }));
+    expect(hidden.status).toBe(404);
+    const stats = await handleApi(new Request("http://localhost/api/admin/stats", { headers: { cookie: cookie.split(";")[0] ?? "" } }));
+    expect(stats.status).toBe(401);
+  });
+
   it("sends a confirmation link and signs in only after it is opened", async () => {
     process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-mail-"));
     process.env["SMTP_HOST"] = "smtp.timeweb.ru";

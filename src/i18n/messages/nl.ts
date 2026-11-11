@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const nl: Copy = {
   language: "Taal",
-  nav: { home: "Start", audits: "Controles", new: "Nieuwe controle", users: "Gebruikers", inbox: "Post", login: "Inloggen", logout: "Uitloggen", exit: "Afsluiten" },
+  nav: { home: "Start", audits: "Controles", new: "Nieuwe controle", users: "Gebruikers", inbox: "Post", stats: "Statistieken", login: "Inloggen", logout: "Uitloggen", exit: "Afsluiten" },
   theme: { label: "Thema", light: "Licht", dusk: "Schemering", night: "Nacht" },
   meta: {
     homeTitle: "Sverko — verificatie van rapporten aan de hand van brondocumenten",
@@ -11,6 +11,7 @@ export const nl: Copy = {
     register: "Nieuw account — Sverko",
     admin: "Gebruikers — Sverko",
     inbox: "Post — Sverko",
+    stats: "Statistieken — Sverko",
     newTitle: "Nieuwe controle — Sverko",
     newDescription: "Begin met het rapport: de naam wordt ingevuld vanuit de bestandsnaam.",
     auditsTitle: "Controles — Sverko",
@@ -353,6 +354,7 @@ export const nl: Copy = {
     reviewerLine: "Beslissing reviewer: {text}.",
     none: "niet genomen",
   },
+  stats: { title: "Statistieken", lead: "Accounts en controles in het kort.", users: "Accounts", audits: "Controles", documents: "Documenten", checks: "Indicatoren", recent: "Recente controles", empty: "Nog geen controles.", guest: "Gast", loadFailed: "Statistieken laden mislukt" },
   inbox: { title: "Post", lead: "Berichten die naar de Sverko-mailbox zijn gestuurd.", empty: "Nog geen berichten.", loadFailed: "Mailbox openen mislukt", openFailed: "Bericht openen mislukt", refresh: "Vernieuwen", unread: "ongelezen", noText: "Dit bericht heeft geen tekst.", notConfigured: "De mailbox is niet gekoppeld.", attachments: "Bijlagen", back: "Terug naar de lijst", pick: "Kies een bericht.", tooLarge: "Dit bericht is te groot om het hier te openen." },
   admin: { title: "Gebruikers", lead: "De administrator ziet alle controles. De gebruiker alleen de eigen.", forbidden: "Deze pagina is alleen voor de administrator.", loadFailed: "Gebruikers laden mislukt", admin: "Administrator", user: "Gebruiker", makeUser: "Gebruiker maken", makeAdmin: "Administrator maken", newAccount: "Nieuw account", password: "Wachtwoord", create: "Aanmaken", createFailed: "Gebruiker aanmaken mislukt", roleFailed: "Rol wijzigen mislukt", changePassword: "Eigen wachtwoord wijzigen", current: "Huidig wachtwoord", next: "Nieuw wachtwoord", savePassword: "Wachtwoord opslaan", passwordFailed: "Wachtwoord wijzigen mislukt" },
 };

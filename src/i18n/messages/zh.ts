@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const zh: Copy = {
   language: "语言",
-  nav: { home: "首页", audits: "核对", new: "新建核对", users: "用户", inbox: "邮件", login: "登录", logout: "退出登录", exit: "退出" },
+  nav: { home: "首页", audits: "核对", new: "新建核对", users: "用户", inbox: "邮件", stats: "统计", login: "登录", logout: "退出登录", exit: "退出" },
   theme: { label: "主题", light: "浅色", dusk: "暮色", night: "夜间" },
   meta: {
     homeTitle: "Sverko — 基于原始凭证的报表可信度核对",
@@ -11,6 +11,7 @@ export const zh: Copy = {
     register: "新建账户 — Sverko",
     admin: "用户 — Sverko",
     inbox: "邮件 — Sverko",
+    stats: "统计 — Sverko",
     newTitle: "新建核对 — Sverko",
     newDescription: "从报表开始：名称将自动取自文件名。",
     auditsTitle: "核对 — Sverko",
@@ -353,6 +354,7 @@ export const zh: Copy = {
     reviewerLine: "复核人决定：{text}。",
     none: "未作出",
   },
+  stats: { title: "统计", lead: "账户和核对的概览。", users: "账户", audits: "核对", documents: "文档", checks: "指标", recent: "最近的核对", empty: "还没有核对。", guest: "访客", loadFailed: "无法加载统计" },
   inbox: { title: "邮件", lead: "发到 Sverko 邮箱的信件。", empty: "还没有邮件。", loadFailed: "无法打开邮箱", openFailed: "无法打开这封邮件", refresh: "刷新", unread: "未读", noText: "这封邮件没有正文。", notConfigured: "邮箱尚未连接。", attachments: "附件", back: "返回列表", pick: "请选择一封邮件。", tooLarge: "这封邮件太大，无法在这里打开。" },
   admin: { title: "用户", lead: "管理员可查看全部核对。用户仅可查看自己的。", forbidden: "此页面仅管理员可访问。", loadFailed: "无法加载用户", admin: "管理员", user: "用户", makeUser: "设为用户", makeAdmin: "设为管理员", newAccount: "新建账户", password: "密码", create: "创建", createFailed: "无法创建用户", roleFailed: "无法更改角色", changePassword: "修改我的密码", current: "当前密码", next: "新密码", savePassword: "保存密码", passwordFailed: "无法修改密码" },
 };

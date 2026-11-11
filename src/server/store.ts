@@ -144,6 +144,54 @@ export async function run(sql: string, params: unknown[] = []): Promise<void> {
   });
 }
 
+export interface AdminStats {
+  users: number;
+  audits: number;
+  documents: number;
+  checks: number;
+  auditsByStatus: { status: string; count: number }[];
+  checksByStatus: { status: string; count: number }[];
+  recent: { id: string; title: string; status: string; createdAt: string; ownerEmail: string | null }[];
+}
+
+export async function adminStats(): Promise<AdminStats> {
+  await ready();
+  const countOf = async (sql: string) => Number((await get<{ n: number | string }>(sql))?.n ?? 0);
+  const checkSql = mode === "postgres"
+    ? "SELECT payload::json->>'status' AS status, COUNT(*)::int AS n FROM checks GROUP BY 1"
+    : "SELECT json_extract(payload, '$.status') AS status, COUNT(*) AS n FROM checks GROUP BY 1";
+  const [users, audits, documents, auditRows, checkRows, recentRows] = await Promise.all([
+    countOf("SELECT COUNT(*) AS n FROM users"),
+    countOf("SELECT COUNT(*) AS n FROM sessions"),
+    countOf("SELECT COUNT(*) AS n FROM documents"),
+    all<{ status: string; n: number | string }>("SELECT status, COUNT(*) AS n FROM sessions GROUP BY status"),
+    all<{ status: string | null; n: number | string }>(checkSql),
+    all<{ id: string; title: string; status: string; created_at: string; owner_email: string | null }>(
+      `SELECT s.id, s.title, s.status, s.created_at, u.email AS owner_email
+       FROM sessions s LEFT JOIN users u ON u.id = s.owner
+       ORDER BY s.created_at DESC LIMIT 12`,
+    ),
+  ]);
+  const checksByStatus = checkRows
+    .filter((row) => row.status)
+    .map((row) => ({ status: String(row.status), count: Number(row.n) }));
+  return {
+    users,
+    audits,
+    documents,
+    checks: checksByStatus.reduce((sum, row) => sum + row.count, 0),
+    auditsByStatus: auditRows.map((row) => ({ status: row.status, count: Number(row.n) })),
+    checksByStatus,
+    recent: recentRows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      createdAt: row.created_at,
+      ownerEmail: row.owner_email,
+    })),
+  };
+}
+
 export async function transaction<T>(fn: (query: Query) => Promise<T>): Promise<T> {
   await ready();
   if (mode === "postgres") return pgTransaction(fn);

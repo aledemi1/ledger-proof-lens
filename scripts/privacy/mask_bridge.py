@@ -13,10 +13,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "third_party" / "pii-mask"))
-
-from pii_mask.core import Masker  # noqa: E402
-from pii_mask.recognizers import Entity  # noqa: E402
+try:
+    from pii_mask.core import Masker
+    from pii_mask.recognizers import Entity
+except ImportError:
+    sys.path.insert(0, str(ROOT / "third_party" / "pii-mask"))
+    from pii_mask.core import Masker
+    from pii_mask.recognizers import Entity
 
 PRESIDIO_TYPES = {
     "PERSON": "PERSON",

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { FolderOpen, LogIn, Mail, Plus, ScanSearch, Users, type LucideIcon } from "lucide-react";
+import { FolderOpen, LogIn, Mail, Plus, ScanSearch, Users, BarChart3, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,14 @@ const nav = [
   { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
 ] as const;
 
-type NavTo = "/" | "/audits" | "/new" | "/admin" | "/admin/mail";
+type NavTo = "/" | "/audits" | "/new" | "/admin" | "/admin/mail" | "/admin/stats";
 
 function navLabel(to: NavTo, t: Copy): string {
   if (to === "/") return t.nav.home;
   if (to === "/audits") return t.nav.audits;
   if (to === "/new") return t.nav.new;
   if (to === "/admin/mail") return t.nav.inbox;
+  if (to === "/admin/stats") return t.nav.stats;
   return t.nav.users;
 }
 
@@ -56,6 +57,9 @@ function AccountLinks({ compact = false, adminLinks = true }: { compact?: boolea
       {adminLinks && account.role === "admin" && (
         <>
           <Button asChild variant="ghost" size="sm">
+            <Link to="/admin/stats"><BarChart3 className="size-4" />{compact ? null : t.nav.stats}</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link to="/admin/mail"><Mail className="size-4" />{compact ? null : t.nav.inbox}</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
@@ -63,7 +67,7 @@ function AccountLinks({ compact = false, adminLinks = true }: { compact?: boolea
           </Button>
         </>
       )}
-      {!compact && <span className="max-w-40 truncate px-2 text-xs text-muted-foreground">{account.email}</span>}
+      {!compact && account.email ? <span className="max-w-40 truncate px-2 text-xs text-muted-foreground">{account.email}</span> : null}
       <Button variant="ghost" size="sm" onClick={() => void logout()}>{compact ? t.nav.exit : t.nav.logout}</Button>
     </div>
   );
@@ -79,6 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     ...nav,
     ...(account?.role === "admin"
       ? [
+          { to: "/admin/stats" as const, label: t.nav.stats, Icon: BarChart3, exact: true },
           { to: "/admin/mail" as const, label: t.nav.inbox, Icon: Mail, exact: true },
           { to: "/admin" as const, label: t.nav.users, Icon: Users, exact: true },
         ]
