@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const tr: Copy = {
   language: "Dil",
-  nav: { home: "Ana sayfa", audits: "Kontroller", new: "Yeni kontrol", users: "Kullanıcılar", login: "Giriş yap", logout: "Çıkış yap", exit: "Çıkış" },
+  nav: { home: "Ana sayfa", audits: "Kontroller", new: "Yeni kontrol", users: "Kullanıcılar", inbox: "Posta", login: "Giriş yap", logout: "Çıkış yap", exit: "Çıkış" },
   theme: { label: "Tema", light: "Açık", dusk: "Alacakaranlık", night: "Gece" },
   meta: {
     homeTitle: "Sverko — birincil belgelere göre rapor doğrulama",
@@ -10,6 +10,7 @@ export const tr: Copy = {
     login: "Giriş — Sverko",
     register: "Yeni hesap — Sverko",
     admin: "Kullanıcılar — Sverko",
+    inbox: "Posta — Sverko",
     newTitle: "Yeni kontrol — Sverko",
     newDescription: "Raporla başlayın: ad dosya adından doldurulur.",
     auditsTitle: "Kontroller — Sverko",
@@ -352,5 +353,6 @@ export const tr: Copy = {
     reviewerLine: "Denetçi kararı: {text}.",
     none: "alınmadı",
   },
+  inbox: { title: "Posta", lead: "Sverko kutusuna gönderilen iletiler.", empty: "Henüz ileti yok.", loadFailed: "Kutu açılamadı", openFailed: "İleti açılamadı", refresh: "Yenile", unread: "okunmadı", noText: "Bu iletide metin yok.", notConfigured: "Posta kutusu bağlı değil.", attachments: "Ekler", back: "Listeye dön", pick: "Bir ileti seçin.", tooLarge: "Bu ileti burada açmak için çok büyük." },
   admin: { title: "Kullanıcılar", lead: "Yönetici tüm kontrolleri görür. Kullanıcı yalnızca kendininkileri.", forbidden: "Bu sayfa yöneticiye açıktır.", loadFailed: "Kullanıcılar yüklenemedi", admin: "Yönetici", user: "Kullanıcı", makeUser: "Kullanıcı yap", makeAdmin: "Yönetici yap", newAccount: "Yeni hesap", password: "Parola", create: "Oluştur", createFailed: "Kullanıcı oluşturulamadı", roleFailed: "Rol değiştirilemedi", changePassword: "Parolamı değiştir", current: "Mevcut parola", next: "Yeni parola", savePassword: "Parolayı kaydet", passwordFailed: "Parola değiştirilemedi" },
 };

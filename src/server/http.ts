@@ -36,6 +36,7 @@ import {
   setReportDocument,
 } from "./db";
 import { loadEnv } from "./env";
+import { InboxError, listInbox, readInbox } from "./inbox";
 import { fileExtension, validateFile } from "./extract/index";
 import { dataDir } from "./paths";
 import { enqueue, enqueueRebuild, findSelectedIndicator, sha256, whenRebuildQueued } from "./process";
@@ -142,7 +143,31 @@ async function adminApi(request: Request, parts: string[]): Promise<Response> {
   if (parts[2] === "users" && parts.length === 3 && request.method === "GET") return json(await listAccounts(), 200);
   if (parts[2] === "users" && parts.length === 3 && request.method === "POST") return createUser(request);
   if (parts[2] === "users" && parts[3] && parts.length === 4 && request.method === "PATCH") return updateUser(request, parts[3]);
+  if (parts[2] === "inbox" && parts.length === 3 && request.method === "GET") return inboxList();
+  if (parts[2] === "inbox" && parts[3] && parts.length === 4 && request.method === "GET") return inboxLetter(parts[3]);
   return json({ error: "Не найдено" }, 404);
+}
+
+async function inboxList(): Promise<Response> {
+  try {
+    return json(await listInbox(), 200);
+  } catch (error) {
+    if (error instanceof InboxError) return json({ error: error.message }, 502);
+    throw error;
+  }
+}
+
+async function inboxLetter(rawUid: string): Promise<Response> {
+  const uid = Number(rawUid);
+  if (!Number.isInteger(uid) || uid < 1) return json({ error: "Некорректное письмо" }, 400);
+  try {
+    const letter = await readInbox(uid);
+    if (!letter) return json({ error: "Письмо не найдено" }, 404);
+    return json(letter, 200);
+  } catch (error) {
+    if (error instanceof InboxError) return json({ error: error.message }, error.code === "not_configured" ? 409 : 502);
+    throw error;
+  }
 }
 
 async function createUser(request: Request): Promise<Response> {

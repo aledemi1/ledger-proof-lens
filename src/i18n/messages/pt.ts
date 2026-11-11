@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const pt: Copy = {
   language: "Idioma",
-  nav: { home: "Início", audits: "Conferências", new: "Nova conferência", users: "Usuários", login: "Entrar", logout: "Sair", exit: "Saída" },
+  nav: { home: "Início", audits: "Conferências", new: "Nova conferência", users: "Usuários", inbox: "Correio", login: "Entrar", logout: "Sair", exit: "Saída" },
   theme: { label: "Tema", light: "Claro", dusk: "Crepúsculo", night: "Noite" },
   meta: {
     homeTitle: "Sverko — verificação de relatórios com documentos de origem",
@@ -10,6 +10,7 @@ export const pt: Copy = {
     login: "Login — Sverko",
     register: "Nova conta — Sverko",
     admin: "Usuários — Sverko",
+    inbox: "Correio — Sverko",
     newTitle: "Nova conferência — Sverko",
     newDescription: "Comece pelo relatório: o título virá do nome do arquivo.",
     auditsTitle: "Conferências — Sverko",
@@ -352,5 +353,6 @@ export const pt: Copy = {
     reviewerLine: "Decisão do revisor: {text}.",
     none: "não decidido",
   },
+  inbox: { title: "Correio", lead: "Mensagens enviadas para a caixa do Sverko.", empty: "Ainda não há mensagens.", loadFailed: "Não foi possível abrir a caixa", openFailed: "Não foi possível abrir a mensagem", refresh: "Atualizar", unread: "não lida", noText: "Esta mensagem não tem texto.", notConfigured: "A caixa não está ligada.", attachments: "Anexos", back: "Voltar à lista", pick: "Escolha uma mensagem.", tooLarge: "Esta mensagem é grande demais para abrir aqui." },
   admin: { title: "Usuários", lead: "O administrador vê todas as conferências. O usuário vê só as suas.", forbidden: "Esta página é só para o administrador.", loadFailed: "Não foi possível carregar os usuários", admin: "Administrador", user: "Usuário", makeUser: "Tornar usuário", makeAdmin: "Tornar administrador", newAccount: "Nova conta", password: "Senha", create: "Criar", createFailed: "Não foi possível criar o usuário", roleFailed: "Não foi possível alterar o papel", changePassword: "Alterar minha senha", current: "Senha atual", next: "Nova senha", savePassword: "Salvar senha", passwordFailed: "Não foi possível alterar a senha" },
 };

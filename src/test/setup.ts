@@ -5,6 +5,8 @@ process.env["ADMIN_EMAIL"] = "";
 process.env["ADMIN_PASSWORD"] = "";
 process.env["SMTP_HOST"] = "";
 process.env["SMTP_PASS"] = "";
+process.env["IMAP_HOST"] = "";
+process.env["IMAP_PASS"] = "";
 if (process.env["SVERKO_LIVE_AI"] !== "1") process.env["AI_API_KEY"] = "";
 
 if (typeof window !== "undefined") Object.defineProperty(window, "scrollTo", {

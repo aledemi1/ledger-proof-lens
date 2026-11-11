@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const de: Copy = {
   language: "Sprache",
-  nav: { home: "Start", audits: "Prüfungen", new: "Neue Prüfung", users: "Benutzer", login: "Anmelden", logout: "Abmelden", exit: "Beenden" },
+  nav: { home: "Start", audits: "Prüfungen", new: "Neue Prüfung", users: "Benutzer", inbox: "Post", login: "Anmelden", logout: "Abmelden", exit: "Beenden" },
   theme: { label: "Design", light: "Hell", dusk: "Dämmerung", night: "Nacht" },
   meta: {
     homeTitle: "Sverko — Berichte anhand von Belegen prüfen",
@@ -10,6 +10,7 @@ export const de: Copy = {
     login: "Anmelden — Sverko",
     register: "Neues Konto — Sverko",
     admin: "Benutzer — Sverko",
+    inbox: "Post — Sverko",
     newTitle: "Neue Prüfung — Sverko",
     newDescription: "Beginnen Sie mit dem Bericht: Der Titel wird aus dem Dateinamen übernommen.",
     auditsTitle: "Prüfungen — Sverko",
@@ -352,5 +353,6 @@ export const de: Copy = {
     reviewerLine: "Entscheidung des Prüfers: {text}.",
     none: "nicht entschieden",
   },
+  inbox: { title: "Post", lead: "Nachrichten an das Postfach von Sverko.", empty: "Noch keine Nachrichten.", loadFailed: "Postfach konnte nicht geöffnet werden", openFailed: "Nachricht konnte nicht geöffnet werden", refresh: "Aktualisieren", unread: "ungelesen", noText: "Diese Nachricht enthält keinen Text.", notConfigured: "Das Postfach ist nicht verbunden.", attachments: "Anhänge", back: "Zur Liste", pick: "Wählen Sie eine Nachricht.", tooLarge: "Diese Nachricht ist zu groß, um sie hier zu öffnen." },
   admin: { title: "Benutzer", lead: "Administratoren sehen alle Prüfungen. Benutzer nur eigene.", forbidden: "Diese Seite ist für Administratoren.", loadFailed: "Benutzer konnten nicht geladen werden", admin: "Administrator", user: "Benutzer", makeUser: "Zum Benutzer machen", makeAdmin: "Zum Administrator machen", newAccount: "Neues Konto", password: "Passwort", create: "Erstellen", createFailed: "Benutzer konnte nicht erstellt werden", roleFailed: "Rolle konnte nicht geändert werden", changePassword: "Eigenes Passwort ändern", current: "Aktuelles Passwort", next: "Neues Passwort", savePassword: "Passwort speichern", passwordFailed: "Passwort konnte nicht geändert werden" },
 };

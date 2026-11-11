@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const pl: Copy = {
   language: "Język",
-  nav: { home: "Strona główna", audits: "Kontrole", new: "Nowa kontrola", users: "Użytkownicy", login: "Zaloguj się", logout: "Wyloguj się", exit: "Wyjdź" },
+  nav: { home: "Strona główna", audits: "Kontrole", new: "Nowa kontrola", users: "Użytkownicy", inbox: "Poczta", login: "Zaloguj się", logout: "Wyloguj się", exit: "Wyjdź" },
   theme: { label: "Motyw", light: "Jasny", dusk: "Zmierzch", night: "Nocny" },
   meta: {
     homeTitle: "Sverko — weryfikacja raportu na podstawie dokumentów pierwotnych",
@@ -10,6 +10,7 @@ export const pl: Copy = {
     login: "Logowanie — Sverko",
     register: "Nowe konto — Sverko",
     admin: "Użytkownicy — Sverko",
+    inbox: "Poczta — Sverko",
     newTitle: "Nowa kontrola — Sverko",
     newDescription: "Zacznij od raportu: nazwa zostanie uzupełniona z nazwy pliku.",
     auditsTitle: "Kontrole — Sverko",
@@ -352,5 +353,6 @@ export const pl: Copy = {
     reviewerLine: "Decyzja weryfikatora: {text}.",
     none: "nie podjęto",
   },
+  inbox: { title: "Poczta", lead: "Wiadomości wysłane na skrzynkę Sverko.", empty: "Nie ma jeszcze wiadomości.", loadFailed: "Nie udało się otworzyć skrzynki", openFailed: "Nie udało się otworzyć wiadomości", refresh: "Odśwież", unread: "nieprzeczytane", noText: "Ta wiadomość nie ma tekstu.", notConfigured: "Skrzynka nie jest podłączona.", attachments: "Załączniki", back: "Wróć do listy", pick: "Wybierz wiadomość.", tooLarge: "Ta wiadomość jest za duża, aby otworzyć ją tutaj." },
   admin: { title: "Użytkownicy", lead: "Administrator widzi wszystkie kontrole. Użytkownik widzi tylko swoje.", forbidden: "Ta strona jest dostępna dla administratora.", loadFailed: "Nie udało się załadować użytkowników", admin: "Administrator", user: "Użytkownik", makeUser: "Ustaw jako użytkownika", makeAdmin: "Ustaw jako administratora", newAccount: "Nowe konto", password: "Hasło", create: "Utwórz", createFailed: "Nie udało się utworzyć użytkownika", roleFailed: "Nie udało się zmienić roli", changePassword: "Zmień własne hasło", current: "Bieżące hasło", next: "Nowe hasło", savePassword: "Zapisz hasło", passwordFailed: "Nie udało się zmienić hasła" },
 };

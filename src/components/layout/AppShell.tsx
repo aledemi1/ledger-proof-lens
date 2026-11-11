@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { FolderOpen, LogIn, Plus, ScanSearch, Users } from "lucide-react";
+import { FolderOpen, LogIn, Mail, Plus, ScanSearch, Users, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/hooks/useAccount";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import type { Copy } from "@/i18n/copy";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { useCopy } from "@/i18n/messages";
 import { loadAccount } from "@/lib/account";
@@ -16,6 +17,16 @@ const nav = [
   { to: "/new", label: "Новая проверка", Icon: Plus, exact: true },
 ] as const;
 
+type NavTo = "/" | "/audits" | "/new" | "/admin" | "/admin/mail";
+
+function navLabel(to: NavTo, t: Copy): string {
+  if (to === "/") return t.nav.home;
+  if (to === "/audits") return t.nav.audits;
+  if (to === "/new") return t.nav.new;
+  if (to === "/admin/mail") return t.nav.inbox;
+  return t.nav.users;
+}
+
 function Logo({ shortOnPhone = false }: { shortOnPhone?: boolean }) {
   return (
     <Link to="/" className="flex items-center gap-2 px-2">
@@ -25,7 +36,7 @@ function Logo({ shortOnPhone = false }: { shortOnPhone?: boolean }) {
   );
 }
 
-function AccountLinks({ compact = false }: { compact?: boolean }) {
+function AccountLinks({ compact = false, adminLinks = true }: { compact?: boolean; adminLinks?: boolean }) {
   const account = useAccount();
   const t = useCopy();
   const logout = async () => {
@@ -42,10 +53,15 @@ function AccountLinks({ compact = false }: { compact?: boolean }) {
   }
   return (
     <div className="flex items-center gap-1">
-      {account.role === "admin" && (
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/admin"><Users className="size-4" />{compact ? null : t.nav.users}</Link>
-        </Button>
+      {adminLinks && account.role === "admin" && (
+        <>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/admin/mail"><Mail className="size-4" />{compact ? null : t.nav.inbox}</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/admin"><Users className="size-4" />{compact ? null : t.nav.users}</Link>
+          </Button>
+        </>
       )}
       {!compact && <span className="max-w-40 truncate px-2 text-xs text-muted-foreground">{account.email}</span>}
       <Button variant="ghost" size="sm" onClick={() => void logout()}>{compact ? t.nav.exit : t.nav.logout}</Button>
@@ -59,7 +75,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const t = useCopy();
   const home = pathname === "/";
   const workspace = /^\/audits\/[^/]+\/?$/.test(pathname);
-  const items = account?.role === "admin" ? [...nav, { to: "/admin" as const, label: t.nav.users, Icon: Users, exact: true }] : nav;
+  const items: { to: NavTo; label: string; Icon: LucideIcon; exact: boolean }[] = [
+    ...nav,
+    ...(account?.role === "admin"
+      ? [
+          { to: "/admin/mail" as const, label: t.nav.inbox, Icon: Mail, exact: true },
+          { to: "/admin" as const, label: t.nav.users, Icon: Users, exact: true },
+        ]
+      : []),
+  ];
   if (home) return <div className="min-h-screen bg-background"><header className="no-print border-b border-border bg-card"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 lg:px-8"><Logo /><div className="flex items-center gap-1"><Button asChild variant="ghost" size="sm"><Link to="/audits"><FolderOpen className="size-4" />{t.nav.audits}</Link></Button><AccountLinks /><ThemeSwitcher /><LocaleSwitcher /></div></div></header><main>{children}</main></div>;
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
@@ -67,39 +91,39 @@ export function AppShell({ children }: { children: ReactNode }) {
         {workspace ? <Link to="/" aria-label="Sverko — главная" className="mx-auto grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><ScanSearch className="size-5" /></Link> : <Logo />}
         {!workspace && <div className="mt-4 flex gap-1.5 px-2"><ThemeSwitcher align="left" /><LocaleSwitcher align="left" /></div>}
         <nav className={cn(workspace ? "mt-6" : "mt-4", "flex flex-col gap-0.5 px-2")}>
-          {items.map(({ to, label, Icon, exact }) => (
+          {items.map(({ to, Icon, exact }) => (
             <Link
               key={to}
               to={to}
               activeOptions={{ exact }}
-              aria-label={to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users}
-              title={workspace ? label : undefined}
+              aria-label={navLabel(to, t)}
+              title={workspace ? navLabel(to, t) : undefined}
               className={cn("group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent", workspace && "h-10 justify-center")}
               activeProps={{ className: "bg-sidebar-accent font-medium text-sidebar-accent-foreground" }}
             >
               <Icon className="size-4" />
-              {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : label}</span> : (to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users)}
+              {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{navLabel(to, t)}</span> : navLabel(to, t)}
             </Link>
           ))}
         </nav>
-        <div className="mt-auto px-2"><AccountLinks compact={workspace} /></div>
+        <div className="mt-auto px-2"><AccountLinks compact={workspace} adminLinks={false} /></div>
       </aside>
       <header className="no-print sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Logo shortOnPhone />
         <nav className="flex gap-1">
-          {items.map(({ to, label, Icon, exact }) => (
+          {items.map(({ to, Icon, exact }) => (
             <Link
               key={to}
               to={to}
               activeOptions={{ exact }}
-              aria-label={to === "/" ? t.nav.home : to === "/audits" ? t.nav.audits : to === "/new" ? t.nav.new : t.nav.users}
+              aria-label={navLabel(to, t)}
               className={cn("grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent")}
               activeProps={{ className: "bg-accent text-accent-foreground" }}
             >
               <Icon className="size-4" />
             </Link>
           ))}
-          <AccountLinks compact />
+          <AccountLinks compact adminLinks={false} />
           <ThemeSwitcher compact />
           <LocaleSwitcher />
         </nav>

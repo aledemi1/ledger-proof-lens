@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const en: Copy = {
   language: "Language",
-  nav: { home: "Home", audits: "Reviews", new: "New review", users: "Users", login: "Sign in", logout: "Sign out", exit: "Exit" },
+  nav: { home: "Home", audits: "Reviews", new: "New review", users: "Users", inbox: "Mail", login: "Sign in", logout: "Sign out", exit: "Exit" },
   theme: { label: "Theme", light: "Light", dusk: "Dusk", night: "Night" },
   meta: {
     homeTitle: "Sverko — verify financial reports against source documents",
@@ -10,6 +10,7 @@ export const en: Copy = {
     login: "Sign in — Sverko",
     register: "New account — Sverko",
     admin: "Users — Sverko",
+    inbox: "Mail — Sverko",
     newTitle: "New review — Sverko",
     newDescription: "Start with the report: the title will be taken from the file name.",
     auditsTitle: "Reviews — Sverko",
@@ -352,5 +353,6 @@ export const en: Copy = {
     reviewerLine: "Reviewer decision: {text}.",
     none: "not decided",
   },
+  inbox: { title: "Mail", lead: "Messages sent to the Sverko mailbox.", empty: "No messages yet.", loadFailed: "Could not open the mailbox", openFailed: "Could not open the message", refresh: "Refresh", unread: "unread", noText: "This message has no text.", notConfigured: "The mailbox is not connected.", attachments: "Attachments", back: "Back to the list", pick: "Choose a message.", tooLarge: "This message is too large to open here." },
   admin: { title: "Users", lead: "Administrators see all reviews. Users see only their own.", forbidden: "This page is for administrators.", loadFailed: "Could not load users", admin: "Administrator", user: "User", makeUser: "Make user", makeAdmin: "Make administrator", newAccount: "New account", password: "Password", create: "Create", createFailed: "Could not create user", roleFailed: "Could not change role", changePassword: "Change your password", current: "Current password", next: "New password", savePassword: "Save password", passwordFailed: "Could not change password" },
 };

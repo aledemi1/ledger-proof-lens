@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const fr: Copy = {
   language: "Langue",
-  nav: { home: "Accueil", audits: "Contrôles", new: "Nouveau contrôle", users: "Utilisateurs", login: "Connexion", logout: "Déconnexion", exit: "Quitter" },
+  nav: { home: "Accueil", audits: "Contrôles", new: "Nouveau contrôle", users: "Utilisateurs", inbox: "Courrier", login: "Connexion", logout: "Déconnexion", exit: "Quitter" },
   theme: { label: "Thème", light: "Clair", dusk: "Crépuscule", night: "Nuit" },
   meta: {
     homeTitle: "Sverko — vérifier les rapports à partir des pièces justificatives",
@@ -10,6 +10,7 @@ export const fr: Copy = {
     login: "Connexion — Sverko",
     register: "Nouveau compte — Sverko",
     admin: "Utilisateurs — Sverko",
+    inbox: "Courrier — Sverko",
     newTitle: "Nouveau contrôle — Sverko",
     newDescription: "Commencez par le rapport : le titre sera repris du nom du fichier.",
     auditsTitle: "Contrôles — Sverko",
@@ -352,5 +353,6 @@ export const fr: Copy = {
     reviewerLine: "Décision du contrôleur : {text}.",
     none: "non décidé",
   },
+  inbox: { title: "Courrier", lead: "Messages envoyés à la boîte Sverko.", empty: "Aucun message pour le moment.", loadFailed: "Impossible d'ouvrir la boîte", openFailed: "Impossible d'ouvrir le message", refresh: "Actualiser", unread: "non lu", noText: "Ce message n'a pas de texte.", notConfigured: "La boîte n'est pas connectée.", attachments: "Pièces jointes", back: "Retour à la liste", pick: "Choisissez un message.", tooLarge: "Ce message est trop volumineux pour être ouvert ici." },
   admin: { title: "Utilisateurs", lead: "L'administrateur voit tous les contrôles. L'utilisateur ne voit que les siens.", forbidden: "Cette page est réservée à l'administrateur.", loadFailed: "Impossible de charger les utilisateurs", admin: "Administrateur", user: "Utilisateur", makeUser: "Passer en utilisateur", makeAdmin: "Passer en administrateur", newAccount: "Nouveau compte", password: "Mot de passe", create: "Créer", createFailed: "Impossible de créer l'utilisateur", roleFailed: "Impossible de changer le rôle", changePassword: "Changer votre mot de passe", current: "Mot de passe actuel", next: "Nouveau mot de passe", savePassword: "Enregistrer le mot de passe", passwordFailed: "Impossible de changer le mot de passe" },
 };

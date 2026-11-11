@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const ru: Copy = {
   language: "Язык",
-  nav: { home: "Главная", audits: "Проверки", new: "Новая проверка", users: "Пользователи", login: "Войти", logout: "Выйти", exit: "Выход" },
+  nav: { home: "Главная", audits: "Проверки", new: "Новая проверка", users: "Пользователи", inbox: "Почта", login: "Войти", logout: "Выйти", exit: "Выход" },
   theme: { label: "Тема", light: "Светлая", dusk: "Сумерки", night: "Ночная" },
   meta: {
     homeTitle: "Sverko — проверка достоверности отчётности по первичным документам",
@@ -10,6 +10,7 @@ export const ru: Copy = {
     login: "Вход — Sverko",
     register: "Новый аккаунт — Sverko",
     admin: "Пользователи — Sverko",
+    inbox: "Почта — Sverko",
     newTitle: "Новая проверка — Sverko",
     newDescription: "Начните с отчёта: название подставится из имени файла.",
     auditsTitle: "Проверки — Sverko",
@@ -352,5 +353,6 @@ export const ru: Copy = {
     reviewerLine: "Решение проверяющего: {text}.",
     none: "не принято",
   },
+  inbox: { title: "Почта", lead: "Письма, которые приходят на почту Sverko.", empty: "Пока писем нет.", loadFailed: "Не удалось открыть почту", openFailed: "Не удалось открыть письмо", refresh: "Обновить", unread: "непрочитано", noText: "В письме нет текста.", notConfigured: "Почтовый ящик не подключён.", attachments: "Вложения", back: "К списку", pick: "Выберите письмо.", tooLarge: "Письмо слишком большое, чтобы открыть его здесь." },
   admin: { title: "Пользователи", lead: "Администратор видит все проверки. Пользователь видит только свои.", forbidden: "Эта страница доступна администратору.", loadFailed: "Не удалось загрузить пользователей", admin: "Администратор", user: "Пользователь", makeUser: "Сделать пользователем", makeAdmin: "Сделать администратором", newAccount: "Новый аккаунт", password: "Пароль", create: "Создать", createFailed: "Не удалось создать пользователя", roleFailed: "Не удалось сменить роль", changePassword: "Сменить свой пароль", current: "Текущий пароль", next: "Новый пароль", savePassword: "Сохранить пароль", passwordFailed: "Не удалось сменить пароль" },
 };

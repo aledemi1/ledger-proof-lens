@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const it: Copy = {
   language: "Lingua",
-  nav: { home: "Home", audits: "Verifiche", new: "Nuova verifica", users: "Utenti", login: "Accedi", logout: "Esci", exit: "Uscita" },
+  nav: { home: "Home", audits: "Verifiche", new: "Nuova verifica", users: "Utenti", inbox: "Posta", login: "Accedi", logout: "Esci", exit: "Uscita" },
   theme: { label: "Tema", light: "Chiaro", dusk: "Crepuscolo", night: "Notte" },
   meta: {
     homeTitle: "Sverko — verifica della rendicontazione rispetto ai documenti di origine",
@@ -10,6 +10,7 @@ export const it: Copy = {
     login: "Accesso — Sverko",
     register: "Nuovo account — Sverko",
     admin: "Utenti — Sverko",
+    inbox: "Posta — Sverko",
     newTitle: "Nuova verifica — Sverko",
     newDescription: "Iniziate dal report: il titolo verrà preso dal nome del file.",
     auditsTitle: "Verifiche — Sverko",
@@ -352,5 +353,6 @@ export const it: Copy = {
     reviewerLine: "Decisione del revisore: {text}.",
     none: "non deciso",
   },
+  inbox: { title: "Posta", lead: "Messaggi inviati alla casella di Sverko.", empty: "Nessun messaggio per ora.", loadFailed: "Impossibile aprire la casella", openFailed: "Impossibile aprire il messaggio", refresh: "Aggiorna", unread: "non letto", noText: "Questo messaggio non ha testo.", notConfigured: "La casella non è collegata.", attachments: "Allegati", back: "Torna all'elenco", pick: "Scegli un messaggio.", tooLarge: "Questo messaggio è troppo grande per aprirlo qui." },
   admin: { title: "Utenti", lead: "L'amministratore vede tutte le verifiche. L'utente vede solo le proprie.", forbidden: "Questa pagina è riservata all'amministratore.", loadFailed: "Impossibile caricare gli utenti", admin: "Amministratore", user: "Utente", makeUser: "Rendi utente", makeAdmin: "Rendi amministratore", newAccount: "Nuovo account", password: "Password", create: "Crea", createFailed: "Impossibile creare l'utente", roleFailed: "Impossibile cambiare ruolo", changePassword: "Cambia la mia password", current: "Password attuale", next: "Nuova password", savePassword: "Salva password", passwordFailed: "Impossibile cambiare la password" },
 };

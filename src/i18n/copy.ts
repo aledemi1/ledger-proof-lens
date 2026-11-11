@@ -1,8 +1,8 @@
 export interface Copy {
   language: string;
-  nav: { home: string; audits: string; new: string; users: string; login: string; logout: string; exit: string };
+  nav: { home: string; audits: string; new: string; users: string; inbox: string; login: string; logout: string; exit: string };
   theme: { label: string; light: string; dusk: string; night: string };
-  meta: { homeTitle: string; homeDescription: string; login: string; register: string; admin: string; newTitle: string; newDescription: string; auditsTitle: string; auditsDescription: string; workspace: string; conclusion: string };
+  meta: { homeTitle: string; homeDescription: string; login: string; register: string; admin: string; inbox: string; newTitle: string; newDescription: string; auditsTitle: string; auditsDescription: string; workspace: string; conclusion: string };
   common: { loading: string; notFoundTitle: string; notFoundText: string; home: string; tryAgain: string; pageFailed: string; pageFailedText: string; cancel: string; save: string; close: string; demo: string; demoTitle: string; example: string };
   status: { match: string; mismatch: string; notFound: string; needsReview: string };
   category: { match: string; mismatch: string; notFound: string; needsReview: string };
@@ -56,5 +56,6 @@ export interface Copy {
     excelField: string; excelReport: string; excelSource: string; excelStatus: string; excelDecision: string; excelComment: string; excelSources: string; excelDocument: string; excelPlace: string; sheetFindings: string; sheetEvidence: string; fileSuffix: string;
     decisionAccept: string; decisionRevise: string; findingsHeading: string; systemLine: string; reviewerLine: string; none: string;
   };
+  inbox: { title: string; lead: string; empty: string; loadFailed: string; openFailed: string; refresh: string; unread: string; noText: string; notConfigured: string; attachments: string; back: string; pick: string; tooLarge: string };
   admin: { title: string; lead: string; forbidden: string; loadFailed: string; admin: string; user: string; makeUser: string; makeAdmin: string; newAccount: string; password: string; create: string; createFailed: string; roleFailed: string; changePassword: string; current: string; next: string; savePassword: string; passwordFailed: string };
 }

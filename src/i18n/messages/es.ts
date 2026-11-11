@@ -2,7 +2,7 @@ import type { Copy } from "../copy";
 
 export const es: Copy = {
   language: "Idioma",
-  nav: { home: "Inicio", audits: "Revisiones", new: "Nueva revisión", users: "Usuarios", login: "Iniciar sesión", logout: "Cerrar sesión", exit: "Salir" },
+  nav: { home: "Inicio", audits: "Revisiones", new: "Nueva revisión", users: "Usuarios", inbox: "Correo", login: "Iniciar sesión", logout: "Cerrar sesión", exit: "Salir" },
   theme: { label: "Tema", light: "Claro", dusk: "Crepúsculo", night: "Noche" },
   meta: {
     homeTitle: "Sverko — verificación de informes frente a documentos fuente",
@@ -10,6 +10,7 @@ export const es: Copy = {
     login: "Inicio de sesión — Sverko",
     register: "Nueva cuenta — Sverko",
     admin: "Usuarios — Sverko",
+    inbox: "Correo — Sverko",
     newTitle: "Nueva revisión — Sverko",
     newDescription: "Empiece con el informe: el título se tomará del nombre del archivo.",
     auditsTitle: "Revisiones — Sverko",
@@ -352,5 +353,6 @@ export const es: Copy = {
     reviewerLine: "Decisión del revisor: {text}.",
     none: "sin decisión",
   },
+  inbox: { title: "Correo", lead: "Mensajes enviados al buzón de Sverko.", empty: "Todavía no hay mensajes.", loadFailed: "No se pudo abrir el buzón", openFailed: "No se pudo abrir el mensaje", refresh: "Actualizar", unread: "no leído", noText: "Este mensaje no tiene texto.", notConfigured: "El buzón no está conectado.", attachments: "Adjuntos", back: "Volver a la lista", pick: "Elija un mensaje.", tooLarge: "Este mensaje es demasiado grande para abrirlo aquí." },
   admin: { title: "Usuarios", lead: "El administrador ve todas las revisiones. El usuario solo ve las suyas.", forbidden: "Esta página es solo para el administrador.", loadFailed: "No se pudieron cargar los usuarios", admin: "Administrador", user: "Usuario", makeUser: "Convertir en usuario", makeAdmin: "Convertir en administrador", newAccount: "Nueva cuenta", password: "Contraseña", create: "Crear", createFailed: "No se pudo crear el usuario", roleFailed: "No se pudo cambiar el rol", changePassword: "Cambiar mi contraseña", current: "Contraseña actual", next: "Nueva contraseña", savePassword: "Guardar contraseña", passwordFailed: "No se pudo cambiar la contraseña" },
 };
