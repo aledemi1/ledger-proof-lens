@@ -34,9 +34,8 @@ RUN pip install --no-cache-dir \
     "presidio-analyzer>=2.2,<3" \
     "presidio-anonymizer>=2.2,<3" \
   && python -m spacy download en_core_web_sm
-COPY scripts/privacy/mask_bridge.py /tmp/mask_bridge.py
 RUN mkdir -p /opt/cache \
-  && printf '%s' '{"action":"mask","items":[{"id":"0","text":"Иван Петров, ИНН 7707083893, почта a@b.ru"}]}' | python /tmp/mask_bridge.py
+  && python -c "from pii_mask.core import Masker; from presidio_analyzer import AnalyzerEngine; Masker(ner=True).mask('\u0418\u0432\u0430\u043d \u041f\u0435\u0442\u0440\u043e\u0432, 7707083893', {'version': 1, 'labels': {}}); AnalyzerEngine().analyze(text='john@example.com', language='en')"
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
