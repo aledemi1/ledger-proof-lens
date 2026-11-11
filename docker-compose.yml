@@ -1,0 +1,35 @@
+# Local run with PostgreSQL. SQLite is enough without this file: see README, docker run.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sverko
+      POSTGRES_PASSWORD: sverko
+      POSTGRES_DB: sverko
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sverko -d sverko"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      args:
+        RUN_TESTS: "0"
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://sverko:sverko@db:5432/sverko
+      SVERKO_DATA_DIR: /data
+    volumes:
+      - sverko-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  sverko-data:
