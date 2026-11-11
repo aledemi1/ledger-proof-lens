@@ -537,7 +537,10 @@ function partySide(text: string): "supplier" | "buyer" | "any" {
 }
 
 function isService(fact: Fact): boolean {
-  return /перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|fracht|vervoer|nakliye|installation|instal|montage|montaje|montaggio|monta[zż]|training|schulung|formation|formazione|formaci[oó]n|szkol|eğitim|egitim|commissioning|inbetriebnahme|mise en service|inbedrijf|puesta en marcha|avviamento|rozruch|devreye|certificat|zertifiz|aarding|uziem|toprak|运输|安装|培训|调试|认证|接地/i.test(`${fact.item ?? ""} ${fact.label}`);
+  const line = `${fact.item ?? ""} ${fact.label} ${fact.fragment.rowLabel ?? ""}`;
+  if (/услуг|services?|dienst|prestation|servicio|servi[cç]o|hizmet|服务|перевоз|монтаж|обучен|пусконалад|сертификац|заземл|transport|fracht|vervoer|nakliye|installation|instal|montage|montaje|montaggio|monta[zż]|training|schulung|formation|formazione|formaci[oó]n|szkol|eğitim|egitim|commissioning|inbetriebnahme|mise en service|inbedrijf|puesta en marcha|avviamento|rozruch|devreye|certificat|zertifiz|aarding|uziem|toprak|运输|安装|培训|调试|认证|接地/i.test(line)) return true;
+  if (/журнал|реестр|наклад|спецификац|склад|отчет|отчёт/i.test(fact.docName)) return false;
+  return /услуг|монтаж|обучен|перевоз|пусконалад|сертификац|заземл/i.test(fact.docName);
 }
 
 function isBlanketTotal(fact: Fact): boolean {
@@ -675,6 +678,25 @@ function distinctAmounts(parts: Fact[]): Fact[] {
     if (!seen.has(key)) seen.set(key, part);
   }
   return [...seen.values()];
+}
+
+function preferNewer(parts: Fact[]): { kept: Fact[]; older: Fact[] } {
+  const documents = new Set(parts.map((part) => part.documentId));
+  if (documents.size < 2) return { kept: parts, older: [] };
+  const dated = parts.filter((part) => part.operationDate);
+  if (dated.length < 2) return { kept: parts, older: [] };
+  const newest = dated.map((part) => part.operationDate ?? "").sort().at(-1) ?? "";
+  const older = dated.filter((part) => part.operationDate !== newest);
+  if (!older.length || new Set(dated.map(amountKey)).size <= 1) return { kept: parts, older: [] };
+  const subject = new Set(parts.map((part) => normText(`${part.item ?? ""} ${part.label}`)));
+  if (subject.size > 1) return { kept: parts, older: [] };
+  return { kept: dated.filter((part) => part.operationDate === newest), older };
+}
+
+function dateNote(older: Fact[]): string {
+  if (!older.length) return "";
+  const listed = older.map((part) => `${part.docName}${part.operationDate ? ` от ${part.operationDate.split("-").reverse().join(".")}` : ""}`).join(", ");
+  return ` Более новый документ имеет приоритет. Более ранние не вошли в расчёт: ${listed}.`;
 }
 
 function additiveShipments(parts: Fact[]): boolean {
@@ -1038,7 +1060,9 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
     }
     if (!parts.length) return null;
     const collapsedMoney = collapseSameDocument(parts);
-    const disagreedMoney = distinctAmounts(collapsedMoney.filter((part) => !isReturnDoc(part)));
+    let disagreedMoney = distinctAmounts(collapsedMoney.filter((part) => !isReturnDoc(part)));
+    const newer = fact.role === "line_total" && !additiveShipments(disagreedMoney) ? preferNewer(disagreedMoney) : { kept: disagreedMoney, older: [] as Fact[] };
+    if (newer.older.length) disagreedMoney = newer.kept;
     const sameMoney = new Set(disagreedMoney.map(amountKey)).size <= 1;
     const acrossDocuments = new Set(disagreedMoney.map((part) => part.documentId)).size > 1;
     if (fact.role === "line_total" && disagreedMoney.length > 1 && !sameMoney && !additiveShipments(disagreedMoney) && acrossDocuments) {
@@ -1068,7 +1092,7 @@ function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; 
       discrepancy: same ? null : formatSigned(fact.parsed.minor - total, "₽"),
       status: same ? "match" : "mismatch",
       severity: same ? "low" : "high",
-      explanation: `Сумма собрана из строк одной операции${fact.net ? " за вычетом возврата" : ""}: ${moneyParts.slice(0, 8).map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, "₽")}.`,
+      explanation: `Сумма собрана из строк одной операции${fact.net ? " за вычетом возврата" : ""}: ${moneyParts.slice(0, 8).map((part) => `${part.raw} (${part.docName})`).join(", ")}. Итого ${formatScaled(total, "₽")}.${dateNote(newer.older)}`,
       evidenceReferences: moneyParts.map((part) => reference(part.documentId, part.fragment, part.raw)),
       unit: "₽",
     };
@@ -1512,16 +1536,22 @@ function detectNumber(kind: DocKind, name: string, text: string): string | undef
   return fromName?.[1];
 }
 
-export function duplicateNames(report: PreparedDoc, supporting: PreparedDoc[]): string[] {
+export function withoutDuplicates(report: PreparedDoc, supporting: PreparedDoc[]): { unique: PreparedDoc[]; duplicates: PreparedDoc[] } {
   const seen = new Set<string>([report.sha256, fingerprint(report.read.fragments.map((fragment) => fragment.text))]);
-  const names: string[] = [];
+  const unique: PreparedDoc[] = [];
+  const duplicates: PreparedDoc[] = [];
   for (const doc of supporting) {
     const fp = fingerprint(doc.read.fragments.map((fragment) => fragment.text));
-    if (seen.has(doc.sha256) || (fp && seen.has(fp))) names.push(doc.name);
+    if (seen.has(doc.sha256) || (fp && seen.has(fp))) duplicates.push(doc);
     else {
       seen.add(doc.sha256);
       if (fp) seen.add(fp);
+      unique.push(doc);
     }
   }
-  return names;
+  return { unique, duplicates };
+}
+
+export function duplicateNames(report: PreparedDoc, supporting: PreparedDoc[]): string[] {
+  return withoutDuplicates(report, supporting).duplicates.map((doc) => doc.name);
 }

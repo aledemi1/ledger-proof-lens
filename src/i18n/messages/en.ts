@@ -187,7 +187,7 @@ export const en: Copy = {
     more: "Additional actions",
     reset: "Reset decisions",
     resetDone: "Reviewer decisions reset",
-    toConclusion: "To conclusion",
+    toConclusion: "To conclusion", hintFill: "The report should say {value}", saveValue: "Write into the report", downloadFile: "Download", downloadRevised: "Download the corrected report",
     unread: "Unread files: {n}.",
     recheck: "Re-run «{title}»: closed {closed}, remaining {remaining}, new {appeared}.",
     prevIssue: "Previous finding",

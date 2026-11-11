@@ -187,7 +187,7 @@ export const de: Copy = {
     more: "Weitere Aktionen",
     reset: "Entscheidungen zurücksetzen",
     resetDone: "Prüferentscheidungen zurückgesetzt",
-    toConclusion: "Zur Schlussfolgerung",
+    toConclusion: "Zur Schlussfolgerung", hintFill: "Im Bericht muss {value} stehen", saveValue: "In den Bericht schreiben", downloadFile: "Herunterladen", downloadRevised: "Korrigierten Bericht herunterladen",
     unread: "Ungelesene Dateien: {n}.",
     recheck: "Erneut «{title}»: geschlossen {closed}, offen {remaining}, neu {appeared}.",
     prevIssue: "Vorherige Feststellung",

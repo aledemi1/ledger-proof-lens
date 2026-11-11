@@ -187,7 +187,7 @@ export const tr: Copy = {
     more: "Ek işlemler",
     reset: "Kararları sıfırla",
     resetDone: "Denetçi kararları sıfırlandı",
-    toConclusion: "Sonuca",
+    toConclusion: "Sonuca", hintFill: "Raporda {value} yazmalı", saveValue: "Rapora yaz", downloadFile: "İndir", downloadRevised: "Düzeltilmiş raporu indir",
     unread: "Okunmamış dosya: {n}.",
     recheck: "«{title}» yeniden: kapanan {closed}, kalan {remaining}, yeni {appeared}.",
     prevIssue: "Önceki bulgu",

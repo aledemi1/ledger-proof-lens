@@ -187,7 +187,7 @@ export const fr: Copy = {
     more: "Actions supplémentaires",
     reset: "Réinitialiser les décisions",
     resetDone: "Décisions du contrôleur réinitialisées",
-    toConclusion: "Vers la conclusion",
+    toConclusion: "Vers la conclusion", hintFill: "Le rapport doit indiquer {value}", saveValue: "Écrire dans le rapport", downloadFile: "Télécharger", downloadRevised: "Télécharger le rapport corrigé",
     unread: "Fichiers non lus : {n}.",
     recheck: "Relance « {title} » : fermés {closed}, restants {remaining}, apparus {appeared}.",
     prevIssue: "Anomalie précédente",

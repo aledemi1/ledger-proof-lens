@@ -18,6 +18,7 @@ export interface AuditService {
   getDocuments(sessionId: string): Promise<AuditDocument[]>;
   getChecks(sessionId: string): Promise<CheckResult[]>;
   updateReview(sessionId: string, checkId: string, update: ReviewUpdate): Promise<CheckResult>;
+  updateReportValue(sessionId: string, checkId: string, value: string): Promise<CheckResult>;
   resetReviews(sessionId: string): Promise<void>;
   setReviewerDecision(sessionId: string, decision: Decision | null, comment?: string): Promise<AuditSession>;
   createDraft(input: NewDraftInput): Promise<AuditSession>;

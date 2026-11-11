@@ -19,7 +19,7 @@ import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithMod
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { CheckResult, CheckStatus } from "@/types/audit";
-import { duplicateNames, reconcile, unknownLabels } from "./reconcile";
+import { reconcile, unknownLabels, withoutDuplicates } from "./reconcile";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
 const sessionLimit = createLimiter(workerCount("SVERKO_SESSION_CONCURRENCY", Math.min(4, Math.max(2, cores))));
@@ -143,19 +143,20 @@ export async function processSession(sessionId: string, replace = false): Promis
   ).filter((doc): doc is PreparedDoc => doc != null);
 
   await setStage(sessionId, "matching");
+  const separated = withoutDuplicates(reportDoc, supporting);
   const modelNotices: string[] = [];
   const config = aiConfig();
   let checks: CheckResult[] = [];
   if (config) {
     try {
-      checks = findingsToChecks(await scanPackInTwoStages(reportDoc, supporting), reportDoc.id);
+      checks = findingsToChecks(await scanPackInTwoStages(reportDoc, separated.unique), reportDoc.id);
       if (checks.length) modelNotices.push("Показатели сначала выделены по одному отчёту, затем сверены с первичными документами. Статус посчитан по цитатам, которые есть в файлах.");
     } catch (error) {
       const reason = error instanceof Error ? error.message : "нет ответа";
       modelNotices.push(`Полный просмотр не выполнен (${reason}). Результат посчитан правилами.`);
     }
   }
-  if (!checks.length) checks = await ruleChecks(reportDoc, supporting, fileErrors, modelNotices);
+  if (!checks.length) checks = await ruleChecks(reportDoc, separated.unique, fileErrors, modelNotices);
   if (!checks.length) {
     await markFailed(
       sessionId,
@@ -166,7 +167,7 @@ export async function processSession(sessionId: string, replace = false): Promis
   }
   const notices = [
     ...modelNotices,
-    ...duplicateNames(reportDoc, supporting).map((name) => `«${name}» повторяет уже учтённый файл и не увеличивает суммы.`),
+    ...separated.duplicates.map((doc) => `«${doc.name}» повторяет уже учтённый файл и не увеличивает суммы.`),
   ];
   if (fileErrors.length) notices.unshift("Проверка неполная: часть подтверждающих файлов не прочитана. Найденные результаты сохранены.");
   if (!replace && (await checkCount(sessionId)) > 0) return;

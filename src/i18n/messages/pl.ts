@@ -187,7 +187,7 @@ export const pl: Copy = {
     more: "Dodatkowe działania",
     reset: "Resetuj decyzje",
     resetDone: "Decyzje weryfikatora zostały zresetowane",
-    toConclusion: "Do podsumowania",
+    toConclusion: "Do podsumowania", hintFill: "W raporcie powinno być {value}", saveValue: "Zapisz w raporcie", downloadFile: "Pobierz", downloadRevised: "Pobierz poprawiony raport",
     unread: "Nieodczytanych plików: {n}.",
     recheck: "Powtórka „{title}”: zamknięto {closed}, pozostało {remaining}, pojawiło się {appeared}.",
     prevIssue: "Poprzednia uwaga",

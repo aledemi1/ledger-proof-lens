@@ -187,7 +187,7 @@ export const es: Copy = {
     more: "Más acciones",
     reset: "Restablecer decisiones",
     resetDone: "Decisiones del revisor restablecidas",
-    toConclusion: "Ir a la conclusión",
+    toConclusion: "Ir a la conclusión", hintFill: "El informe debe decir {value}", saveValue: "Escribir en el informe", downloadFile: "Descargar", downloadRevised: "Descargar el informe corregido",
     unread: "Archivos sin leer: {n}.",
     recheck: "Repetición «{title}»: cerrados {closed}, restantes {remaining}, nuevos {appeared}.",
     prevIssue: "Observación anterior",

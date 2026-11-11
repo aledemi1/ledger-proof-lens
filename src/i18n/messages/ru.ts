@@ -187,7 +187,7 @@ export const ru: Copy = {
     more: "Дополнительные действия",
     reset: "Сбросить решения",
     resetDone: "Решения проверяющего сброшены",
-    toConclusion: "К заключению",
+    toConclusion: "К заключению", hintFill: "В отчёт нужно вписать {value}", saveValue: "Записать в отчёт", downloadFile: "Скачать", downloadRevised: "Скачать отчёт с правками",
     unread: "Непрочитано файлов: {n}.",
     recheck: "Повтор «{title}»: закрылось {closed}, осталось {remaining}, появилось {appeared}.",
     prevIssue: "Предыдущее замечание",

@@ -187,7 +187,7 @@ export const pt: Copy = {
     more: "Mais ações",
     reset: "Redefinir decisões",
     resetDone: "Decisões do revisor redefinidas",
-    toConclusion: "Ir à conclusão",
+    toConclusion: "Ir à conclusão", hintFill: "O relatório deve dizer {value}", saveValue: "Gravar no relatório", downloadFile: "Baixar", downloadRevised: "Baixar o relatório corrigido",
     unread: "Arquivos não lidos: {n}.",
     recheck: "Repetição «{title}»: fechados {closed}, restantes {remaining}, surgiram {appeared}.",
     prevIssue: "Apontamento anterior",

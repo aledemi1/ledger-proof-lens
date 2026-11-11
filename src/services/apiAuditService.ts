@@ -87,6 +87,15 @@ export const apiAuditService: AuditService = {
     emit();
     return updated;
   },
+  async updateReportValue(sessionId, checkId, value) {
+    if (await isDemo(sessionId)) throw new AuditApiError("Демонстрационный отчёт не редактируется", 400);
+    const updated = await request<CheckResult>(`/api/audits/${sessionId}/checks/${checkId}/report-value`, {
+      method: "POST",
+      body: JSON.stringify({ value }),
+    });
+    emit();
+    return updated;
+  },
   async resetReviews(sessionId) {
     if (await isDemo(sessionId)) {
       await mockAuditService.resetReviews(sessionId);

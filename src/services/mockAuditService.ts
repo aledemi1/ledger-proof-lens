@@ -83,6 +83,9 @@ export const mockAuditService: AuditService = {
   async getChecks(sessionId) {
     return (await this.getSession(sessionId))?.checks ?? [];
   },
+  async updateReportValue() {
+    throw new Error("Демонстрационный отчёт не редактируется");
+  },
   async updateReview(sessionId, checkId, update) {
     const store = read();
     const session = allSessions(store, await demoPack()).find((s) => s.id === sessionId);

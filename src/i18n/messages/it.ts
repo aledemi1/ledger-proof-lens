@@ -187,7 +187,7 @@ export const it: Copy = {
     more: "Altre azioni",
     reset: "Reimposta decisioni",
     resetDone: "Decisioni del revisore reimpostate",
-    toConclusion: "Alla conclusione",
+    toConclusion: "Alla conclusione", hintFill: "Nel rapporto va scritto {value}", saveValue: "Scrivi nel rapporto", downloadFile: "Scarica", downloadRevised: "Scarica il rapporto corretto",
     unread: "File non letti: {n}.",
     recheck: "Ripetizione «{title}»: chiusi {closed}, restanti {remaining}, comparsi {appeared}.",
     prevIssue: "Osservazione precedente",

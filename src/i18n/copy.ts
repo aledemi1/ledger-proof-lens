@@ -36,7 +36,7 @@ export interface Copy {
     toList: string; back: string; next: string; start: string; started: string; failed: string; remove: string;
   };
   work: {
-    loading: string; openFailed: string; backToAudits: string; missing: string; reviewed: string; of: string; summary: string; summaryLead: string; results: string; hideHint: string; auditStatus: string; more: string; reset: string; resetDone: string; toConclusion: string; unread: string; recheck: string;
+    loading: string; openFailed: string; backToAudits: string; missing: string; reviewed: string; of: string; summary: string; summaryLead: string; results: string; hideHint: string; auditStatus: string; more: string; reset: string; resetDone: string; toConclusion: string; hintFill: string; saveValue: string; downloadFile: string; downloadRevised: string; unread: string; recheck: string;
     prevIssue: string; nextIssue: string; issues: string; hidden: string; none: string; all: string; search: string; onlyOpen: string; moreRelated: string; noFilter: string; noReport: string; pickSource: string;
     skipped: string; demoLocked: string; addedOne: string; addedMany: string; addFailed: string; add: string; pickToCheck: string; checkThis: string; checking: string; checked: string; checkFailed: string; paragraph: string; table: string; findFragment: string; openSourceFirst: string; noRows: string;
     inReport: string; notFoundIn: string; inDocument: string; difference: string; sourceN: string; prevSource: string; nextSource: string; hide: string; details: string; notInOpen: string; openFile: string;

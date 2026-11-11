@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mailConfigured } from "./mail";
 import fs from "node:fs";
 import path from "node:path";
-import type { Decision, DocumentType, EvidenceReference, ReviewerStatus } from "@/types/audit";
+import type { CheckResult, Decision, DocumentType, EvidenceReference, ReviewerStatus } from "@/types/audit";
 import {
   AccountError,
   accountFromToken,
@@ -37,9 +37,11 @@ import {
 } from "./db";
 import { loadEnv } from "./env";
 import { InboxError, listInbox, readInbox } from "./inbox";
-import { adminStats } from "./store";
+import { adminStats, get, run } from "./store";
 import { fileExtension, validateFile } from "./extract/index";
 import { dataDir } from "./paths";
+import { formatSigned, parseMoney, parseQuantity } from "./values";
+import * as XLSX from "xlsx";
 import { enqueue, enqueueRebuild, findSelectedIndicator, sha256, whenRebuildQueued } from "./process";
 
 const TYPES = new Set(["unknown", "act", "invoice", "waybill", "contract", "payment", "other", "report"]);
@@ -88,7 +90,10 @@ async function register(request: Request): Promise<Response> {
       return json({ pending: true, email }, 202);
     }
     const token = await openAuthSession(account.id);
-    return json(account, 201, authCookie(token, request));
+    const response = json(account, 201, authCookie(token, request));
+    const clearGuest = await claimGuestAudits(request, account.id);
+    if (clearGuest) response.headers.append("Set-Cookie", clearGuest);
+    return response;
   } catch (error) {
     if (error instanceof AccountError) return json({ error: error.message }, error.code === "duplicate" ? 409 : 400);
     throw error;
@@ -101,7 +106,10 @@ async function verifyEmail(request: Request): Promise<Response> {
   try {
     const account = await confirmEmail(body.token);
     const token = await openAuthSession(account.id);
-    return json(account, 200, authCookie(token, request));
+    const response = json(account, 200, authCookie(token, request));
+    const clearGuest = await claimGuestAudits(request, account.id);
+    if (clearGuest) response.headers.append("Set-Cookie", clearGuest);
+    return response;
   } catch (error) {
     if (error instanceof AccountError) return json({ error: error.message }, 400);
     throw error;
@@ -115,7 +123,10 @@ async function login(request: Request): Promise<Response> {
   if (account === "unverified") return json({ error: "Сначала подтвердите почту по ссылке из письма" }, 403);
   if (!account) return json({ error: "Неверная почта или пароль" }, 401);
   const token = await openAuthSession(account.id);
-  return json(account, 200, authCookie(token, request));
+  const response = json(account, 200, authCookie(token, request));
+  const clearGuest = await claimGuestAudits(request, account.id);
+  if (clearGuest) response.headers.append("Set-Cookie", clearGuest);
+  return response;
 }
 
 async function logout(request: Request): Promise<Response> {
@@ -221,8 +232,9 @@ async function auditsApi(request: Request, parts: string[], user: Account): Prom
   }
   if (parts[3] === "documents" && request.method === "GET") return json(await readDocuments(id), 200);
   if (parts[3] === "documents" && request.method === "POST") return addDocuments(request, id);
-  if (parts[3] === "files" && parts[4] && request.method === "GET") return fileResponse(id, parts[4]);
+  if (parts[3] === "files" && parts[4] && request.method === "GET") return fileResponse(id, parts[4], request);
   if (parts[3] === "checks" && parts[4] && parts[5] === "review" && request.method === "POST") return review(request, id, parts[4]);
+  if (parts[3] === "checks" && parts[4] && parts[5] === "report-value" && request.method === "POST") return reviseReport(request, id, parts[4]);
   if (parts[3] === "indicators" && request.method === "POST") return addIndicator(request, id);
   if (parts[3] === "decision" && request.method === "POST") return decision(request, id);
   if (parts[3] === "reviews" && parts[4] === "reset" && request.method === "POST") {
@@ -396,18 +408,73 @@ async function decision(request: Request, sessionId: string): Promise<Response> 
   return json(await readSession(sessionId), 200);
 }
 
-async function fileResponse(sessionId: string, documentId: string): Promise<Response> {
+async function reviseReport(request: Request, sessionId: string, checkId: string): Promise<Response> {
+  const body = await readJson<{ value?: string }>(request);
+  const value = body?.value?.trim() ?? "";
+  if (!value) return json({ error: "Введите значение" }, 400);
+  const row = await get<{ payload: string }>("SELECT payload FROM checks WHERE session_id = ? AND id = ?", [sessionId, checkId]);
+  if (!row) return json({ error: "Показатель не найден" }, 404);
+  const stored = JSON.parse(row.payload) as CheckResult;
+  const next = revisedCheck(stored, value);
+  await run("UPDATE checks SET payload = ? WHERE session_id = ? AND id = ?", [JSON.stringify(next), sessionId, checkId]);
+  const updated = (await readSession(sessionId))?.checks.find((check) => check.id === checkId);
+  return json(updated ?? next, 200);
+}
+
+function revisedCheck(check: CheckResult, value: string): CheckResult {
+  const next: CheckResult = { ...check, reportValue: value, reportEdited: true };
+  const left = parseMoney(value) ?? parseQuantity(value)?.minor ?? null;
+  const right = check.sourceValue ? parseMoney(check.sourceValue) ?? parseQuantity(check.sourceValue)?.minor ?? null : null;
+  if (left == null || right == null) {
+    next.status = "needs_review";
+    next.discrepancy = null;
+    next.explanation = `${check.explanation} В отчёт записано «${value}». Сравнить с источником как число не удалось.`;
+    return next;
+  }
+  const same = left === right;
+  const suffix = parseMoney(value) != null || parseMoney(check.sourceValue ?? "") != null ? "₽" : check.unit ?? "";
+  next.status = same ? "match" : "mismatch";
+  next.discrepancy = same ? null : formatSigned(left - right, suffix);
+  next.explanation = same
+    ? `В отчёт записано значение источника: ${value}. Расхождение снято.`
+    : `В отчёт записано ${value}. Источник по-прежнему ${check.sourceValue}. ${next.discrepancy ? `Разница ${next.discrepancy}.` : ""}`;
+  return next;
+}
+
+async function fileResponse(sessionId: string, documentId: string, request: Request): Promise<Response> {
   if (!/^doc_[a-f0-9]+$/.test(documentId)) return json({ error: "Документ не найден" }, 404);
   const file = await readDocumentFile(sessionId, documentId);
   if (!file || !fs.existsSync(file.path)) return json({ error: "Документ не найден" }, 404);
-  const data = fs.readFileSync(file.path);
+  let data = fs.readFileSync(file.path);
+  const revised = new URL(request.url).searchParams.get("revised") === "1";
+  let name = file.name;
+  if (revised && file.name.toLowerCase().endsWith(".xlsx")) {
+    const session = await readSession(sessionId);
+    data = applyReportEdits(data, session?.checks ?? []);
+    name = file.name.replace(/\.xlsx$/i, " — правки.xlsx");
+  }
   const headers = new Headers({
     "Content-Type": file.mimeType || "application/octet-stream",
-    "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    "Content-Disposition": `${revised ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(name)}`,
     "Cache-Control": "private, no-store",
     "X-Content-Type-Options": "nosniff",
   });
   return new Response(new Uint8Array(data), { status: 200, headers });
+}
+
+function applyReportEdits(buffer: Buffer, checks: CheckResult[]): Buffer {
+  const book = XLSX.read(buffer, { type: "buffer", cellDates: false });
+  for (const check of checks) {
+    if (!check.reportEdited) continue;
+    const label = check.reportReference?.locationLabel ?? "";
+    const address = label.match(/ячейка\s+([A-Z]+\d+)/i)?.[1];
+    const sheetName = label.match(/Лист «([^»]+)»/)?.[1];
+    if (!address || !sheetName || !book.Sheets[sheetName]) continue;
+    const normalized = check.reportValue.replace(/\s/g, "").replace(",", ".");
+    const numeric = Number(normalized);
+    book.Sheets[sheetName][address] = Number.isFinite(numeric) ? { t: "n", v: numeric } : { t: "s", v: check.reportValue };
+  }
+  return Buffer.from(XLSX.write(book, { type: "buffer", bookType: "xlsx" }));
 }
 
 async function canRead(id: string, user: Account): Promise<boolean> {
@@ -429,6 +496,14 @@ async function actorOf(request: Request): Promise<{ actor: Account; setCookie?: 
 function guestCookie(id: string, request: Request): string {
   const secure = request.headers.get("x-forwarded-proto") === "https" ? "; Secure" : "";
   return `sverko_guest=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure}`;
+}
+
+async function claimGuestAudits(request: Request, userId: string): Promise<string | undefined> {
+  const guest = cookieValue(request.headers.get("cookie"), "sverko_guest");
+  if (!guest || !GUEST_ID.test(guest)) return undefined;
+  await run("UPDATE sessions SET owner = ? WHERE owner = ?", [userId, guest]);
+  const secure = request.headers.get("x-forwarded-proto") === "https" ? "; Secure" : "";
+  return `sverko_guest=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`;
 }
 
 function authCookie(token: string, request: Request): string {

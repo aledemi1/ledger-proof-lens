@@ -248,6 +248,16 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {report && !session.isDemo && (
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <a href={`/api/audits/${session.id}/files/${report.id}`}>{t.work.downloadFile}</a>
+            </Button>
+          )}
+          {report && !session.isDemo && report.name.toLowerCase().endsWith(".xlsx") && (
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <a href={`/api/audits/${session.id}/files/${report.id}?revised=1`}>{t.work.downloadRevised}</a>
+            </Button>
+          )}
           <Button asChild size="sm" className="shrink-0">
             <Link to="/audits/$id/conclusion" params={{ id: session.id }}>
               <FileCheck2 /> <span className="hidden sm:inline">{t.work.toConclusion}</span>
@@ -351,6 +361,7 @@ function Workspace({ session, documents }: { session: AuditSession; documents: A
                     onBack={() => evidence && setSourceId(evidence.documentId)}
                     sourceDoc={sources.find((doc) => doc.id === sourceId) ?? null}
                     sessionId={session.id}
+                    editable={!session.isDemo}
                   />
                 )
               }
@@ -465,6 +476,7 @@ function Comparison({
   onBack,
   sourceDoc,
   sessionId,
+  editable,
 }: {
   check: CheckResult;
   evidenceIndex: number;
@@ -475,11 +487,14 @@ function Comparison({
   onBack: () => void;
   sourceDoc: AuditDocument | null;
   sessionId: string;
+  editable: boolean;
 }) {
   const t = useCopy();
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [fragmentQuery, setFragmentQuery] = useState("");
+  const [draft, setDraft] = useState(check.reportValue);
+  const [saving, setSaving] = useState(false);
   const refs = check.evidenceReferences;
   const ref = refs[evidenceIndex];
   const meta = checkStatusMeta[check.status];
@@ -498,6 +513,9 @@ function Comparison({
           {missing ? <span className="text-orange">{fill(t.work.notFoundIn, { n: sourceCount })}</span> : <>{t.work.inDocument} <b className="text-sm tabular">{check.sourceValue ?? "—"}</b></>}
         </span>
         {check.discrepancy && <span className="whitespace-nowrap">{t.work.difference} <b className="text-sm text-danger tabular">{check.discrepancy}</b></span>}
+        {editable && check.sourceValue && check.status !== "match" && (
+          <span className="text-muted-foreground">{fill(t.work.hintFill, { value: check.sourceValue })}</span>
+        )}
         <span className="ml-auto flex items-center gap-0.5">
           {refs.length > 1 && (
             <>
@@ -520,6 +538,24 @@ function Comparison({
       {open && (
         <div className="mt-1.5 space-y-1.5 pb-1">
           <p className="rounded-md bg-muted px-2.5 py-1.5 text-[13px] leading-relaxed text-foreground/85">{check.explanation}</p>
+          {editable && (
+            <form
+              className="flex flex-wrap items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSaving(true);
+                void auditService.updateReportValue(sessionId, check.id, draft).catch((error: unknown) => {
+                  toast.error(error instanceof Error ? error.message : t.work.checkFailed);
+                }).finally(() => setSaving(false));
+              }}
+            >
+              <input className="h-7 rounded-md border border-input bg-background px-2 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} />
+              {check.sourceValue && (
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setDraft(check.sourceValue ?? "")}>{check.sourceValue}</Button>
+              )}
+              <Button type="submit" size="sm" className="h-7 text-xs" disabled={saving || !draft.trim()}>{t.work.saveValue}</Button>
+            </form>
+          )}
           {refs.length > 1 && (
             <div>
               <p className="font-medium text-muted-foreground">{t.work.calculation}</p>

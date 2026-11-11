@@ -187,7 +187,7 @@ export const nl: Copy = {
     more: "Extra acties",
     reset: "Beslissingen resetten",
     resetDone: "Beslissingen van de reviewer zijn gereset",
-    toConclusion: "Naar conclusie",
+    toConclusion: "Naar conclusie", hintFill: "In het rapport moet {value} staan", saveValue: "In het rapport schrijven", downloadFile: "Downloaden", downloadRevised: "Gecorrigeerd rapport downloaden",
     unread: "Ongelezen bestanden: {n}.",
     recheck: "Herhaling «{title}»: afgesloten {closed}, resterend {remaining}, nieuw {appeared}.",
     prevIssue: "Vorige opmerking",

@@ -108,6 +108,8 @@ export interface CheckResult {
   evidenceReferences: EvidenceReference[];
   /** Where the value sits in the main report. */
   reportReference?: EvidenceReference;
+  /** Set when a person replaced the value read from the report. */
+  reportEdited?: boolean;
   reviewerStatus: ReviewerStatus;
   reviewerComment: string;
   reviewedAt?: string;

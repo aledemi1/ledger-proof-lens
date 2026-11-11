@@ -187,7 +187,7 @@ export const zh: Copy = {
     more: "更多操作",
     reset: "重置决定",
     resetDone: "已重置复核人决定",
-    toConclusion: "查看结论",
+    toConclusion: "查看结论", hintFill: "报告中应填写 {value}", saveValue: "写入报告", downloadFile: "下载", downloadRevised: "下载改正后的报告",
     unread: "未读文件：{n}。",
     recheck: "重新核对「{title}」：已关闭 {closed}，剩余 {remaining}，新增 {appeared}。",
     prevIssue: "上一问题",
