@@ -424,7 +424,10 @@ function verdictFromQuotes(name: string, reportValue: string, quotes: string[]):
   if (isCode(reportValue)) {
     const wanted = normText(reportValue);
     const hit = quotes.find((quote) => normText(quote).includes(wanted));
-    return { relation: hit ? "same" : "different", sourceValue: hit ?? quotes[0] ?? "" };
+    if (hit) return { relation: "same", sourceValue: reportValue };
+    const other = quotes.flatMap((quote) => [...quote.matchAll(/[A-Za-zА-Яа-яЁё]{1,12}[-/№]\s*\d[\d./-]*/g)].map((match) => match[0]));
+    if (other.length) return { relation: "different", sourceValue: other[0] ?? "" };
+    return { relation: "missing", sourceValue: "" };
   }
   if (reportDate) {
     const label = name.toLowerCase().replace(/ё/g, "е");
@@ -778,7 +781,7 @@ function readSourceList(value: unknown): ListedSource[] {
 }
 
 const NUMBER_TOKEN = String.raw`\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?`;
-const UNIT_TOKEN = String.raw`шт\.?|ед\.?|экземпл\p{L}*|экз\.?|кг|час\p{L}*|ч(?![\p{L}])|мин\p{L}*|чел\p{L}*|компл\p{L}*|метр\p{L}*|км|г(?![\p{L}])|м(?![\p{L}])|pcs|pieces?|hours?`;
+const UNIT_TOKEN = String.raw`шт\.?|ед\.?|экземпл\p{L}*|экз\.?|анализатор\p{L}*|кг|час\p{L}*|ч(?![\p{L}])|мин\p{L}*|месяц\p{L}*|чел\p{L}*|компл\p{L}*|метр\p{L}*|км|г(?![\p{L}])|м(?![\p{L}])|pcs|pieces?|hours?`;
 
 function bareNumber(raw: string): boolean {
   return new RegExp(`^(?:${NUMBER_TOKEN})$`, "u").test(raw.trim());

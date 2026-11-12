@@ -524,6 +524,33 @@ describe("pack finding judge", () => {
     expect(judged.relation).toBe("same");
   });
 
+  it("does not treat an unrelated place as another contract number", () => {
+    const judged = judgePackFinding(finding({
+      name: "Номер договора",
+      reportValue: "КП-47/2026",
+      sources: [{ fragmentId: "a", quote: "г. Калуга", value: "", where: "Договор", quoteFound: true }],
+    }));
+    expect(judged.relation).toBe("missing");
+    expect(judged.sourceValue).toBe("");
+  });
+
+  it("reads a count and a term from the sentence the model quoted", () => {
+    const count = judgePackFinding(finding({
+      name: "Количество поставленных анализаторов Ав-10",
+      reportValue: "12",
+      sources: [{ fragmentId: "a", quote: "Стоимость переданного оборудования с НДС: 300 000 рублей. Получено 10 анализаторов Ав-10.", value: "", where: "Накладная", quoteFound: true }],
+    }));
+    const term = judgePackFinding(finding({
+      name: "Гарантийный срок анализаторов Ав-10",
+      reportValue: "24",
+      sources: [{ fragmentId: "b", quote: "3. Гарантийный срок анализаторов Ав-10: 24 месяца с даты приёмки оборудования.", value: "", where: "Договор", quoteFound: true }],
+    }));
+    expect(count.relation).toBe("different");
+    expect(count.sourceValue).toContain("10");
+    expect(term.relation).toBe("same");
+    expect(term.sourceValue).toContain("24");
+  });
+
   it("drops an operation from another month", () => {
     const judged = judgePackFinding(finding({
       name: "Возврат переплаты, полученный в октябре",
