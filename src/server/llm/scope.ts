@@ -118,15 +118,20 @@ export interface GatheredPart {
 
 /** Monthly or separate documents of one article, when the report total itself is not written in them. */
 export function gatherParts(name: string, reportValue: string, docs: PreparedDoc[]): GatheredPart[] {
+  if (/итого|всего/i.test(name)) return [];
   const wanted = stems(name);
   const reportMoney = parseMoney(reportValue);
   if (!wanted.length || reportMoney == null) return [];
   const parts: GatheredPart[] = [];
   for (const doc of docs) {
     const facts = documentFacts(`${doc.name}\n${doc.read.fragments.map((fragment) => fragment.text).join("\n")}`);
-    for (const fragment of doc.read.fragments) {
+    const paired = pairedAmount(doc.read.fragments, wanted);
+    const candidates = paired ? [paired] : doc.read.fragments.flatMap((fragment) => {
       const blob = `${fragment.text} ${fragment.label ?? ""} ${fragment.columnHeader ?? ""} ${fragment.rowLabel ?? ""}`.toLowerCase().replace(/ё/g, "е");
-      if (!wanted.some((stem) => blob.includes(stem))) continue;
+      if (!wanted.some((stem) => blob.includes(stem))) return [];
+      return [fragment];
+    });
+    for (const fragment of candidates) {
       const amounts = [...new Set(moneyTokens(fragment.text))];
       if (amounts.length !== 1 || amounts[0] === reportMoney) continue;
       parts.push({
@@ -139,6 +144,24 @@ export function gatherParts(name: string, reportValue: string, docs: PreparedDoc
     }
   }
   return parts;
+}
+
+/** A header row followed by a value row, paired by position. Keeps the column whose header matches the article. */
+function pairedAmount(fragments: PreparedDoc["read"]["fragments"], wanted: string[]): PreparedDoc["read"]["fragments"][number] | null {
+  const firstMoney = fragments.findIndex((fragment) => moneyTokens(fragment.text).length === 1);
+  if (firstMoney < 1) return null;
+  const headers = [];
+  for (let index = firstMoney - 1; index >= 0; index -= 1) {
+    const text = fragments[index]?.text ?? "";
+    if (!text.trim() || moneyTokens(text).length || /\d{2}\/\d{2}\/\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4}|документ\s*:/i.test(text)) break;
+    headers.unshift(fragments[index]);
+  }
+  if (headers.length < 2) return null;
+  const values = fragments.slice(firstMoney, firstMoney + headers.length);
+  const column = headers.findIndex((header) => wanted.some((stem) => (header?.text ?? "").toLowerCase().replace(/ё/g, "е").includes(stem)));
+  const value = column >= 0 ? values[column] : undefined;
+  if (!value || moneyTokens(value.text).length !== 1) return null;
+  return value;
 }
 
 function moneyTokens(quote: string): bigint[] {

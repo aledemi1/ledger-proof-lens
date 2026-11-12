@@ -414,7 +414,7 @@ function docText(doc: PreparedDoc): string {
 function rollRowTotals(findings: PackFinding[]): void {
   for (const finding of findings) {
     if (!/итого|всего/i.test(finding.name) || finding.relation === "same" || finding.relation === "different") continue;
-    const siblings = findings.filter((other) => other !== finding && !/итого|всего/i.test(other.name) && sameRow(finding.name, other.name) && parseMoney(other.sourceValue) != null);
+    const siblings = findings.filter((other) => other !== finding && (other.relation === "same" || other.relation === "different") && !/итого|всего/i.test(other.name) && sameRow(finding.name, other.name) && parseMoney(other.sourceValue) != null);
     if (siblings.length < 2) continue;
     const reportMoney = parseMoney(finding.reportValue);
     const parts = siblings.flatMap((other) => {
@@ -901,10 +901,9 @@ function moneyAmounts(quote: string): bigint[] {
 
 /** Sums the parts the model explicitly included. One amount per quote; several amounts in one quote stay unresolved. */
 function sumMarked(finding: PackFinding): { relation: PackFinding["relation"]; sourceValue: string; calculation: string } | null {
-  const sources = finding.sources;
-  if (!sources.some((source) => source.marked)) return null;
+  const sources = finding.sources.filter((source) => source.quoteFound);
   const included: PackSource[] = [];
-  const excluded = sources.filter((source) => source.marked && source.included === false);
+  const excluded = sources.filter((source) => source.included === false);
   for (const source of sources) {
     if (source.included === false) continue;
     const reason = finding.scope ? exclusionReason({ dates: source.docDates ?? [], contracts: source.docContracts ?? [] }, finding.scope) : null;
@@ -914,14 +913,16 @@ function sumMarked(finding: PackFinding): { relation: PackFinding["relation"]; s
     }
     included.push(source);
   }
-  if (!included.length) return null;
   const reportMoney = parseMoney(finding.reportValue);
-  if (reportMoney == null) return null;
+  if (reportMoney == null || !included.length) return null;
+  if (included.length < 2 && !excluded.length) return null;
   const parts: bigint[] = [];
   for (const source of included) {
     const distinct = [...new Set(moneyAmounts(source.quote).map((part) => part.toString()))].map(BigInt);
-    if (distinct.length !== 1) return { relation: "unclear", sourceValue: included.map((item) => item.quote).join(", "), calculation: "" };
-    parts.push(distinct[0] ?? 0n);
+    if (distinct.length !== 1) return null;
+    const part = distinct[0] ?? 0n;
+    if (included.length > 1 && part * 10n >= reportMoney * 9n) return null;
+    parts.push(part);
   }
   const total = parts.reduce((sum, part) => sum + part, 0n);
   const formula = parts.map((part) => formatScaled(part, "₽")).join(" + ");
