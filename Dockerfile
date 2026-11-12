@@ -44,7 +44,10 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /opt/cache \
   && python -c "from pii_mask.core import Masker; from presidio_analyzer import AnalyzerEngine; Masker(ner=True).mask('\u0418\u0432\u0430\u043d \u041f\u0435\u0442\u0440\u043e\u0432, 7707083893', {'version': 1, 'labels': {}}); AnalyzerEngine().analyze(text='john@example.com', language='en')"
 
-FROM node:22-bookworm-slim AS runner
+# The venv python is a symlink into this image. A Node base image does not
+# contain that interpreter, so the bridge looked missing even though the
+# packages had been copied.
+FROM python:3.12-slim-bookworm AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
@@ -58,10 +61,13 @@ RUN mkdir -p /data
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=privacy /usr/local /usr/local
 COPY --from=privacy /opt/venv /opt/venv
 COPY --from=privacy /opt/cache /opt/cache
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY scripts/privacy/mask_bridge.py ./scripts/privacy/mask_bridge.py
 ENV SVERKO_PRIVACY_PYTHON=/opt/venv/bin/python
+ENV SVERKO_PRIVACY_BRIDGE=/app/scripts/privacy/mask_bridge.py
 ENV XDG_CACHE_HOME=/opt/cache
 ENV PATH=/opt/venv/bin:$PATH
 

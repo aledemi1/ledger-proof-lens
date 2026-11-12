@@ -16,25 +16,30 @@ function privacyOff(): boolean {
   return process.env["SVERKO_PRIVACY"] === "off";
 }
 
+function firstExisting(candidates: string[]): string | undefined {
+  return candidates.find((candidate) => candidate && existsSync(candidate));
+}
+
 function pythonBin(): string {
-  const configured = process.env["SVERKO_PRIVACY_PYTHON"]?.trim();
-  if (configured) return configured;
+  const configured = process.env["SVERKO_PRIVACY_PYTHON"]?.trim() ?? "";
   const folder = process.platform === "win32" ? "Scripts" : "bin";
   const name = process.platform === "win32" ? "python.exe" : "python";
-  return path.resolve("third_party", ".venv", folder, name);
+  const local = path.resolve("third_party", ".venv", folder, name);
+  return firstExisting([configured, "/opt/venv/bin/python", local]) ?? (configured || local);
 }
 
 function bridgePath(): string {
-  const configured = process.env["SVERKO_PRIVACY_BRIDGE"]?.trim();
-  if (configured) return path.resolve(configured);
-  return path.resolve("scripts", "privacy", "mask_bridge.py");
+  const configured = process.env["SVERKO_PRIVACY_BRIDGE"]?.trim() ?? "";
+  const resolved = configured ? path.resolve(configured) : "";
+  return firstExisting([resolved, "/app/scripts/privacy/mask_bridge.py", path.resolve("scripts", "privacy", "mask_bridge.py")]) ?? (resolved || path.resolve("scripts", "privacy", "mask_bridge.py"));
 }
 
 /** Runs the local pii-mask / Presidio bridge. Refuses to continue if it cannot mask. */
 function runBridge(payload: unknown): Promise<unknown> {
   const python = pythonBin();
   const bridge = bridgePath();
-  if (!existsSync(bridge) || (python.includes(path.sep) && !existsSync(python))) {
+  const pythonMissing = python.includes(path.sep) && !existsSync(python);
+  if (!existsSync(bridge) || pythonMissing) {
     return Promise.reject(new Error("локальная маскировка не установлена (python scripts/privacy/setup.py)"));
   }
   return new Promise((resolve, reject) => {
