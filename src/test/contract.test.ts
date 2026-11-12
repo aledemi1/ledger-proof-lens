@@ -130,7 +130,12 @@ describe("processSession contract", () => {
     const session = await readSession(id);
     const model = session?.checks.find((check) => check.fieldName === "Контракт модели");
     expect(model).toBeTruthy();
-    expect(session?.checks.filter((check) => check.id.startsWith("omitted-")).every((check) => check.status === "needs_review")).toBe(true);
+    const omitted = session?.checks.filter((check) => check.id.startsWith("omitted-")) ?? [];
+    expect(omitted.length).toBeGreaterThan(0);
+    expect(omitted.every((check) => {
+      const note = Array.isArray(check.explanation) ? check.explanation[0] : undefined;
+      return check.status === "needs_review" && check.discrepancy == null && note?.code === "model_omitted";
+    })).toBe(true);
     expect(session?.notices?.some((notice) => notice.code === "model_two_stage")).toBe(true);
     const evidence = model?.evidenceReferences[0];
     expect(evidence?.pageNumber).toBeGreaterThan(0);
