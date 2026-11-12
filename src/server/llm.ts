@@ -322,7 +322,7 @@ export async function scanPackForDiscrepancies(
       report: { file: report.name, role: "отчёт, данные которого нужно проверить", indicators, fragments: reportFragments.fragments },
       sources: { role: "первичные документы, из которых берутся фактические значения", fragments: sourceFragments.fragments },
     },
-    180_000,
+    300_000,
     pages,
   )) as { findings?: unknown };
   const rows = Array.isArray(parsed.findings) ? parsed.findings : [];
