@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { directComponents, documentFacts, exclusionReason, gatherParts, isRowTotal, sameRow, scopeOf } from "@/server/llm/scope";
+import { directComponents, documentFacts, exclusionReason, gatherParts, isRowTotal, partitionRow, sameRow, scopeOf } from "@/server/llm/scope";
 import { parseMoney } from "@/server/values";
 import type { PreparedDoc } from "@/server/reconcile";
 
@@ -58,8 +58,7 @@ describe("report scope", () => {
       return value;
     };
     const part = (name: string, report: string, source: string) => ({ name, report: money(report), source: money(source) });
-    const chosen = directComponents(
-      [
+    const parts = [
         part("оплата труда", "5 558 474,83", "5 558 474,83"),
         part("зарплата", "5 248 019,04", "7 230 237,79"),
         part("резерв", "310 455,79", "100 000,00"),
@@ -68,11 +67,12 @@ describe("report scope", () => {
         part("взносы с резерва", "93 233,59", "100 000,00"),
         part("общепроизводственные", "1 145 798,10", "1 133 298,10"),
         part("общехозяйственные", "3 204 744,51", "3 204 744,51"),
-      ],
-      money("11 580 377,40"),
-    );
+    ];
+    const chosen = directComponents(parts, money("11 580 377,40"));
+    const dropped = partitionRow(parts, money("11 580 377,40")).splits;
     expect(chosen?.map((item) => item.name).sort()).toEqual(["взносы", "общепроизводственные", "общехозяйственные", "оплата труда"]);
     expect(chosen?.reduce((sum, item) => sum + item.source, 0n)).toBe(money("11 567 877,40"));
+    expect(dropped.map((item) => item.name).sort()).toEqual(["взносы с зарплаты", "взносы с резерва", "зарплата", "резерв"]);
     expect(isRowTotal("3 этап, 2026 г. — итого")).toBe(true);
     expect(isRowTotal("3 этап, 2026 г. — страховые взносы, всего")).toBe(false);
     expect(isRowTotal("Итого подтверждённых расходов")).toBe(false);

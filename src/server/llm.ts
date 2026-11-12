@@ -4,7 +4,7 @@ import { packCharLimit, packFragmentSlice, scanCharLimit, scanFragmentSlice } fr
 import { reconcile, type PreparedDoc, type RoleHints, type UnknownLabel } from "./reconcile";
 import { chatJson, type AiConfig, type OutboundPage } from "./llm/chat";
 import { appendNote, keepsAutomaticStatus, wantsModelLink } from "../lib/explanations";
-import { directComponents, documentFacts, exclusionReason, gatherParts, isRowTotal, sameRow, scopeOf, type Scope } from "./llm/scope";
+import { documentFacts, exclusionReason, gatherParts, isRowTotal, partitionRow, sameRow, scopeOf, type Scope } from "./llm/scope";
 import { formatScaled, formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
 interface Proposal {
@@ -433,7 +433,19 @@ function rollRowTotals(findings: PackFinding[]): void {
       if (report == null || source == null) return [];
       return [{ other, report, source }];
     });
-    const chosen = directComponents(pool, reportMoney);
+    const { components: chosen, splits } = partitionRow(pool, reportMoney);
+    for (const split of splits) {
+      const row = split.other;
+      row.relation = "insufficient";
+      row.sourceValue = "";
+      delete row.calculation;
+      row.sourceCount = 0;
+      row.sources = [];
+      row.sourceQuote = "";
+      row.sourceWhere = "";
+      row.sourceFragmentId = "";
+      row.sourceQuoteFound = false;
+    }
     if (!chosen || chosen.length < 2) continue;
     const total = chosen.reduce((sum, part) => sum + part.source, 0n);
     finding.relation = total === reportMoney ? "same" : "different";

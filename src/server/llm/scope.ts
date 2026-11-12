@@ -237,24 +237,30 @@ function subsetSum<T extends ReportPart>(parts: T[], target: bigint, prefer: "mo
 }
 
 /**
- * Articles whose report values add up to the row total.
- * A breakdown that already adds up to one of those articles is left out, so it is not added twice.
+ * Articles whose report values add up to the row total, and the breakdowns that add up to one of those articles.
+ * The breakdowns are not part of the row total: they are already inside an article.
  */
-export function directComponents<T extends ReportPart>(parts: T[], totalReport: bigint): T[] | null {
+export function partitionRow<T extends ReportPart>(parts: T[], totalReport: bigint): { components: T[] | null; splits: T[] } {
+  const splits: T[] = [];
   let pool = parts.filter((part) => part.report > 0n);
   let changed = true;
   while (changed && pool.length <= 20) {
     changed = false;
     for (const part of pool) {
       const others = pool.filter((other) => other !== part && other.report < part.report);
-      const splits = subsetSum(others, part.report, "most");
-      if (!splits) continue;
-      const drop = new Set(splits);
+      const breakdown = subsetSum(others, part.report, "most");
+      if (!breakdown) continue;
+      splits.push(...breakdown);
+      const drop = new Set(breakdown);
       pool = pool.filter((item) => !drop.has(item));
       changed = true;
       break;
     }
   }
-  return subsetSum(pool, totalReport, "least");
+  return { components: subsetSum(pool, totalReport, "least"), splits };
+}
+
+export function directComponents<T extends ReportPart>(parts: T[], totalReport: bigint): T[] | null {
+  return partitionRow(parts, totalReport).components;
 }
 
