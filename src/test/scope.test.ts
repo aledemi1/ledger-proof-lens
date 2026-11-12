@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { documentFacts, exclusionReason, gatherParts, sameRow, scopeOf } from "@/server/llm/scope";
+import { directComponents, documentFacts, exclusionReason, gatherParts, isRowTotal, sameRow, scopeOf } from "@/server/llm/scope";
+import { parseMoney } from "@/server/values";
 import type { PreparedDoc } from "@/server/reconcile";
 
 describe("report scope", () => {
@@ -48,5 +49,32 @@ describe("report scope", () => {
   it("treats a row total as the same row as its articles", () => {
     expect(sameRow("Итого — 3 этап, 2026 г.", "Оплата труда — 3 этап, 2026 г.")).toBe(true);
     expect(sameRow("Итого — 3 этап, 2026 г.", "Оплата труда — 2 этап, 2025 г.")).toBe(false);
+  });
+
+  it("builds a row total from article totals and leaves out splits of those articles", () => {
+    const money = (raw: string) => {
+      const value = parseMoney(raw);
+      if (value == null) throw new Error(raw);
+      return value;
+    };
+    const part = (name: string, report: string, source: string) => ({ name, report: money(report), source: money(source) });
+    const chosen = directComponents(
+      [
+        part("оплата труда", "5 558 474,83", "5 558 474,83"),
+        part("зарплата", "5 248 019,04", "7 230 237,79"),
+        part("резерв", "310 455,79", "100 000,00"),
+        part("взносы", "1 671 359,96", "1 671 359,96"),
+        part("взносы с зарплаты", "1 578 126,37", "7 230 237,79"),
+        part("взносы с резерва", "93 233,59", "100 000,00"),
+        part("общепроизводственные", "1 145 798,10", "1 133 298,10"),
+        part("общехозяйственные", "3 204 744,51", "3 204 744,51"),
+      ],
+      money("11 580 377,40"),
+    );
+    expect(chosen?.map((item) => item.name).sort()).toEqual(["взносы", "общепроизводственные", "общехозяйственные", "оплата труда"]);
+    expect(chosen?.reduce((sum, item) => sum + item.source, 0n)).toBe(money("11 567 877,40"));
+    expect(isRowTotal("3 этап, 2026 г. — итого")).toBe(true);
+    expect(isRowTotal("3 этап, 2026 г. — страховые взносы, всего")).toBe(false);
+    expect(isRowTotal("Итого подтверждённых расходов")).toBe(false);
   });
 });

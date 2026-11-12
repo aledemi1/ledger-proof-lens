@@ -4,7 +4,7 @@ import { packCharLimit, packFragmentSlice, scanCharLimit, scanFragmentSlice } fr
 import { reconcile, type PreparedDoc, type RoleHints, type UnknownLabel } from "./reconcile";
 import { chatJson, type AiConfig, type OutboundPage } from "./llm/chat";
 import { appendNote, keepsAutomaticStatus, wantsModelLink } from "../lib/explanations";
-import { documentFacts, exclusionReason, gatherParts, sameRow, scopeOf, type Scope } from "./llm/scope";
+import { directComponents, documentFacts, exclusionReason, gatherParts, isRowTotal, sameRow, scopeOf, type Scope } from "./llm/scope";
 import { formatScaled, formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
 interface Proposal {
@@ -413,23 +413,38 @@ function docText(doc: PreparedDoc): string {
   return `${doc.name}\n${doc.read.fragments.map((fragment) => fragment.text).join("\n")}`;
 }
 
-/** A row total with no documents of its own is the sum of the article totals already checked on that row. */
+function soleAmount(raw: string): bigint | null {
+  const distinct = [...new Set(moneyAmounts(raw).map((part) => part.toString()))];
+  const only = distinct[0];
+  return distinct.length === 1 && only != null ? BigInt(only) : null;
+}
+
+/** A row total is recomputed from the article totals on that row. Splits of an article are not added again. */
 function rollRowTotals(findings: PackFinding[]): void {
   for (const finding of findings) {
-    if (!/итого|всего/i.test(finding.name) || finding.relation === "same" || finding.relation === "different") continue;
-    const siblings = findings.filter((other) => other !== finding && (other.relation === "same" || other.relation === "different") && !/итого|всего/i.test(other.name) && sameRow(finding.name, other.name) && parseMoney(other.sourceValue) != null);
-    if (siblings.length < 2) continue;
-    const reportMoney = parseMoney(finding.reportValue);
-    const parts = siblings.flatMap((other) => {
-      const value = parseMoney(other.sourceValue);
-      return value == null ? [] : [value];
+    if (!isRowTotal(finding.name)) continue;
+    const reportMoney = soleAmount(finding.reportValue);
+    if (reportMoney == null) continue;
+    const pool = findings.flatMap((other) => {
+      if (other === finding || isRowTotal(other.name) || !sameRow(finding.name, other.name)) return [];
+      if (other.relation !== "same" && other.relation !== "different") return [];
+      const report = soleAmount(other.reportValue);
+      const source = soleAmount(other.sourceValue);
+      if (report == null || source == null) return [];
+      return [{ other, report, source }];
     });
-    if (reportMoney == null || parts.length < 2) continue;
-    const total = parts.reduce((sum, part) => sum + part, 0n);
+    const chosen = directComponents(pool, reportMoney);
+    if (!chosen || chosen.length < 2) continue;
+    const total = chosen.reduce((sum, part) => sum + part.source, 0n);
     finding.relation = total === reportMoney ? "same" : "different";
     finding.sourceValue = formatScaled(total, "₽");
-    finding.calculation = siblings.map((other) => `${other.name} ${other.sourceValue}`).join(" + ");
-    finding.sourceCount = siblings.length;
+    finding.calculation = chosen.map((part) => `${part.other.name} ${part.other.sourceValue}`).join(" + ");
+    finding.sourceCount = chosen.length;
+    finding.sources = [];
+    finding.sourceQuote = "";
+    finding.sourceWhere = "";
+    finding.sourceFragmentId = "";
+    finding.sourceQuoteFound = false;
   }
 }
 

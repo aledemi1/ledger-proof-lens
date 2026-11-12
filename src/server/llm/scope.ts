@@ -194,3 +194,67 @@ export function sameRow(totalName: string, partName: string): boolean {
   return tokens.every((token) => part.includes(token));
 }
 
+const ROW_WORD = /^(итого|всего|сумма|суммы|затрат|затраты|этап|этапа|этапу|этапе|период|периода|года|году|год|квартал|квартала|месяц|месяца|строка|строки|показатель|руб|рублей|рубля)$/u;
+
+/** A row total names the row, not an article. «Страховые взносы, всего» still names an article. */
+export function isRowTotal(name: string): boolean {
+  const words = name.toLowerCase().replace(/ё/g, "е").split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4 || /^\d{4}$/.test(word));
+  if (!words.some((word) => word === "итого" || word === "всего" || word === "сумма" || word === "суммы")) return false;
+  return words.every((word) => ROW_WORD.test(word) || /^\d{4}$/.test(word));
+}
+
+export interface ReportPart {
+  report: bigint;
+  source: bigint;
+}
+
+function subsetSum<T extends ReportPart>(parts: T[], target: bigint, prefer: "most" | "least"): T[] | null {
+  const count = parts.length;
+  if (count < 2 || count > 20) return null;
+  let best: T[] | null = null;
+  const limit = 1 << count;
+  for (let mask = 0; mask < limit; mask += 1) {
+    let size = 0;
+    let sum = 0n;
+    const chosen: T[] = [];
+    let tooBig = false;
+    for (let index = 0; index < count; index += 1) {
+      if ((mask & (1 << index)) === 0) continue;
+      const part = parts[index];
+      if (!part) continue;
+      size += 1;
+      sum += part.report;
+      chosen.push(part);
+      if (sum > target) {
+        tooBig = true;
+        break;
+      }
+    }
+    if (tooBig || size < 2 || sum !== target) continue;
+    if (!best || (prefer === "most" ? chosen.length > best.length : chosen.length < best.length)) best = chosen;
+  }
+  return best;
+}
+
+/**
+ * Articles whose report values add up to the row total.
+ * A breakdown that already adds up to one of those articles is left out, so it is not added twice.
+ */
+export function directComponents<T extends ReportPart>(parts: T[], totalReport: bigint): T[] | null {
+  let pool = parts.filter((part) => part.report > 0n);
+  let changed = true;
+  while (changed && pool.length <= 20) {
+    changed = false;
+    for (const part of pool) {
+      const others = pool.filter((other) => other !== part && other.report < part.report);
+      const splits = subsetSum(others, part.report, "most");
+      if (!splits) continue;
+      const drop = new Set(splits);
+      pool = pool.filter((item) => !drop.has(item));
+      changed = true;
+      break;
+    }
+  }
+  return subsetSum(pool, totalReport, "least");
+}
+
