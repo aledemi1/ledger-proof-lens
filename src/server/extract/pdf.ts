@@ -1,6 +1,9 @@
 import { importExternal } from "../external";
-import type { Box, Fragment, ReadDocument } from "../model";
+import type { Box, Fragment, PageImage, ReadDocument } from "../model";
 import { ocrUnavailableReason, recognizeImage } from "./ocr";
+
+/** Scale 2 left the cost-card amounts unreadable. Four times the page size is the size Tesseract could read. */
+const RENDER_SCALE = 4;
 
 interface Glyph {
   text: string;
@@ -24,59 +27,60 @@ export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
   }
 
   const fragments: Fragment[] = [];
+  const pages: PageImage[] = [];
   const warnings: string[] = [];
   try {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
+      const rendered = await renderPage(page);
+      let recognized = false;
+      if (!rendered) {
+        warnings.push(`Страница ${pageNumber} не удалось подготовить для распознавания.`);
+      } else {
+        try {
+          const result = await recognizeImage(rendered.image, rendered.width, rendered.height, "image/png");
+          if (result.lines.length) {
+            recognized = true;
+            pages.push({ pageNumber, image: rendered.image, width: rendered.width, height: rendered.height });
+            result.lines.forEach((line, index) => {
+              const anchor = `p${pageNumber}o${index + 1}`;
+              fragments.push({
+                id: anchor,
+                text: line.text,
+                pageNumber,
+                locationLabel: `Стр. ${pageNumber}`,
+                anchor,
+                shape: "line",
+                ...(line.box ? { box: line.box } : {}),
+                ...(line.tokens ? { tokens: line.tokens } : {}),
+              });
+            });
+          } else {
+            warnings.push(`Страница ${pageNumber}: распознавание не нашло текста.`);
+          }
+        } catch (error) {
+          warnings.push(`Страница ${pageNumber}: ${ocrUnavailableReason(error)}`);
+        }
+      }
+      if (recognized) continue;
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
-      const glyphs = glyphsOf(content.items, viewport.width, viewport.height);
-      const lines = joinWrapped(groupLines(glyphs));
-      const pageText = lines.map((line) => line.text).join(" ").replace(/\s+/g, " ").trim();
-      if (pageText.length >= 20) {
-        lines.forEach((line, index) => {
-          const anchor = `p${pageNumber}l${index + 1}`;
-          fragments.push({
-            id: anchor,
-            text: line.text,
-            pageNumber,
-            locationLabel: `Стр. ${pageNumber}`,
-            anchor,
-            shape: "line",
-            box: line.box,
-            tokens: line.tokens,
-          });
+      const lines = joinWrapped(groupLines(glyphsOf(content.items, viewport.width, viewport.height)));
+      if (!lines.length) continue;
+      warnings.push(`Страница ${pageNumber}: использован текстовый слой, потому что распознавание не вернуло строк.`);
+      lines.forEach((line, index) => {
+        const anchor = `p${pageNumber}l${index + 1}`;
+        fragments.push({
+          id: anchor,
+          text: line.text,
+          pageNumber,
+          locationLabel: `Стр. ${pageNumber}`,
+          anchor,
+          shape: "line",
+          box: line.box,
+          tokens: line.tokens,
         });
-        continue;
-      }
-      const rendered = await renderPage(page, viewport.width, viewport.height);
-      if (!rendered) {
-        warnings.push(`Страница ${pageNumber} без текстового слоя, и страницу не удалось подготовить для OCR.`);
-        continue;
-      }
-      try {
-        const recognized = await recognizeImage(rendered, Math.ceil(page.getViewport({ scale: 2 }).width), Math.ceil(page.getViewport({ scale: 2 }).height), "image/png");
-        if (!recognized.lines.length) {
-          warnings.push(`Страница ${pageNumber}: распознавание не нашло текста.`);
-          continue;
-        }
-        if (recognized.engine === "model") warnings.push(`Страница ${pageNumber}: текст распознан запасным OCR без координат строк.`);
-        recognized.lines.forEach((line, index) => {
-          const anchor = `p${pageNumber}o${index + 1}`;
-          fragments.push({
-            id: anchor,
-            text: line.text,
-            pageNumber,
-            locationLabel: `Стр. ${pageNumber}`,
-            anchor,
-            shape: "line",
-            ...(line.box ? { box: line.box } : {}),
-            ...(line.tokens ? { tokens: line.tokens } : {}),
-          });
-        });
-      } catch (error) {
-        warnings.push(`Страница ${pageNumber}: ${ocrUnavailableReason(error)}`);
-      }
+      });
     }
   } finally {
     await document.destroy?.();
@@ -93,6 +97,7 @@ export async function extractPdf(buffer: Buffer): Promise<ReadDocument> {
     pageCount: document.numPages,
     text: fragments.map((fragment) => fragment.text).join("\n"),
     warnings,
+    ...(pages.length ? { pages } : {}),
   };
 }
 
@@ -188,14 +193,16 @@ function union(boxes: Box[]): Box {
   return { x, y, width: right - x, height: bottom - y };
 }
 
-async function renderPage(page: PdfPage, _width: number, _height: number): Promise<Buffer | null> {
+async function renderPage(page: PdfPage): Promise<{ image: Buffer; width: number; height: number } | null> {
   try {
     const canvasMod = await import("@napi-rs/canvas");
-    const viewport = page.getViewport({ scale: 2 });
-    const canvas = canvasMod.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const viewport = page.getViewport({ scale: RENDER_SCALE });
+    const width = Math.ceil(viewport.width);
+    const height = Math.ceil(viewport.height);
+    const canvas = canvasMod.createCanvas(width, height);
     const context = canvas.getContext("2d");
     await page.render({ canvas, canvasContext: context, viewport }).promise;
-    return canvas.toBuffer("image/png");
+    return { image: canvas.toBuffer("image/png"), width, height };
   } catch {
     return null;
   }

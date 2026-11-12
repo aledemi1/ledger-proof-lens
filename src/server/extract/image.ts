@@ -30,11 +30,13 @@ export async function extractImage(buffer: Buffer): Promise<ReadDocument> {
     ...(line.box ? { box: line.box } : {}),
     ...(line.tokens ? { tokens: line.tokens } : {}),
   }));
+  const tokens = fragments.flatMap((fragment) => fragment.tokens ?? []);
   return {
     fragments,
     preview: { kind: "image", width, height },
     pageCount: 1,
     text: fragments.map((fragment) => fragment.text).join("\n"),
     warnings: recognized.lines.some((line) => line.box) ? [] : ["Текст распознан локально. Координаты строк есть только там, где распознаватель их вернул."],
+    ...(tokens.length ? { pages: [{ pageNumber: 1, image: buffer, width, height }] } : {}),
   };
 }

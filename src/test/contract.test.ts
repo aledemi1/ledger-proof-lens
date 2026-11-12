@@ -99,9 +99,11 @@ describe("processSession contract", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url: string, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
-        const system = body.messages[0]?.content ?? "";
-        const data = JSON.parse(body.messages[1]?.content ?? "{}") as {
+        const body = JSON.parse(String(init?.body)) as { messages: { content: unknown }[] };
+        const system = typeof body.messages[0]?.content === "string" ? body.messages[0].content : "";
+        const user = body.messages[1]?.content;
+        const userText = typeof user === "string" ? user : Array.isArray(user) ? String((user.find((part) => part && typeof part === "object" && "text" in part) as { text?: string } | undefined)?.text ?? "") : "";
+        const data = JSON.parse(userText || "{}") as {
           report?: { fragments?: { id: string; text: string }[] };
           sources?: { fragments?: { id: string; text: string }[] };
         };

@@ -29,6 +29,14 @@ export type PreviewDraft =
   | { kind: "image"; width: number; height: number }
   | { kind: "none"; reason: string };
 
+/** A rendered page kept in memory so the model can see it after personal data is painted over. */
+export interface PageImage {
+  pageNumber: number;
+  image: Buffer;
+  width: number;
+  height: number;
+}
+
 export interface ReadDocument {
   fragments: Fragment[];
   preview: PreviewDraft;
@@ -36,6 +44,7 @@ export interface ReadDocument {
   /** Joined text for document-kind and copy detection. */
   text: string;
   warnings: string[];
+  pages?: PageImage[];
 }
 
 export function withUrls(preview: PreviewDraft, fileUrl: string): DocumentPreview {

@@ -2,7 +2,7 @@ import type { CheckResult, CheckStatus, Severity } from "@/types/audit";
 import { aiConfig } from "./env";
 import { packCharLimit, packFragmentSlice, scanCharLimit, scanFragmentSlice } from "./llm/limits";
 import { reconcile, type PreparedDoc, type RoleHints, type UnknownLabel } from "./reconcile";
-import { chatJson, type AiConfig } from "./llm/chat";
+import { chatJson, type AiConfig, type OutboundPage } from "./llm/chat";
 import { appendNote, keepsAutomaticStatus, wantsModelLink } from "../lib/explanations";
 import { formatScaled, formatSigned, normText, parseDate, parseMoney, parseQuantity, similarText, type Role } from "./values";
 
@@ -21,6 +21,28 @@ interface LinkedValue {
 }
 
 const LABEL_ROLES: Role[] = ["quantity", "line_total", "unit_price", "transport", "date", "contract_number", "inn", "counterparty", "item_name"];
+const PAGE_LIMIT = 20;
+const PAGE_NOTE = "Если после текста приложены изображения страниц, персональные данные на них закрыты метками вроде {{INN_1}} и {{PERSON_1}}. Суммы, даты и номера договоров на изображении видны. Цитату бери из текстового фрагмента; изображение нужно, чтобы прочитать строку, если текст фрагмента искажён.";
+
+function modelPages(docs: PreparedDoc[]): OutboundPage[] {
+  const pages: OutboundPage[] = [];
+  for (const doc of docs) {
+    for (const page of doc.read.pages ?? []) {
+      if (pages.length >= PAGE_LIMIT) return pages;
+      const fragments = doc.read.fragments.filter((fragment) => fragment.pageNumber === page.pageNumber && fragment.text.trim().length > 1);
+      if (!fragments.length || fragments.some((fragment) => !fragment.tokens?.length)) continue;
+      pages.push({
+        name: doc.name,
+        pageNumber: page.pageNumber,
+        image: page.image,
+        width: page.width,
+        height: page.height,
+        words: fragments.flatMap((fragment) => fragment.tokens ?? []),
+      });
+    }
+  }
+  return pages;
+}
 
 const LABEL_SYSTEM = [
   "Ты определяешь смысл подписей показателей в первичных бухгалтерских документах и отчётах.",
@@ -184,6 +206,7 @@ export async function listReportIndicators(report: PreparedDoc): Promise<{ name:
   const config = aiConfig();
   if (!config) return [];
   const reportFragments = scanFragments([report]);
+  const pages = modelPages([report]);
   const parsed = (await chatJson(
     config,
     [
@@ -195,9 +218,11 @@ export async function listReportIndicators(report: PreparedDoc): Promise<{ name:
       "Ответь JSON-объектом {\"indicators\":[{\"name\":\"\",\"reportValue\":\"\",\"reportFragmentId\":\"\",\"reportQuote\":\"\"}]}.",
       "name — короткая подпись показателя из отчёта. reportQuote — дословная цитата значения из фрагмента reportFragmentId.",
       "Используй только переданные id.",
-    ].join(" "),
+      pages.length ? PAGE_NOTE : "",
+    ].filter(Boolean).join(" "),
     { report: { file: report.name, fragments: reportFragments.fragments } },
     120_000,
+    pages,
   )) as { indicators?: unknown };
   const rows = Array.isArray(parsed.indicators) ? parsed.indicators : [];
   const fragments = new Map(reportFragments.fragments.map((item) => [item.id, item]));
@@ -247,6 +272,7 @@ export async function scanPackForDiscrepancies(
   if (!config) return { findings: [], truncated, kept: active.kept, limit: active.limit };
   const indicators = preset ?? reconcile(report, [], []).map((check) => ({ name: check.fieldName, value: check.reportValue }));
   const reportValues = new Map(indicators.map((item) => [normKey(item.name), item.value]));
+  const pages = modelPages([report, ...supporting]);
   const parsed = (await chatJson(
     config,
     [
@@ -271,6 +297,7 @@ export async function scanPackForDiscrepancies(
       "Тариф и цену за единицу цитируй одной цифрой с единицей, не суммой договора.",
       "Если сумма сложена из нескольких документов, каждый документ — отдельный источник. Одинаковую сумму, дважды написанную в одном документе, не указывай дважды.",
       "Если в названии есть месяц, цитата должна содержать дату этого месяца. Операции другого месяца не включай.",
+      pages.length ? PAGE_NOTE : "",
       extra,
     ].filter(Boolean).join(" "),
     {
@@ -278,6 +305,7 @@ export async function scanPackForDiscrepancies(
       sources: { role: "первичные документы, из которых берутся фактические значения", fragments: sourceFragments.fragments },
     },
     180_000,
+    pages,
   )) as { findings?: unknown };
   const rows = Array.isArray(parsed.findings) ? parsed.findings : [];
   const fragments = new Map([...reportFragments.fragments, ...sourceFragments.fragments].map((item) => [item.id, item]));
