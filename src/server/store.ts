@@ -281,7 +281,12 @@ async function open(): Promise<void> {
 
 type PoolConfig = NonNullable<ConstructorParameters<typeof Pool>[0]>;
 
-/** TLS options for a Postgres URL. Any sslmode other than disable verifies the server certificate. */
+/**
+ * TLS options for a Postgres URL.
+ * `require` encrypts the connection. Hosted Postgres often presents a certificate
+ * that is not in the public trust store, so that mode does not reject it.
+ * `verify-ca` and `verify-full` check the certificate, as does any mode that names a CA file.
+ */
 export function poolOptions(url: string): PoolConfig {
   const query = url.split("#")[0]?.split("?")[1] ?? "";
   const params = new Map(query.split("&").filter(Boolean).map((part) => {
@@ -293,10 +298,11 @@ export function poolOptions(url: string): PoolConfig {
   if (!mode || mode === "disable") return { connectionString, max: 10 };
   const root = params.get("sslrootcert") ? decodeURIComponent(params.get("sslrootcert") ?? "") : process.env["PGSSLROOTCERT"]?.trim();
   const ca = root && fs.existsSync(root) ? fs.readFileSync(root) : undefined;
+  const verify = mode === "verify-ca" || mode === "verify-full" || Boolean(ca);
   return {
     connectionString,
     max: 10,
-    ssl: { rejectUnauthorized: true, ...(ca ? { ca } : {}) },
+    ssl: { rejectUnauthorized: verify, ...(ca ? { ca } : {}) },
   };
 }
 

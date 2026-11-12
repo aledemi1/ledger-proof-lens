@@ -87,8 +87,9 @@ describe("postgres tls", () => {
     expect(poolOptions("postgres://db.example/sverko?sslmode=disable").ssl).toBeUndefined();
     expect(poolOptions("postgres://db.example/sverko?sslmode=require")).toMatchObject({
       connectionString: "postgres://db.example/sverko",
-      ssl: { rejectUnauthorized: true },
+      ssl: { rejectUnauthorized: false },
     });
+    expect(poolOptions("postgres://db.example/sverko?sslmode=verify-full").ssl).toMatchObject({ rejectUnauthorized: true });
     expect(poolOptions("postgres://db.example/sverko?sslmode=verify-full&application_name=sverko").connectionString).toBe("postgres://db.example/sverko?application_name=sverko");
     const dir = mkdtempSync(path.join(tmpdir(), "sverko-ca-"));
     const caPath = path.join(dir, "ca.pem");
