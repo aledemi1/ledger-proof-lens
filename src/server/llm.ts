@@ -303,7 +303,7 @@ export async function scanPackForDiscrepancies(
         fragmentId: source.id,
         quote: source.quote,
         value: source.value,
-        where: fragment ? `${fragment.document}, ${fragment.where}` : "",
+        where: fragment ? [fragment.document, fragment.label, fragment.where].filter(Boolean).join(", ") : "",
         quoteFound: Boolean(fragment && containsQuote(fragment.text, source.quote)),
       };
     });
@@ -344,7 +344,11 @@ export function judgePackFinding(finding: PackFinding): PackFinding {
     const emptyValue = droppedByMonth ? "0" : "";
     return { ...finding, sourceCount: 0, sourceValue: emptyValue, relation: droppedByMonth ? "different" : "missing", sourceQuoteFound: false };
   }
-  const verdict = verdictFromQuotes(finding.name, finding.reportValue, sources.map((source) => source.quote));
+  let verdict = verdictFromQuotes(finding.name, finding.reportValue, sources.map((source) => source.quote));
+  if (verdict.relation === "same" && /получен|принят|фактическ/i.test(finding.name)) {
+    const blob = sources.map((source) => `${source.quote} ${source.where}`).join(" ");
+    if (!/получен|принят|приём|прием|фактическ/i.test(blob)) verdict = { relation: "unclear", sourceValue: verdict.sourceValue };
+  }
   return {
     ...finding,
     sourceCount: sources.length,
@@ -452,15 +456,18 @@ function verdictFromQuotes(name: string, reportValue: string, quotes: string[]):
     const reportMoney = parseMoney(reportValue);
     const parts = [...new Set(quotes.map((quote) => quoteMoney(quote.replace(/[A-Za-zА-Яа-яЁё]{1,8}-\d{1,6}/g, " "))).filter((part): part is bigint => part != null).map((part) => part.toString()))].map(BigInt);
     if (reportMoney == null || !parts.length) return { relation: "unclear", sourceValue: quotes.join(", ") };
-    const equal = parts.find((part) => part === reportMoney);
+    const every = quotes.flatMap((quote) => moneyAmounts(quote.replace(/[A-Za-zА-Яа-яЁё]{1,8}-\d{1,6}/g, " ")));
+    const distinct = [...new Set(every.map((part) => part.toString()))].map(BigInt);
     const totalLabel = /итого|всего|сумм|стоимост|начисл|оплат|расход/i.test(name) && !/цена|тариф/i.test(name);
-    if (equal != null && !totalLabel) return { relation: "same", sourceValue: formatScaled(equal, "₽") };
-    if (!totalLabel && parts.length > 1) return { relation: "unclear", sourceValue: parts.map((part) => formatScaled(part, "₽")).join(", ") };
+    if (!totalLabel && distinct.length > 1) return { relation: "unclear", sourceValue: distinct.map((part) => formatScaled(part, "₽")).join(", ") };
     const total = parts.reduce((sum, part) => sum + part, 0n);
     return { relation: reportMoney === total ? "same" : "different", sourceValue: formatScaled(total, "₽") };
   }
   const measurableQuotes = quotes.map((quote) => quote.replace(/[A-Za-zА-Яа-яЁё]{1,8}-\d{1,6}/g, " "));
   const quantities = [...new Map(measurableQuotes.filter((quote) => hasQuantityUnit(quote)).map((quote) => quantityFromQuote(quote)).filter((part) => part != null).map((part) => [`${part?.unit}|${part?.minor.toString()}`, part])).values()];
+  if (quantities.length > 1 && new Set(quantities.map((part) => part?.minor.toString())).size > 1 && !/итого|всего|сумм|стоимост|начисл|оплат|расход/i.test(name)) {
+    return { relation: "unclear", sourceValue: quantities.map((part) => formatScaled(part?.minor ?? 0n, part?.unit ?? "")).join(", ") };
+  }
   if (quantities.length && quantities.every((part) => part != null) && new Set(quantities.map((part) => part?.unit)).size === 1) {
     const unit = quantities[0]?.unit ?? "";
     const reportQty = quantityFromQuote(reportValue);
@@ -630,6 +637,21 @@ function applyQuotedLink(check: CheckResult, proposals: Proposal[], supportFragm
 }
 
 /** Parses both sides with the same code as the rule reconciler. Returns null when the quote is not a measurable value. */
+/** A displayed source can stay "match" only when it parses as the same value as the report. */
+export function shownStatus(reportValue: string, sourceValue: string | null, proposed: CheckStatus): CheckStatus {
+  if (proposed !== "match") return proposed;
+  if (!sourceValue?.trim()) return "needs_review";
+  const reportDate = parseDate(reportValue);
+  const sourceDate = parseDate(sourceValue);
+  if (reportDate && sourceDate) return reportDate === sourceDate ? "match" : "mismatch";
+  if (moneyAmounts(sourceValue).filter((value, index, all) => all.findIndex((item) => item === value) === index).length > 1) return "needs_review";
+  const compared = compareLinkedValues(reportValue, sourceValue);
+  if (compared?.status === "match") return "match";
+  if (compared?.status === "mismatch") return "mismatch";
+  if (normText(reportValue) && normText(reportValue) === normText(sourceValue)) return "match";
+  return "needs_review";
+}
+
 export function compareLinkedValues(reportValue: string, quote: string): (LinkedValue & { unit?: string }) | null {
   const reportDate = parseDate(reportValue);
   const quoteDate = parseDate(quote);
@@ -742,6 +764,15 @@ function sumQuotedParts(reportValue: string, quotes: string[]): (LinkedValue & {
   };
 }
 
+function moneyAmounts(quote: string): bigint[] {
+  const amounts: bigint[] = [];
+  for (const match of quote.matchAll(/\d{1,3}(?:[ \u00A0,]\d{3})+(?:[.,]\d+)?|\d+[.,]\d{2}/g)) {
+    const value = parseMoney(match[0]);
+    if (value != null) amounts.push(value);
+  }
+  return amounts;
+}
+
 function quoteMoney(quote: string): bigint | null {
   const amounts: bigint[] = [];
   for (const match of quote.matchAll(/\d{1,3}(?:[ \u00A0,]\d{3})+(?:[.,]\d+)?|\d+[.,]\d{2}/g)) {
@@ -796,7 +827,7 @@ function hasCurrency(raw: string): boolean {
 }
 
 function hasQuantityUnit(raw: string): boolean {
-  return new RegExp(`(?:^|[^\\p{L}])(?:${UNIT_TOKEN})(?![\\p{L}])`, "iu").test(raw);
+  return new RegExp(`(?:^|[^\\p{L}])(?:${UNIT_TOKEN})(?![\\p{L}])`, "iu").test(withoutDateGrams(raw));
 }
 
 /** Prefers an amount equal to the report, otherwise the last amount in a row of several. */
@@ -810,13 +841,21 @@ function pickMoney(report: bigint, quote: string): bigint | null {
   return amounts.find((value) => value === report) ?? amounts[amounts.length - 1] ?? null;
 }
 
+/** A year marker, «2026 г.» or «12.10.2026 г.», is not a mass. */
+function withoutDateGrams(raw: string): string {
+  return raw
+    .replace(/(\d{1,2}[./]\d{1,2}[./]\d{2,4})\s*г\.?(?!\p{L})/giu, "$1")
+    .replace(/\b((?:19|20)\d{2})\s*г\.?(?!\p{L})/giu, "$1");
+}
+
 /** Uses the last number that stands next to a unit, so a code like БК-8 does not hide «10 шт». */
 function quantityFromQuote(raw: string): { minor: bigint; unit: string } | null {
+  const text = withoutDateGrams(raw);
   const re = new RegExp(`(${NUMBER_TOKEN})\\s*(${UNIT_TOKEN})`, "giu");
-  const hits = [...raw.matchAll(re)];
+  const hits = [...text.matchAll(re)].filter((hit) => !/^г\.?$/i.test(hit[2] ?? "") || !/^(?:19|20)\d{2}$/.test((hit[1] ?? "").replace(/\s/g, "")));
   const last = hits.at(-1);
-  if (last?.[1] && last[2]) return parseQuantity(`${last[1]} ${/^экз/i.test(last[2]) ? "шт" : last[2]}`);
-  return parseQuantity(raw);
+  if (last?.[1] && last[2]) return parseQuantity(`${last[1]} ${/^экз/i.test(last[2]) ? "шт" : /^анализ/i.test(last[2]) ? "шт" : last[2]}`);
+  return parseQuantity(text);
 }
 
 function alignQuantity(reportValue: string, quote: string): { left: { minor: bigint; unit: string }; right: { minor: bigint; unit: string } } | null {

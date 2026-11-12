@@ -126,9 +126,11 @@ describe("processSession contract", () => {
     const id = await upload(cookie, "Модель вместо правил", supplyReport(), "Отчет_поставка.xlsx", [{ name: "Акт_14.pdf", bytes: await actPdf("250 000,00 руб.", 1) }]);
     await enqueue(id);
     const session = await readSession(id);
-    expect(session?.checks.map((check) => check.fieldName)).toEqual(["Контракт модели"]);
+    const model = session?.checks.find((check) => check.fieldName === "Контракт модели");
+    expect(model).toBeTruthy();
+    expect(session?.checks.filter((check) => check.id.startsWith("omitted-")).every((check) => check.status === "needs_review")).toBe(true);
     expect(session?.notices?.some((notice) => notice.code === "model_two_stage")).toBe(true);
-    const evidence = session?.checks[0]?.evidenceReferences[0];
+    const evidence = model?.evidenceReferences[0];
     expect(evidence?.pageNumber).toBeGreaterThan(0);
     expect(evidence?.box).toBeTruthy();
     expect(evidence?.locationInDocument).toBeTruthy();

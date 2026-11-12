@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { aiConfig } from "@/server/env";
 import { readFile } from "@/server/extract";
 import { laptopActPdf, laptopReport, laptopWaybill } from "@/server/fixtures";
-import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "@/server/llm";
+import { classifyLabels, compareLinkedValues, judgePackFinding, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, shownStatus, type PackFinding } from "@/server/llm";
 import { reconcile, unknownLabels, type PreparedDoc, type RoleHints } from "@/server/reconcile";
 import type { Locale } from "@/i18n/locales";
 import { formatExplanation } from "@/lib/explanations";
@@ -522,6 +522,40 @@ describe("pack finding judge", () => {
       sources: [{ fragmentId: "a", quote: "окончательная цена 6,35 рубля за кВт·ч", value: "", where: "Условия", quoteFound: true }],
     }));
     expect(judged.relation).toBe("same");
+  });
+
+  it("does not call different visible dates a match", () => {
+    expect(shownStatus("31.12.2026", "31.08.2027", "match")).toBe("mismatch");
+    expect(shownStatus("31.12.2026", "31.12.2026", "match")).toBe("match");
+  });
+
+  it("does not pick the amount that happens to equal the report", () => {
+    const judged = judgePackFinding(finding({
+      name: "Получено АН-21",
+      reportValue: "10",
+      sources: [{ fragmentId: "a", quote: "План 10 экз. Приёмка 6 экз.", value: "", where: "Приёмка", quoteFound: true }],
+    }));
+    expect(judged.relation).not.toBe("same");
+  });
+
+  it("does not match a received quantity quoted as a bare number", () => {
+    const judged = judgePackFinding(finding({
+      name: "Получено АН-21",
+      reportValue: "10",
+      sources: [{ fragmentId: "a", quote: "10", value: "", where: "План", quoteFound: true }],
+    }));
+    expect(judged.relation).not.toBe("same");
+  });
+
+  it("does not read the year marker as grams", () => {
+    const judged = judgePackFinding(finding({
+      name: "Масса порошка",
+      reportValue: "500 г",
+      sources: [{ fragmentId: "a", quote: "Договор от 12.10.2026 г. Передано 500 г.", value: "", where: "Акт", quoteFound: true }],
+    }));
+    expect(judged.relation).toBe("same");
+    expect(judged.sourceValue).toContain("500");
+    expect(judged.sourceValue).not.toContain("2026");
   });
 
   it("does not treat an unrelated place as another contract number", () => {

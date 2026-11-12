@@ -16,7 +16,7 @@ import {
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
 import { evidenceFromFragment } from "./evidence";
-import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, type PackFinding } from "./llm";
+import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, shownStatus, type PackFinding } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { AuditNotice, CheckResult, CheckStatus } from "@/types/audit";
@@ -154,6 +154,7 @@ export async function processSession(sessionId: string, replace = false): Promis
     try {
       const scan = await scanPackInTwoStages(reportDoc, separated.unique);
       checks = findingsToChecks(scan.findings, docs);
+      if (checks.length) checks = withOmitted(checks, reportDoc, separated.unique, fileErrors);
       if (scan.truncated) modelNotices.push({ code: "context_truncated", kept: scan.kept, limit: scan.limit });
       if (checks.length) modelNotices.push({ code: "model_two_stage" });
     } catch (error) {
@@ -210,10 +211,40 @@ async function ruleChecks(reportDoc: PreparedDoc, supporting: PreparedDoc[], fil
   return checks;
 }
 
+function indicatorKey(value: string): string {
+  return value.toLowerCase().replace(/ё/g, "е").replace(/[«»"'.,]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function sameIndicator(left: string, right: string): boolean {
+  const a = indicatorKey(left);
+  const b = indicatorKey(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.length >= 8 && b.length >= 8 && (a.includes(b) || b.includes(a));
+}
+
+/** Rows the model never named stay visible, but only as manual review. */
+function withOmitted(checks: CheckResult[], report: PreparedDoc, supporting: PreparedDoc[], fileErrors: { fileName: string; reason: string }[]): CheckResult[] {
+  const added = reconcile(report, supporting, fileErrors).flatMap((rule) => {
+    if (checks.some((check) => sameIndicator(check.fieldName, rule.fieldName))) return [];
+    const row: CheckResult = {
+      ...rule,
+      id: `omitted-${rule.id}`,
+      status: "needs_review",
+      severity: "medium",
+      discrepancy: null,
+      explanation: [{ code: "model_omitted", label: rule.fieldName }],
+    };
+    return [row];
+  });
+  return [...checks, ...added];
+}
+
 function findingsToChecks(findings: PackFinding[], docs: PreparedDoc[]): CheckResult[] {
   const reportId = docs[0]?.id ?? "";
   return findings.map((finding, index) => {
-    const status: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" ? "needs_review" : "not_found";
+    const proposed: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" ? "needs_review" : "not_found";
+    const status = shownStatus(finding.reportValue, finding.sourceValue || null, proposed);
     const compared = status === "match" || status === "mismatch" ? compareLinkedValues(finding.reportValue, finding.sourceValue) : null;
     const evidence = finding.sources.filter((source) => source.quoteFound).map((source) => evidenceFromFragment(docs, source.fragmentId, source.quote, source.where));
     const reportReference = evidenceFromFragment(docs, finding.reportFragmentId, finding.reportQuote || finding.reportValue, finding.reportWhere);
@@ -265,7 +296,8 @@ export async function findSelectedIndicator(sessionId: string, text: string, anc
   const scan = await scanPackForDiscrepancies(report, supporting, "", [{ name: trimmed, value: trimmed }]);
   const findings = scan.findings;
   const finding = findings.find((item) => item.name === trimmed) ?? findings[0];
-  const status: CheckStatus = finding?.relation === "same" ? "match" : finding?.relation === "different" ? "mismatch" : finding?.relation === "unclear" ? "needs_review" : "not_found";
+  const proposed: CheckStatus = finding?.relation === "same" ? "match" : finding?.relation === "different" ? "mismatch" : finding?.relation === "unclear" ? "needs_review" : "not_found";
+  const status = shownStatus(trimmed, finding?.sourceValue || null, proposed);
   const compared = finding && (status === "match" || status === "mismatch") ? compareLinkedValues(trimmed, finding.sourceValue) : null;
   const docs = [report, ...supporting];
   const evidence = (finding?.sources ?? []).filter((source) => source.quoteFound).map((source) => evidenceFromFragment(docs, source.fragmentId, source.quote, source.where));

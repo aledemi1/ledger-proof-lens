@@ -57,6 +57,7 @@ interface Phrases {
   modelSummed: string;
   cited: string;
   citeMissing: string;
+  modelOmitted: string;
   selectedFound: string;
   selectedMissing: string;
   editedUnparsed: string;
@@ -123,6 +124,7 @@ const ru: Phrases = {
   modelSummed: "Модель указала {count} источников: {listed}. Сервер сложил их и сверил с {report}.{difference}",
   cited: "Сервер сверил «{name}» с {count} цитатами из первичных документов.",
   citeMissing: "Для «{name}» в первичных документах не найдена цитата, которая есть в указанном фрагменте.",
+  modelOmitted: "Модель не выделила «{label}». Строка добавлена из правил и оставлена на ручную проверку, без статуса «совпадает».",
   selectedFound: "Проверяющий выделил «{text}» после разбора. Сервер нашёл {count} источников и сверил их с выделенным текстом.",
   selectedMissing: "Проверяющий выделил «{text}» после разбора. В первичных документах подтверждение не найдено.",
   editedUnparsed: "В отчёт записано «{value}». Сравнить с источником как число не удалось.",
@@ -189,6 +191,7 @@ const en: Phrases = {
   modelSummed: "The model named {count} sources: {listed}. The server added them and compared the sum with {report}.{difference}",
   cited: "The server compared «{name}» with {count} quotes from the source documents.",
   citeMissing: "No quote that actually appears in the named fragment was found for «{name}».",
+  modelOmitted: "The model did not list «{label}». The row was added from the rules and left for manual review, not closed as a match.",
   selectedFound: "The reviewer selected «{text}» after the check. The server found {count} sources and compared them with the selected text.",
   selectedMissing: "The reviewer selected «{text}» after the check. No confirmation was found in the source documents.",
   editedUnparsed: "«{value}» was written into the report. It could not be compared with the source as a number.",
@@ -255,6 +258,7 @@ const de: Phrases = {
   modelSummed: "Das Modell hat {count} Quellen genannt: {listed}. Der Server hat sie addiert und mit {report} verglichen.{difference}",
   cited: "Der Server hat «{name}» mit {count} Zitaten aus den Primärdokumenten verglichen.",
   citeMissing: "Für «{name}» wurde kein Zitat gefunden, das im angegebenen Fragment tatsächlich steht.",
+  modelOmitted: "Das Modell hat «{label}» nicht genannt. Die Zeile kommt aus den Regeln und bleibt zur manuellen Prüfung, nicht als Übereinstimmung.",
   selectedFound: "Die prüfende Person hat «{text}» nach der Auswertung markiert. Der Server hat {count} Quellen gefunden und mit dem markierten Text verglichen.",
   selectedMissing: "Die prüfende Person hat «{text}» nach der Auswertung markiert. In den Primärdokumenten wurde keine Bestätigung gefunden.",
   editedUnparsed: "In den Bericht wurde «{value}» eingetragen. Ein Zahlenvergleich mit der Quelle war nicht möglich.",
@@ -321,6 +325,7 @@ const fr: Phrases = {
   modelSummed: "Le modèle a indiqué {count} sources : {listed}. Le serveur les a additionnées et comparées à {report}.{difference}",
   cited: "Le serveur a comparé «{name}» avec {count} citations des documents primaires.",
   citeMissing: "Aucune citation réellement présente dans le fragment indiqué n'a été trouvée pour «{name}».",
+  modelOmitted: "Le modèle n'a pas retenu «{label}». La ligne est ajoutée par les règles et reste en revue manuelle, sans statut de correspondance.",
   selectedFound: "Le réviseur a sélectionné «{text}» après l'analyse. Le serveur a trouvé {count} sources et les a comparées au texte sélectionné.",
   selectedMissing: "Le réviseur a sélectionné «{text}» après l'analyse. Aucune confirmation n'a été trouvée dans les documents primaires.",
   editedUnparsed: "«{value}» a été inscrit dans le rapport. La comparaison avec la source comme nombre a échoué.",
@@ -387,6 +392,7 @@ const it: Phrases = {
   modelSummed: "Il modello ha indicato {count} fonti: {listed}. Il server le ha sommate e confrontate con {report}.{difference}",
   cited: "Il server ha confrontato «{name}» con {count} citazioni dei documenti primari.",
   citeMissing: "Per «{name}» non è stata trovata una citazione presente nel frammento indicato.",
+  modelOmitted: "Il modello non ha indicato «{label}». La riga è stata aggiunta dalle regole e lasciata alla verifica manuale, senza chiuderla come coincidenza.",
   selectedFound: "Il revisore ha selezionato «{text}» dopo l'analisi. Il server ha trovato {count} fonti e le ha confrontate con il testo selezionato.",
   selectedMissing: "Il revisore ha selezionato «{text}» dopo l'analisi. Nei documenti primari non è stata trovata una conferma.",
   editedUnparsed: "Nel rapporto è stato scritto «{value}». Non è stato possibile confrontarlo con la fonte come numero.",
@@ -453,6 +459,7 @@ const es: Phrases = {
   modelSummed: "El modelo indicó {count} fuentes: {listed}. El servidor las sumó y las comparó con {report}.{difference}",
   cited: "El servidor comparó «{name}» con {count} citas de los documentos primarios.",
   citeMissing: "No se encontró una cita que esté de verdad en el fragmento indicado para «{name}».",
+  modelOmitted: "El modelo no incluyó «{label}». La fila se añadió desde las reglas y queda para revisión manual, sin cerrarla como coincidencia.",
   selectedFound: "Quien revisa seleccionó «{text}» después del análisis. El servidor encontró {count} fuentes y las comparó con el texto seleccionado.",
   selectedMissing: "Quien revisa seleccionó «{text}» después del análisis. No se encontró confirmación en los documentos primarios.",
   editedUnparsed: "Se escribió «{value}» en el informe. No se pudo comparar con la fuente como número.",
@@ -519,6 +526,7 @@ const tr: Phrases = {
   modelSummed: "Model {count} kaynak gösterdi: {listed}. Sunucu bunları toplayıp {report} ile karşılaştırdı.{difference}",
   cited: "Sunucu «{name}» değerini birincil belgelerdeki {count} alıntıyla karşılaştırdı.",
   citeMissing: "«{name}» için, belirtilen parçada gerçekten bulunan bir alıntı yok.",
+  modelOmitted: "Model «{label}» göstergesini seçmedi. Satır kurallardan eklendi ve eşleşme olarak kapatılmadan elle incelemeye bırakıldı.",
   selectedFound: "İnceleyen kişi çözümlemeden sonra «{text}» metnini seçti. Sunucu {count} kaynak bulup seçilen metinle karşılaştırdı.",
   selectedMissing: "İnceleyen kişi çözümlemeden sonra «{text}» metnini seçti. Birincil belgelerde doğrulama bulunamadı.",
   editedUnparsed: "Rapora «{value}» yazıldı. Kaynakla sayı olarak karşılaştırılamadı.",
@@ -585,6 +593,7 @@ const pl: Phrases = {
   modelSummed: "Model wskazał {count} źródeł: {listed}. Serwer je zsumował i porównał z {report}.{difference}",
   cited: "Serwer porównał «{name}» z {count} cytatami z dokumentów pierwotnych.",
   citeMissing: "Dla «{name}» nie znaleziono cytatu, który naprawdę jest we wskazanym fragmencie.",
+  modelOmitted: "Model nie wyróżnił «{label}». Wiersz dodano z reguł i zostawiono do ręcznego sprawdzenia, bez statusu zgodności.",
   selectedFound: "Osoba sprawdzająca zaznaczyła «{text}» po analizie. Serwer znalazł {count} źródeł i porównał je z zaznaczonym tekstem.",
   selectedMissing: "Osoba sprawdzająca zaznaczyła «{text}» po analizie. W dokumentach pierwotnych nie znaleziono potwierdzenia.",
   editedUnparsed: "Do raportu wpisano «{value}». Nie udało się porównać tego ze źródłem jako liczby.",
@@ -651,6 +660,7 @@ const pt: Phrases = {
   modelSummed: "O modelo indicou {count} fontes: {listed}. O servidor somou-as e comparou o total com {report}.{difference}",
   cited: "O servidor comparou «{name}» com {count} citações dos documentos primários.",
   citeMissing: "Não foi encontrada uma citação que esteja de facto no fragmento indicado para «{name}».",
+  modelOmitted: "O modelo não indicou «{label}». A linha foi acrescentada pelas regras e ficou para revisão manual, sem ser fechada como coincidência.",
   selectedFound: "Quem revê selecionou «{text}» depois da análise. O servidor encontrou {count} fontes e comparou-as com o texto selecionado.",
   selectedMissing: "Quem revê selecionou «{text}» depois da análise. Não foi encontrada confirmação nos documentos primários.",
   editedUnparsed: "Foi escrito «{value}» no relatório. Não foi possível comparar com a fonte como número.",
@@ -717,6 +727,7 @@ const nl: Phrases = {
   modelSummed: "Het model noemde {count} bronnen: {listed}. De server heeft ze opgeteld en vergeleken met {report}.{difference}",
   cited: "De server heeft «{name}» vergeleken met {count} citaten uit de brondocumenten.",
   citeMissing: "Voor «{name}» is geen citaat gevonden dat daadwerkelijk in het genoemde fragment staat.",
+  modelOmitted: "Het model heeft «{label}» niet genoemd. De rij is uit de regels toegevoegd en blijft voor handmatige controle, niet als overeenkomst.",
   selectedFound: "De beoordelaar selecteerde «{text}» na de analyse. De server vond {count} bronnen en vergeleek die met de geselecteerde tekst.",
   selectedMissing: "De beoordelaar selecteerde «{text}» na de analyse. In de brondocumenten is geen bevestiging gevonden.",
   editedUnparsed: "«{value}» is in het rapport geschreven. Vergelijken met de bron als getal lukte niet.",
@@ -783,6 +794,7 @@ const zh: Phrases = {
   modelSummed: "模型指出了 {count} 个来源：{listed}。服务器将它们相加并与 {report} 比较。{difference}",
   cited: "服务器将「{name}」与原始凭证中的 {count} 条引文作了比较。",
   citeMissing: "没有找到确实出现在所指片段中的「{name}」引文。",
+  modelOmitted: "模型没有列出「{label}」。这一行由规则补上，并留给人工复核，不会被标成一致。",
   selectedFound: "复核人在分析之后选定了「{text}」。服务器找到 {count} 个来源，并与所选文字作了比较。",
   selectedMissing: "复核人在分析之后选定了「{text}」。原始凭证中没有找到确认。",
   editedUnparsed: "报表中写入了「{value}」。无法把它当作数字与来源比较。",
@@ -892,6 +904,8 @@ function render(note: CheckNote, pack: Phrases): string {
       return fill(pack.cited, { name: note.name, count: note.count });
     case "cite_missing":
       return fill(pack.citeMissing, { name: note.name });
+    case "model_omitted":
+      return fill(pack.modelOmitted, { label: note.label });
     case "selected_found":
       return fill(pack.selectedFound, { text: note.text, count: note.count });
     case "selected_missing":

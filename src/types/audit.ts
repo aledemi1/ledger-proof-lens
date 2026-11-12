@@ -46,6 +46,7 @@ export type CheckNote =
   | { code: "model_summed"; count: number; listed: string; report: string; difference?: string }
   | { code: "cited"; name: string; count: number }
   | { code: "cite_missing"; name: string }
+  | { code: "model_omitted"; label: string }
   | { code: "selected_found"; text: string; count: number }
   | { code: "selected_missing"; text: string }
   | { code: "edited_unparsed"; value: string }
