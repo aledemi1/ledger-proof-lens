@@ -40,6 +40,9 @@ describe("report scope", () => {
     } satisfies PreparedDoc;
     const parts = gatherParts("Страховые взносы", "1 671 359,96", [doc]);
     expect(parts.map((part) => part.quote)).toEqual(["333,000.00"]);
+    expect(gatherParts("Страховые взносы, всего", "1 671 359,96", [doc]).map((part) => part.quote)).toEqual(["333,000.00"]);
+    expect(gatherParts("Итого — 3 этап, 2026 г.", "11 580 377,40", [doc])).toEqual([]);
+    expect(gatherParts("Взносы, счет 213, всего", "1 578 126,37", [doc])).toEqual([]);
   });
 
   it("treats a row total as the same row as its articles", () => {

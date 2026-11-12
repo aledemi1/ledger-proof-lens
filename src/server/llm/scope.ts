@@ -117,8 +117,13 @@ export interface GatheredPart {
 }
 
 /** Monthly or separate documents of one article, when the report total itself is not written in them. */
+function isPureTotal(name: string): boolean {
+  const word = name.toLowerCase().replace(/ё/g, "е").split(/[^\p{L}\p{N}]+/u).find((item) => item.length >= 4);
+  return word === "итого" || word === "всего";
+}
+
 export function gatherParts(name: string, reportValue: string, docs: PreparedDoc[]): GatheredPart[] {
-  if (/итого|всего/i.test(name)) return [];
+  if (isPureTotal(name) || /(?:^|[^\p{L}\p{N}])(счет|счёт|субсчет|субсчёт|код)\s*\d+/iu.test(name)) return [];
   const wanted = stems(name);
   const reportMoney = parseMoney(reportValue);
   if (!wanted.length || reportMoney == null) return [];

@@ -368,7 +368,7 @@ export async function scanPackForDiscrepancies(
     const reportAmount = knownValue || textOf(item["reportValue"]);
     const hasMoneyPart = sources.some((source) => source.quoteFound && source.included !== false && moneyAmounts(source.quote).length === 1);
     const summedMoney = /₽|руб|€|\$/i.test(reportAmount) || /\d{1,3}(?:[ \u00A0]\d{3})+/.test(reportAmount) || /\d+[.,]\d{2}/.test(reportAmount);
-    if (!hasMoneyPart && summedMoney && !/итого|всего/i.test(name)) {
+    if (!hasMoneyPart && summedMoney) {
       sources.splice(0, sources.length);
       for (const part of gatherParts(name, reportAmount, supporting)) {
         if (exclusionReason({ dates: part.dates, contracts: part.contracts }, reportScope)) continue;
