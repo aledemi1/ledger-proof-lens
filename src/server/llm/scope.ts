@@ -165,6 +165,11 @@ function pairedAmount(fragments: PreparedDoc["read"]["fragments"], wanted: strin
 }
 
 function moneyTokens(quote: string): bigint[] {
+  const trimmed = quote.trim();
+  if (/^[\d\s\u00A0.,]+$/.test(trimmed)) {
+    const whole = parseMoney(trimmed);
+    return whole == null ? [] : [whole];
+  }
   const amounts: bigint[] = [];
   for (const match of quote.matchAll(/\d{1,3}(?:[ \u00A0,]\d{3})+(?:[.,]\d+)?|\d+[.,]\d{2}/g)) {
     const value = parseMoney(match[0]);

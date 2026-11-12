@@ -366,7 +366,9 @@ export async function scanPackForDiscrepancies(
       };
     });
     const reportAmount = knownValue || textOf(item["reportValue"]);
-    if (!sources.some((source) => source.quoteFound && source.included !== false) && parseMoney(reportAmount)) {
+    const hasMoneyPart = sources.some((source) => source.quoteFound && source.included !== false && moneyAmounts(source.quote).length === 1);
+    if (!hasMoneyPart && parseMoney(reportAmount) && !/итого|всего/i.test(name)) {
+      sources.splice(0, sources.length);
       for (const part of gatherParts(name, reportAmount, supporting)) {
         if (exclusionReason({ dates: part.dates, contracts: part.contracts }, reportScope)) continue;
         sources.push({
