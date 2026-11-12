@@ -243,9 +243,10 @@ function withOmitted(checks: CheckResult[], report: PreparedDoc, supporting: Pre
 function findingsToChecks(findings: PackFinding[], docs: PreparedDoc[]): CheckResult[] {
   const reportId = docs[0]?.id ?? "";
   return findings.map((finding, index) => {
-    const proposed: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" ? "needs_review" : "not_found";
+    const proposed: CheckStatus = finding.relation === "same" ? "match" : finding.relation === "different" ? "mismatch" : finding.relation === "unclear" || finding.relation === "insufficient" ? "needs_review" : "not_found";
     const status = shownStatus(finding.reportValue, finding.sourceValue || null, proposed);
     const compared = status === "match" || status === "mismatch" ? compareLinkedValues(finding.reportValue, finding.sourceValue) : null;
+    const discrepancy = status === "mismatch" ? (compared?.discrepancy ?? null) : null;
     const evidence = finding.sources.filter((source) => source.quoteFound).map((source) => evidenceFromFragment(docs, source.fragmentId, source.quote, source.where));
     const reportReference = evidenceFromFragment(docs, finding.reportFragmentId, finding.reportQuote || finding.reportValue, finding.reportWhere);
     if (!reportReference.documentId) reportReference.documentId = reportId;
@@ -254,12 +255,16 @@ function findingsToChecks(findings: PackFinding[], docs: PreparedDoc[]): CheckRe
       fieldName: finding.name,
       reportValue: finding.reportValue,
       sourceValue: finding.sourceValue || null,
-      discrepancy: status === "mismatch" ? (compared?.discrepancy ?? null) : null,
+      discrepancy,
       status,
       severity: status === "mismatch" ? "high" : status === "match" ? "low" : "medium",
-      explanation: finding.sourceCount
-        ? [{ code: "cited", name: finding.name, count: finding.sourceCount }]
-        : [{ code: "cite_missing", name: finding.name }],
+      explanation: finding.relation === "insufficient"
+        ? [{ code: "insufficient", name: finding.name }]
+        : finding.calculation
+          ? [{ code: "calculated", formula: finding.calculation, total: finding.sourceValue, report: finding.reportValue, ...(discrepancy ? { difference: discrepancy } : {}) }]
+          : finding.sourceCount
+            ? [{ code: "cited", name: finding.name, count: finding.sourceCount }]
+            : [{ code: "cite_missing", name: finding.name }],
       evidenceReferences: evidence,
       reportReference,
       reviewerStatus: "pending",

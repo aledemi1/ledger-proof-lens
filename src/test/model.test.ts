@@ -487,6 +487,41 @@ describe("pack finding judge", () => {
     ...patch,
   });
 
+  it("sums the documents the model included even when the name is not a total", () => {
+    const judged = judgePackFinding(finding({
+      name: "Общепроизводственные затраты",
+      reportValue: "1 145 798,10",
+      sources: [
+        { fragmentId: "a", quote: "245 000,00 руб.", value: "", where: "Акт 118", quoteFound: true, included: true, marked: true },
+        { fragmentId: "b", quote: "318 298,10 руб.", value: "", where: "Счет 174", quoteFound: true, included: true, marked: true },
+        { fragmentId: "c", quote: "270 000,00 руб.", value: "", where: "Записка", quoteFound: true, included: true, marked: true },
+        { fragmentId: "d", quote: "300 000,00 руб.", value: "", where: "УПД", quoteFound: true, included: true, marked: true },
+        { fragmentId: "e", quote: "165 000,00 руб.", value: "", where: "Акт июня", quoteFound: true, included: false, marked: true, reason: "вне периода" },
+      ],
+    }));
+    expect(judged.relation).toBe("different");
+    expect(judged.sourceValue).toBe("1 133 298,10 ₽");
+    expect(judged.calculation).toContain("245 000");
+    expect(judged.calculation).toContain("вне периода");
+    expect(judged.sources.map((source) => source.fragmentId)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("does not sum several amounts inside one included quote", () => {
+    const judged = judgePackFinding(finding({
+      name: "Общепроизводственные затраты",
+      reportValue: "245 000,00",
+      sources: [
+        { fragmentId: "a", quote: "План 245 000,00 руб. Факт 100 000,00 руб.", value: "", where: "Акт", quoteFound: true, included: true, marked: true },
+      ],
+    }));
+    expect(judged.relation).not.toBe("same");
+  });
+
+  it("leaves an internal split unchecked", () => {
+    const judged = judgePackFinding(finding({ name: "Трудоемкость", reportValue: "34,14", relation: "insufficient", sources: [] }));
+    expect(judged.relation).toBe("insufficient");
+  });
+
   it("sums verified parts and ignores the model's own verdict", () => {
     const judged = judgePackFinding(finding({
       sources: [

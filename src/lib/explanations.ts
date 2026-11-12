@@ -58,6 +58,8 @@ interface Phrases {
   cited: string;
   citeMissing: string;
   modelOmitted: string;
+  calculated: string;
+  insufficient: string;
   selectedFound: string;
   selectedMissing: string;
   editedUnparsed: string;
@@ -125,6 +127,8 @@ const ru: Phrases = {
   cited: "Сервер сверил «{name}» с {count} цитатами из первичных документов.",
   citeMissing: "Для «{name}» в первичных документах не найдена цитата, которая есть в указанном фрагменте.",
   modelOmitted: "Модель не выделила «{label}». Строка добавлена из правил и оставлена на ручную проверку, без статуса «совпадает».",
+  calculated: "Модель решила, какие документы входят в расчёт. Сервер сложил включённые части: {formula} = {total}. В отчёте {report}.{difference}",
+  insufficient: "«{name}» — внутренняя разбивка без отдельного документа. Строка оставлена непроверенной.",
   selectedFound: "Проверяющий выделил «{text}» после разбора. Сервер нашёл {count} источников и сверил их с выделенным текстом.",
   selectedMissing: "Проверяющий выделил «{text}» после разбора. В первичных документах подтверждение не найдено.",
   editedUnparsed: "В отчёт записано «{value}». Сравнить с источником как число не удалось.",
@@ -192,6 +196,8 @@ const en: Phrases = {
   cited: "The server compared «{name}» with {count} quotes from the source documents.",
   citeMissing: "No quote that actually appears in the named fragment was found for «{name}».",
   modelOmitted: "The model did not list «{label}». The row was added from the rules and left for manual review, not closed as a match.",
+  calculated: "The model chose which documents belong in the calculation. The server added the included parts: {formula} = {total}. The report says {report}.{difference}",
+  insufficient: "«{name}» is an internal split with no document of its own. The row stays unchecked.",
   selectedFound: "The reviewer selected «{text}» after the check. The server found {count} sources and compared them with the selected text.",
   selectedMissing: "The reviewer selected «{text}» after the check. No confirmation was found in the source documents.",
   editedUnparsed: "«{value}» was written into the report. It could not be compared with the source as a number.",
@@ -259,6 +265,8 @@ const de: Phrases = {
   cited: "Der Server hat «{name}» mit {count} Zitaten aus den Primärdokumenten verglichen.",
   citeMissing: "Für «{name}» wurde kein Zitat gefunden, das im angegebenen Fragment tatsächlich steht.",
   modelOmitted: "Das Modell hat «{label}» nicht genannt. Die Zeile kommt aus den Regeln und bleibt zur manuellen Prüfung, nicht als Übereinstimmung.",
+  calculated: "Das Modell hat entschieden, welche Dokumente in die Berechnung gehören. Der Server hat die einbezogenen Teile addiert: {formula} = {total}. Im Bericht steht {report}.{difference}",
+  insufficient: "«{name}» ist eine interne Aufteilung ohne eigenes Dokument. Die Zeile bleibt ungeprüft.",
   selectedFound: "Die prüfende Person hat «{text}» nach der Auswertung markiert. Der Server hat {count} Quellen gefunden und mit dem markierten Text verglichen.",
   selectedMissing: "Die prüfende Person hat «{text}» nach der Auswertung markiert. In den Primärdokumenten wurde keine Bestätigung gefunden.",
   editedUnparsed: "In den Bericht wurde «{value}» eingetragen. Ein Zahlenvergleich mit der Quelle war nicht möglich.",
@@ -326,6 +334,8 @@ const fr: Phrases = {
   cited: "Le serveur a comparé «{name}» avec {count} citations des documents primaires.",
   citeMissing: "Aucune citation réellement présente dans le fragment indiqué n'a été trouvée pour «{name}».",
   modelOmitted: "Le modèle n'a pas retenu «{label}». La ligne est ajoutée par les règles et reste en revue manuelle, sans statut de correspondance.",
+  calculated: "Le modèle a choisi les documents du calcul. Le serveur a additionné les parties retenues : {formula} = {total}. Le rapport indique {report}.{difference}",
+  insufficient: "«{name}» est une ventilation interne sans document propre. La ligne reste non vérifiée.",
   selectedFound: "Le réviseur a sélectionné «{text}» après l'analyse. Le serveur a trouvé {count} sources et les a comparées au texte sélectionné.",
   selectedMissing: "Le réviseur a sélectionné «{text}» après l'analyse. Aucune confirmation n'a été trouvée dans les documents primaires.",
   editedUnparsed: "«{value}» a été inscrit dans le rapport. La comparaison avec la source comme nombre a échoué.",
@@ -393,6 +403,8 @@ const it: Phrases = {
   cited: "Il server ha confrontato «{name}» con {count} citazioni dei documenti primari.",
   citeMissing: "Per «{name}» non è stata trovata una citazione presente nel frammento indicato.",
   modelOmitted: "Il modello non ha indicato «{label}». La riga è stata aggiunta dalle regole e lasciata alla verifica manuale, senza chiuderla come coincidenza.",
+  calculated: "Il modello ha scelto quali documenti entrano nel calcolo. Il server ha sommato le parti incluse: {formula} = {total}. Nel rapporto c'è {report}.{difference}",
+  insufficient: "«{name}» è una suddivisione interna senza un documento proprio. La riga resta non verificata.",
   selectedFound: "Il revisore ha selezionato «{text}» dopo l'analisi. Il server ha trovato {count} fonti e le ha confrontate con il testo selezionato.",
   selectedMissing: "Il revisore ha selezionato «{text}» dopo l'analisi. Nei documenti primari non è stata trovata una conferma.",
   editedUnparsed: "Nel rapporto è stato scritto «{value}». Non è stato possibile confrontarlo con la fonte come numero.",
@@ -460,6 +472,8 @@ const es: Phrases = {
   cited: "El servidor comparó «{name}» con {count} citas de los documentos primarios.",
   citeMissing: "No se encontró una cita que esté de verdad en el fragmento indicado para «{name}».",
   modelOmitted: "El modelo no incluyó «{label}». La fila se añadió desde las reglas y queda para revisión manual, sin cerrarla como coincidencia.",
+  calculated: "El modelo decidió qué documentos entran en el cálculo. El servidor sumó las partes incluidas: {formula} = {total}. En el informe figura {report}.{difference}",
+  insufficient: "«{name}» es un desglose interno sin un documento propio. La fila queda sin verificar.",
   selectedFound: "Quien revisa seleccionó «{text}» después del análisis. El servidor encontró {count} fuentes y las comparó con el texto seleccionado.",
   selectedMissing: "Quien revisa seleccionó «{text}» después del análisis. No se encontró confirmación en los documentos primarios.",
   editedUnparsed: "Se escribió «{value}» en el informe. No se pudo comparar con la fuente como número.",
@@ -527,6 +541,8 @@ const tr: Phrases = {
   cited: "Sunucu «{name}» değerini birincil belgelerdeki {count} alıntıyla karşılaştırdı.",
   citeMissing: "«{name}» için, belirtilen parçada gerçekten bulunan bir alıntı yok.",
   modelOmitted: "Model «{label}» göstergesini seçmedi. Satır kurallardan eklendi ve eşleşme olarak kapatılmadan elle incelemeye bırakıldı.",
+  calculated: "Model hangi belgelerin hesaba gireceğine karar verdi. Sunucu dahil edilen parçaları topladı: {formula} = {total}. Raporda {report} yazıyor.{difference}",
+  insufficient: "«{name}» ayrı bir belgesi olmayan iç ayrımdır. Satır denetlenmeden bırakıldı.",
   selectedFound: "İnceleyen kişi çözümlemeden sonra «{text}» metnini seçti. Sunucu {count} kaynak bulup seçilen metinle karşılaştırdı.",
   selectedMissing: "İnceleyen kişi çözümlemeden sonra «{text}» metnini seçti. Birincil belgelerde doğrulama bulunamadı.",
   editedUnparsed: "Rapora «{value}» yazıldı. Kaynakla sayı olarak karşılaştırılamadı.",
@@ -594,6 +610,8 @@ const pl: Phrases = {
   cited: "Serwer porównał «{name}» z {count} cytatami z dokumentów pierwotnych.",
   citeMissing: "Dla «{name}» nie znaleziono cytatu, który naprawdę jest we wskazanym fragmencie.",
   modelOmitted: "Model nie wyróżnił «{label}». Wiersz dodano z reguł i zostawiono do ręcznego sprawdzenia, bez statusu zgodności.",
+  calculated: "Model wybrał dokumenty do obliczenia. Serwer zsumował włączone części: {formula} = {total}. W raporcie jest {report}.{difference}",
+  insufficient: "«{name}» to wewnętrzny podział bez osobnego dokumentu. Wiersz pozostaje niesprawdzony.",
   selectedFound: "Osoba sprawdzająca zaznaczyła «{text}» po analizie. Serwer znalazł {count} źródeł i porównał je z zaznaczonym tekstem.",
   selectedMissing: "Osoba sprawdzająca zaznaczyła «{text}» po analizie. W dokumentach pierwotnych nie znaleziono potwierdzenia.",
   editedUnparsed: "Do raportu wpisano «{value}». Nie udało się porównać tego ze źródłem jako liczby.",
@@ -661,6 +679,8 @@ const pt: Phrases = {
   cited: "O servidor comparou «{name}» com {count} citações dos documentos primários.",
   citeMissing: "Não foi encontrada uma citação que esteja de facto no fragmento indicado para «{name}».",
   modelOmitted: "O modelo não indicou «{label}». A linha foi acrescentada pelas regras e ficou para revisão manual, sem ser fechada como coincidência.",
+  calculated: "O modelo escolheu os documentos do cálculo. O servidor somou as partes incluídas: {formula} = {total}. No relatório está {report}.{difference}",
+  insufficient: "«{name}» é uma divisão interna sem documento próprio. A linha fica por verificar.",
   selectedFound: "Quem revê selecionou «{text}» depois da análise. O servidor encontrou {count} fontes e comparou-as com o texto selecionado.",
   selectedMissing: "Quem revê selecionou «{text}» depois da análise. Não foi encontrada confirmação nos documentos primários.",
   editedUnparsed: "Foi escrito «{value}» no relatório. Não foi possível comparar com a fonte como número.",
@@ -728,6 +748,8 @@ const nl: Phrases = {
   cited: "De server heeft «{name}» vergeleken met {count} citaten uit de brondocumenten.",
   citeMissing: "Voor «{name}» is geen citaat gevonden dat daadwerkelijk in het genoemde fragment staat.",
   modelOmitted: "Het model heeft «{label}» niet genoemd. De rij is uit de regels toegevoegd en blijft voor handmatige controle, niet als overeenkomst.",
+  calculated: "Het model koos welke documenten in de berekening horen. De server heeft de opgenomen delen opgeteld: {formula} = {total}. In het rapport staat {report}.{difference}",
+  insufficient: "«{name}» is een interne uitsplitsing zonder eigen document. De rij blijft ongecontroleerd.",
   selectedFound: "De beoordelaar selecteerde «{text}» na de analyse. De server vond {count} bronnen en vergeleek die met de geselecteerde tekst.",
   selectedMissing: "De beoordelaar selecteerde «{text}» na de analyse. In de brondocumenten is geen bevestiging gevonden.",
   editedUnparsed: "«{value}» is in het rapport geschreven. Vergelijken met de bron als getal lukte niet.",
@@ -795,6 +817,8 @@ const zh: Phrases = {
   cited: "服务器将「{name}」与原始凭证中的 {count} 条引文作了比较。",
   citeMissing: "没有找到确实出现在所指片段中的「{name}」引文。",
   modelOmitted: "模型没有列出「{label}」。这一行由规则补上，并留给人工复核，不会被标成一致。",
+  calculated: "模型决定哪些单据计入计算。服务器把计入的部分相加：{formula} = {total}。报表中为 {report}。{difference}",
+  insufficient: "「{name}」是没有单独单据的内部分项，这一行保持未核对。",
   selectedFound: "复核人在分析之后选定了「{text}」。服务器找到 {count} 个来源，并与所选文字作了比较。",
   selectedMissing: "复核人在分析之后选定了「{text}」。原始凭证中没有找到确认。",
   editedUnparsed: "报表中写入了「{value}」。无法把它当作数字与来源比较。",
@@ -906,6 +930,10 @@ function render(note: CheckNote, pack: Phrases): string {
       return fill(pack.citeMissing, { name: note.name });
     case "model_omitted":
       return fill(pack.modelOmitted, { label: note.label });
+    case "calculated":
+      return fill(pack.calculated, { formula: note.formula, total: note.total, report: note.report, difference: note.difference ? fill(pack.deltaSum, { difference: note.difference }) : "" });
+    case "insufficient":
+      return fill(pack.insufficient, { name: note.name });
     case "selected_found":
       return fill(pack.selectedFound, { text: note.text, count: note.count });
     case "selected_missing":
