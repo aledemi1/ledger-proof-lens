@@ -77,7 +77,7 @@ describe("page redaction", () => {
     expect(text).toContain("{{INN_1}}");
     expect(text).not.toContain("7707083893");
     const url = content?.find((part) => part.type === "image_url")?.image_url?.url ?? "";
-    expect(url.startsWith("data:image/png;base64,")).toBe(true);
+    expect(url.startsWith("data:image/jpeg;base64,")).toBe(true);
   });
 
   it("reads a pdf by recognition even when the text layer is long", async () => {

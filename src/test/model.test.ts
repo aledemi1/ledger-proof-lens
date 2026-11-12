@@ -487,6 +487,23 @@ describe("pack finding judge", () => {
     ...patch,
   });
 
+  it("drops a document outside the report period or under another contract", () => {
+    const judged = judgePackFinding(finding({
+      name: "Общехозяйственные затраты",
+      reportValue: "3 204 744,51",
+      scope: { start: "2025-08-01", end: "2026-05-31", contracts: ["24/03/15-01"] },
+      sources: [
+        { fragmentId: "a", quote: "620 000,00 руб.", value: "", where: "Акт января", quoteFound: true, included: true, marked: true, docDates: ["2026-01-31"], docContracts: ["24/03/15-01"] },
+        { fragmentId: "b", quote: "165 000,00 руб.", value: "", where: "Акт июня", quoteFound: true, included: true, marked: true, docDates: ["2026-06-03"], docContracts: ["24/03/15-01"] },
+        { fragmentId: "c", quote: "98 000,00 руб.", value: "", where: "Чужой договор", quoteFound: true, included: true, marked: true, docDates: ["2026-05-15"], docContracts: ["24/03/16-02"] },
+      ],
+    }));
+    expect(judged.relation).toBe("different");
+    expect(judged.sourceValue).toBe("620 000 ₽");
+    expect(judged.calculation).toContain("вне периода");
+    expect(judged.calculation).toContain("другой договор");
+  });
+
   it("sums the documents the model included even when the name is not a total", () => {
     const judged = judgePackFinding(finding({
       name: "Общепроизводственные затраты",

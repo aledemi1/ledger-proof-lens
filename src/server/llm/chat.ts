@@ -14,6 +14,14 @@ export interface OutboundPage {
 
 type ChatPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
+async function jpegPage(png: Buffer): Promise<Buffer> {
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const image = await loadImage(png);
+  const canvas = createCanvas(image.width, image.height);
+  canvas.getContext("2d").drawImage(image, 0, 0);
+  return canvas.toBuffer("image/jpeg", 70);
+}
+
 function maskKnown(value: string, mapping: MaskMapping): string {
   let text = value;
   const entries = Object.entries(mapping.labels).sort((left, right) => right[1].original.length - left[1].original.length);
@@ -28,11 +36,13 @@ export async function chatJson(config: AiConfig, system: string, data: unknown, 
   const mapping = masked.mapping;
   const text = masked.texts[0] ?? "{}";
   const parts: ChatPart[] = [{ type: "text", text }];
-  for (const page of pages) {
+  const outgoing = process.env["SVERKO_PAGE_IMAGES"] === "off" ? [] : pages;
+  for (const page of outgoing) {
     if (!pageIsCovered(page.words, mapping)) continue;
     const painted = await paintPage(page.image, page.width, page.height, page.words, mapping);
+    const jpeg = await jpegPage(painted);
     parts.push({ type: "text", text: `Изображение: ${maskKnown(page.name, mapping)}, страница ${page.pageNumber}.` });
-    parts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${painted.toString("base64")}` } });
+    parts.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpeg.toString("base64")}` } });
   }
   const messages = [
     { role: "system", content: system },
@@ -58,11 +68,22 @@ export async function chatJson(config: AiConfig, system: string, data: unknown, 
 }
 
 export async function post(config: AiConfig, body: unknown, timeoutMs = 45_000): Promise<Response> {
-  return fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await Promise.race([
+      fetch(`${config.baseUrl}/chat/completions`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      new Promise<Response>((_resolve, reject) => {
+        setTimeout(() => reject(new Error("модель не ответила вовремя")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
