@@ -3,6 +3,7 @@ import type { EvidenceReference, FlowBlock, GridCell, GridSheet } from "@/types/
 import type { DocMark } from "@/lib/marks";
 import { fill } from "@/i18n/fill";
 import { useCopy } from "@/i18n/messages";
+import { imagePreviewWidth, pdfPreviewScale } from "@/lib/previewScale";
 import { cn } from "@/lib/utils";
 
 export interface MarkLayer {
@@ -250,11 +251,24 @@ function PageMarks({ page, layer, focus }: { page: number | null; layer: MarkLay
   );
 }
 
+function screenRatio(): number {
+  if (typeof window === "undefined") return 1;
+  return window.devicePixelRatio || 1;
+}
+
 export function ImageView({ url, layer, focus, zoom }: { url: string; layer: MarkLayer; focus: EvidenceReference | null; zoom: number }) {
+  const [naturalWidth, setNaturalWidth] = useState(0);
+  const width = naturalWidth ? imagePreviewWidth(naturalWidth, zoom, screenRatio()) : undefined;
   return (
-    <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: 920 * zoom }}>
+    <div className="mx-auto w-max">
       <div className="relative inline-block bg-white shadow">
-        <img src={url} alt="" className="block h-auto w-full" />
+        <img
+          src={url}
+          alt=""
+          className="block h-auto max-w-none"
+          style={width ? { width, maxWidth: "none" } : { maxWidth: "none" }}
+          onLoad={(event) => setNaturalWidth(event.currentTarget.naturalWidth)}
+        />
         <PageMarks page={null} layer={layer} focus={focus} />
       </div>
     </div>
@@ -265,11 +279,16 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
   const t = useCopy();
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<{ page: number; src: string; width: number; height: number }[]>([]);
+  const [shownUrl, setShownUrl] = useState(url);
+  if (shownUrl !== url) {
+    setShownUrl(url);
+    setPages([]);
+    setError(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    setPages([]);
     void (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
@@ -280,15 +299,19 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
         const data = new Uint8Array(await response.arrayBuffer());
         const pdf = await pdfjs.getDocument({ data }).promise;
         const rendered: { page: number; src: string; width: number; height: number }[] = [];
+        const pixelRatio = screenRatio();
         for (let number = 1; number <= pdf.numPages; number += 1) {
           const page = await pdf.getPage(number);
-          const viewport = page.getViewport({ scale: 1.5 });
+          const base = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: pdfPreviewScale(base.width, base.height, zoom, pixelRatio) });
+          const outputScale = Math.min(Math.max(pixelRatio, 1), 2);
           const canvas = document.createElement("canvas");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
+          canvas.width = Math.floor(viewport.width * outputScale);
+          canvas.height = Math.floor(viewport.height * outputScale);
           const context = canvas.getContext("2d");
           if (!context) continue;
-          await page.render({ canvasContext: context, canvas, viewport }).promise;
+          const transform = outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0];
+          await page.render({ canvasContext: context, canvas, viewport, ...(transform ? { transform } : {}) }).promise;
           rendered.push({ page: number, src: canvas.toDataURL("image/png"), width: viewport.width, height: viewport.height });
           if (cancelled) return;
         }
@@ -300,15 +323,15 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, zoom]);
 
   if (error) return <p className="p-6 text-center text-sm text-muted-foreground">{error}</p>;
   if (!pages.length) return <p className="p-6 text-center text-sm text-muted-foreground">{t.work.opening}</p>;
   return (
-    <div className="mx-auto flex flex-col gap-4" style={{ width: `${zoom * 100}%`, maxWidth: Math.round((pages[0]?.width ?? 600) * zoom) }}>
+    <div className="mx-auto flex w-max flex-col gap-4">
       {pages.map((page) => (
-        <div key={page.page} data-page={page.page} className="relative w-full bg-white shadow" style={{ aspectRatio: `${page.width} / ${page.height}` }}>
-          <img src={page.src} alt="" className="h-full w-full" />
+        <div key={page.page} data-page={page.page} className="relative bg-white shadow" style={{ width: page.width, aspectRatio: `${page.width} / ${page.height}` }}>
+          <img src={page.src} alt="" className="block h-full w-full max-w-none" style={{ maxWidth: "none" }} />
           <PageMarks page={page.page} layer={layer} focus={focus} />
         </div>
       ))}
