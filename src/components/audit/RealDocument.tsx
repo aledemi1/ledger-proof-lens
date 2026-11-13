@@ -279,11 +279,13 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
   const t = useCopy();
   const [error, setError] = useState<string | null>(null);
   const [pages, setPages] = useState<{ page: number; src: string; width: number; height: number }[]>([]);
+  const [showFile, setShowFile] = useState(false);
   const [shownUrl, setShownUrl] = useState(url);
   if (shownUrl !== url) {
     setShownUrl(url);
     setPages([]);
     setError(null);
+    setShowFile(false);
   }
 
   useEffect(() => {
@@ -300,22 +302,35 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
         const pdf = await pdfjs.getDocument({ data }).promise;
         const rendered: { page: number; src: string; width: number; height: number }[] = [];
         const pixelRatio = screenRatio();
-        for (let number = 1; number <= pdf.numPages; number += 1) {
-          const page = await pdf.getPage(number);
-          const base = page.getViewport({ scale: 1 });
-          const viewport = page.getViewport({ scale: pdfPreviewScale(base.width, base.height, zoom, pixelRatio) });
-          const outputScale = Math.min(Math.max(pixelRatio, 1), 2);
+        const paint = async (page: Awaited<ReturnType<typeof pdf.getPage>>, scale: number, density: number) => {
+          const viewport = page.getViewport({ scale });
           const canvas = document.createElement("canvas");
-          canvas.width = Math.floor(viewport.width * outputScale);
-          canvas.height = Math.floor(viewport.height * outputScale);
-          const context = canvas.getContext("2d");
-          if (!context) continue;
-          const transform = outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0];
-          await page.render({ canvasContext: context, canvas, viewport, ...(transform ? { transform } : {}) }).promise;
-          rendered.push({ page: number, src: canvas.toDataURL("image/png"), width: viewport.width, height: viewport.height });
-          if (cancelled) return;
+          canvas.width = Math.max(1, Math.floor(viewport.width * density));
+          canvas.height = Math.max(1, Math.floor(viewport.height * density));
+          const transform = density === 1 ? undefined : [density, 0, 0, density, 0, 0];
+          await page.render({ canvas, viewport, ...(transform ? { transform } : {}) }).promise;
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((value) => resolve(value), "image/png"));
+          if (!blob) throw new Error("blob");
+          return { src: URL.createObjectURL(blob), width: viewport.width, height: viewport.height };
+        };
+        try {
+          for (let number = 1; number <= pdf.numPages; number += 1) {
+            const page = await pdf.getPage(number);
+            const base = page.getViewport({ scale: 1 });
+            const outputScale = Math.min(Math.max(pixelRatio, 1), 2);
+            let painted: { src: string; width: number; height: number };
+            try {
+              painted = await paint(page, pdfPreviewScale(base.width, base.height, zoom, pixelRatio), outputScale);
+            } catch {
+              painted = await paint(page, 1.5, 1);
+            }
+            rendered.push({ page: number, ...painted });
+            if (cancelled) return;
+          }
+          if (!cancelled) setPages(rendered);
+        } catch {
+          if (!cancelled) setShowFile(true);
         }
-        if (!cancelled) setPages(rendered);
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : t.work.pdfFailed);
       }
@@ -326,6 +341,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
   }, [url, zoom]);
 
   if (error) return <p className="p-6 text-center text-sm text-muted-foreground">{error}</p>;
+  if (showFile) return <iframe src={url} title="" className="h-full min-h-[70vh] w-full border-0 bg-white" />;
   if (!pages.length) return <p className="p-6 text-center text-sm text-muted-foreground">{t.work.opening}</p>;
   return (
     <div className="mx-auto flex w-max flex-col gap-4">
