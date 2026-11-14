@@ -240,6 +240,7 @@ export interface ReportSelection {
   chosen?: { anchor?: string; name: string; value: string }[];
   ocrPages: number;
   textChars: number;
+  totalBytes?: number;
 }
 
 export interface RecheckSummary {

@@ -17,6 +17,13 @@ describe("wait estimate", () => {
     expect(visualPagesOf("table.xlsx", 80_000)).toBe(0);
     expect(visualPagesOf("card.pdf", 900_000, 6)).toBe(6);
     expect(previewWait([{ name: "a.pdf", size: 400_000 }, { name: "b.png", size: 100_000 }])).toBeGreaterThan(30);
+    const tiny = previewWait([{ name: "note.xlsx", size: 20_000 }]);
+    const mid = previewWait([{ name: "book.xlsx", size: 800_000 }]);
+    const big = previewWait([{ name: "scan.pdf", size: 8_000_000 }]);
+    expect(mid).toBeGreaterThan(tiny);
+    expect(big).toBeGreaterThan(mid * 2);
+    expect(waitBounds(tiny).kind).toBe("under");
+    expect(waitBounds(big).kind).toBe("range");
   });
 
   it("turns seconds into a short range", () => {

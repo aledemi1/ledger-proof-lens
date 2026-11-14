@@ -1,18 +1,20 @@
-/** Rough seconds left. PDF and image pages are recognized before the text is compared. */
+/** Rough seconds left. The whole pack's size sets the comparison time; pages still to recognize add OCR on top. */
 export function waitSeconds(input: {
   pendingVisualPages: number;
   pendingTextFiles: number;
   textChars: number;
+  totalBytes?: number;
   model: boolean;
   queued: boolean;
 }): number {
-  const ocr = input.pendingVisualPages * 15;
+  const bytes = Math.max(0, input.totalBytes ?? 0);
+  const megabytes = bytes / (1024 * 1024);
+  const fromSize = bytes > 0
+    ? Math.min(input.model ? 40 * 60 : 8 * 60, (input.model ? 20 : 4) + Math.round(megabytes * (input.model ? 80 : 12)))
+    : Math.min(input.model ? 240 : 30, (input.model ? 25 : 2) + Math.ceil(Math.max(0, input.textChars) / 4000) * (input.model ? 8 : 1));
+  const ocr = input.pendingVisualPages * 12;
   const plain = input.pendingTextFiles * 2;
-  const guessedChars = input.textChars + input.pendingTextFiles * 1500 + input.pendingVisualPages * 800;
-  const perChunk = input.model ? 8 : 1;
-  const base = input.model ? 25 : 2;
-  const model = Math.min(input.model ? 240 : 30, base + Math.ceil(guessedChars / 4000) * perChunk);
-  return Math.max(10, (input.queued ? 15 : 0) + ocr + plain + model);
+  return Math.max(8, (input.queued ? 15 : 0) + ocr + plain + fromSize);
 }
 
 /** Pages still to recognize. A known page count wins; otherwise the file size is a stand-in. */
@@ -32,7 +34,8 @@ export function previewWait(files: { name: string; size: number }[]): number {
     if (pages) pendingVisualPages += pages;
     else pendingTextFiles += 1;
   }
-  return waitSeconds({ pendingVisualPages, pendingTextFiles, textChars: 0, model: true, queued: false });
+  const totalBytes = files.reduce((sum, file) => sum + Math.max(0, file.size), 0);
+  return waitSeconds({ pendingVisualPages, pendingTextFiles, textChars: 0, totalBytes, model: true, queued: false });
 }
 
 export function waitBounds(seconds: number): { kind: "under" } | { kind: "about"; n: number } | { kind: "range"; low: number; high: number } {

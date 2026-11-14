@@ -40,6 +40,7 @@ interface HeldPack {
   duplicates: PreparedDoc[];
   fileErrors: { fileName: string; reason: string }[];
   textChars: number;
+  totalBytes: number;
 }
 
 const heldPacks = new Map<string, { pack: HeldPack; timer: ReturnType<typeof setTimeout> }>();
@@ -141,7 +142,7 @@ export async function processSession(sessionId: string, replace = false): Promis
   const held = existing.selection?.phase === "chosen" ? takePack(sessionId) : undefined;
   if (held) {
     const chosen = existing.selection?.chosen?.length ? existing.selection.chosen : undefined;
-    await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: held.textChars, model: Boolean(aiConfig()), queued: false }));
+    await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: held.textChars, totalBytes: held.totalBytes, model: Boolean(aiConfig()), queued: false }));
     await setStage(sessionId, "matching");
     await finishMatching(sessionId, held, chosen, replace);
     return;
@@ -154,10 +155,12 @@ export async function processSession(sessionId: string, replace = false): Promis
   }
   await setStage(sessionId, "reading");
   const model = Boolean(aiConfig());
+  const totalBytes = files.reduce((sum, file) => sum + file.buffer.length, 0);
   await setEstimate(sessionId, waitSeconds({
     pendingVisualPages: files.reduce((sum, file) => sum + visualPagesOf(file.row.name, file.buffer.length), 0),
     pendingTextFiles: files.filter((file) => visualPagesOf(file.row.name, file.buffer.length) === 0).length,
     textChars: 0,
+    totalBytes,
     model,
     queued: false,
   }));
@@ -194,7 +197,7 @@ export async function processSession(sessionId: string, replace = false): Promis
 
   const separated = withoutDuplicates(reportDoc, supporting);
   const textChars = [reportDoc, ...supporting].reduce((sum, doc) => sum + doc.read.text.length, 0);
-  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars, model, queued: false }));
+  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars, totalBytes, model, queued: false }));
   const pack: HeldPack = {
     reportId: reportFile.row.id,
     reportName: reportFile.row.name,
@@ -203,6 +206,7 @@ export async function processSession(sessionId: string, replace = false): Promis
     duplicates: separated.duplicates,
     fileErrors,
     textChars,
+    totalBytes,
   };
   if (existing.selection?.phase === "deferred") {
     rememberPack(sessionId, pack);
@@ -212,6 +216,7 @@ export async function processSession(sessionId: string, replace = false): Promis
       regions: reportRegions(reportDoc),
       ocrPages: readPack.reduce((sum, doc) => sum + (/\.(pdf|png|jpe?g)$/i.test(doc.name) ? Math.max(doc.read.pageCount, 1) : 0), 0),
       textChars,
+      totalBytes,
     });
     await setStage(sessionId, "selecting");
     return;
@@ -383,7 +388,7 @@ export async function chooseSelection(
   if ((items?.length || ids) && !chosen.length) throw new Error("Выберите хотя бы одно значение");
   const next = { ...session.selection, phase: "chosen" as const, ...(chosen.length ? { chosen } : {}) };
   await saveSelection(sessionId, next);
-  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: session.selection.textChars, model: Boolean(aiConfig()), queued: false }));
+  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: session.selection.textChars, totalBytes: session.selection.totalBytes ?? 0, model: Boolean(aiConfig()), queued: false }));
   await setStage(sessionId, "queued");
   void enqueue(sessionId);
 }
