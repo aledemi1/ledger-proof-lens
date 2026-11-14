@@ -299,7 +299,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
         const response = await fetch(url, { credentials: "same-origin" });
         if (!response.ok) throw new Error(t.work.fileOpenFailed);
         const data = new Uint8Array(await response.arrayBuffer());
-        const pdf = await pdfjs.getDocument({ data }).promise;
+        const pdf = await pdfjs.getDocument({ data, standardFontDataUrl: "/pdfjs/standard_fonts/" }).promise;
         const rendered: { page: number; src: string; width: number; height: number }[] = [];
         const pixelRatio = screenRatio();
         const paint = async (page: Awaited<ReturnType<typeof pdf.getPage>>, scale: number, density: number) => {
