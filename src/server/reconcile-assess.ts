@@ -87,6 +87,8 @@ import {
   amountKey,
   collapseSameDocument,
   distinctAmounts,
+  sameQuotedAmount,
+  dedupeReturns,
   preferNewer,
   earlierDocuments,
   additiveShipments,
@@ -103,6 +105,18 @@ import {
   detectNumber,
   sameUnit,
 } from "./reconcile-facts";
+
+function preferUnitPrice(parts: Fact[]): Fact[] {
+  const agreed = (list: Fact[]): Fact[] => {
+    const unique = [...new Set(list.map(amountKey))];
+    return unique.length === 1 && list[0] ? [list[0]] : [];
+  };
+  const amended = agreed(parts.filter((part) => isAmendmentDoc(part.docName, part.docText)));
+  if (amended.length) return amended;
+  const goods = agreed(parts.filter((part) => part.docKind === "waybill" || /реестр|склад/i.test(part.docName)));
+  if (goods.length) return goods;
+  return parts.slice(0, 1);
+}
 
 export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: string; name: string; text: string; fragment: Fragment }[]): {
   sourceValue: string | null;
@@ -205,7 +219,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     }
   }
   if (focused === "received") {
-    const deliveries = pool.filter((source) => isGoodsDoc(source));
+    const deliveries = pool.filter((source) => isGoodsDoc(source) || isReturnDoc(source));
     const detailed = deliveries.filter((source) => !/реестр/i.test(source.docName));
     pool = detailed.length ? detailed : deliveries;
   }
@@ -247,7 +261,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     const payments = pool.filter((source) => source.docKind === "payment" || /платеж|оплат|payment/i.test(`${source.docName} ${source.fragment.sheet ?? ""} ${source.fragment.columnHeader ?? ""} ${source.label}`));
     if (payments.length) pool = payments;
   } else if (fact.role === "line_total" && /оборудован|парти|поставк|принят|получ|отгруж|товар|с\s*ндс|including|incl\.?|accepted|received|brutto|mit\s|met\s|avec\s|\bcom\s|con\s|z\s*(?:ндс|vat\b)|dahil|含税|含\s/i.test(`${fact.label} ${fact.fragment.columnHeader ?? ""}`) && !isService(fact)) {
-    const shipped = pool.filter((source) => isGoodsDoc(source) && !isService(source));
+    const shipped = pool.filter((source) => (isGoodsDoc(source) || isReturnDoc(source)) && !isService(source));
     if (shipped.length) pool = shipped;
   }
   pool = pool.filter((source) => !isTotalRow(source));
@@ -320,6 +334,8 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     const parts: Fact[] = [];
     for (const source of pool) {
       if (source.parsed.kind !== "quantity") continue;
+      if (/^\d{4}\s*г(?:ода|\.)?$/i.test(source.raw.trim())) continue;
+      if (/^(?:год|года|г\.)$/i.test(source.parsed.unit) && !/год/i.test(fact.parsed.unit)) continue;
       if (!fact.net && isReturnDoc(source)) continue;
       const scaled = scaleToUnit(source.parsed.minor, source.parsed.unit, fact.parsed.unit, `${fact.item ?? ""} ${source.item ?? ""}`, factors);
       if (scaled == null) continue;
@@ -343,8 +359,8 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     if (!kept.length) return null;
     const collapsed = collapseSameDocument(kept);
     const disagreed = distinctAmounts(collapsed.filter((part) => !isReturnDoc(part)));
-    const sameQuantity = new Set(disagreed.map(amountKey)).size <= 1;
-    if (disagreed.length > 1 && !sameQuantity && !additiveShipments(disagreed)) {
+    const quoted = sameQuotedAmount(disagreed);
+    if (disagreed.length > 1 && !quoted && !additiveShipments(disagreed)) {
       return {
         sourceValue: disagreed.map((part) => part.raw).slice(0, 3).join(" и "),
         discrepancy: null,
@@ -356,7 +372,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       };
     }
     total = 0n;
-    const summed = fact.net ? collapsed : sameQuantity ? disagreed.slice(0, 1) : disagreed;
+    const summed = fact.net ? dedupeReturns(collapsed) : quoted ? disagreed.slice(0, 1) : disagreed;
     for (const part of summed) {
       if (part.parsed.kind !== "quantity") continue;
       const scaled = scaleToUnit(part.parsed.minor, part.parsed.unit, fact.parsed.unit, `${fact.item ?? ""} ${part.item ?? ""}`, factors);
@@ -380,7 +396,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     pool = narrowByLabel(fact, pool);
     if (!/%/.test(fact.raw)) pool = pool.filter((source) => !/%/.test(source.raw));
     if (fact.basis === "gross" || fact.basis === "net" || fact.basis === "tax") {
-      const sameBasis = pool.filter((source) => source.basis === fact.basis);
+      const sameBasis = pool.filter((source) => source.basis === fact.basis || (fact.net && isReturnDoc(source)));
       if (sameBasis.length) pool = sameBasis;
     }
     const detailed = pool.filter((source) => !isBlanketTotal(source));
@@ -401,7 +417,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
     let disagreedMoney = distinctAmounts(collapsedMoney.filter((part) => !isReturnDoc(part)));
     const newer = fact.role === "line_total" && !additiveShipments(disagreedMoney) ? preferNewer(disagreedMoney) : { kept: disagreedMoney, older: [] as Fact[] };
     if (newer.older.length) disagreedMoney = newer.kept;
-    const sameMoney = new Set(disagreedMoney.map(amountKey)).size <= 1;
+    const sameMoney = sameQuotedAmount(disagreedMoney);
     const acrossDocuments = new Set(disagreedMoney.map((part) => part.documentId)).size > 1;
     if (fact.role === "line_total" && disagreedMoney.length > 1 && !sameMoney && !additiveShipments(disagreedMoney) && acrossDocuments) {
       return {
@@ -414,7 +430,7 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
         unit: "₽",
       };
     }
-    const moneyParts = fact.role === "unit_price" ? collapsedMoney.slice(0, 1) : fact.net ? collapsedMoney : sameMoney ? disagreedMoney.slice(0, 1) : disagreedMoney;
+    const moneyParts = fact.role === "unit_price" ? preferUnitPrice(collapsedMoney) : fact.net ? dedupeReturns(collapsedMoney, fact.basis) : sameMoney ? disagreedMoney.slice(0, 1) : disagreedMoney;
     total = 0n;
     for (const part of moneyParts) {
       if (part.parsed.kind !== "money") continue;
@@ -423,6 +439,12 @@ export function assess(fact: Fact, found: Fact[], sources: Fact[], docs: { id: s
       total += converted * (fact.net && isReturnDoc(part) ? -1n : 1n);
     }
     const tolerance = statedTolerance(`${fact.docText}\n${parts.map((part) => part.docText).join("\n")}`);
+    if (fact.role === "unit_price" && fact.parsed.kind === "money" && /набор|комплект/i.test(`${fact.item ?? ""} ${fact.label}`)) {
+      const factors = kitFactors(sources.map((part) => part.docText));
+      const code = productCodes(`${fact.item ?? ""} ${fact.label}`).find((item) => factors.has(item));
+      const pieces = code ? factors.get(code) : factors.get("*");
+      if (pieces && pieces > 1 && total * BigInt(pieces) === fact.parsed.minor) total = fact.parsed.minor;
+    }
     const delta = fact.parsed.kind === "money" ? fact.parsed.minor - total : 0n;
     const same = fact.parsed.kind === "money" && (delta === 0n || (tolerance != null && delta <= tolerance && delta >= -tolerance));
     return {
@@ -566,7 +588,17 @@ export function toCheck(fact: Fact, sources: Fact[], reportFacts: Fact[], docs: 
     return summed(base, fact, found);
   }
 
-  const groups = groupByValue(found);
+  if (!/^\d{4}\b/.test(fact.raw.trim())) {
+    const kept = found.filter((source) => !/^\d{4}\s*г/i.test(source.raw.trim()));
+    if (kept.length && kept.length < found.length) found = kept;
+  }
+  const groups = coalesceGroups(groupByValue(found));
+  const agreeing = groups.filter((group) => valuesEqual(fact.parsed, group[0]?.parsed));
+  const reportText = fact.parsed.kind === "text" ? fact.parsed.norm : "";
+  const contained = Boolean(reportText) && groups.every((group) => group.some((source) => source.parsed.kind === "text" && (source.parsed.norm === reportText || source.parsed.norm.includes(reportText))));
+  if (groups.length > 1 && agreeing.length === 1 && agreeing[0] && contained) {
+    return matched(base, fact, agreeing[0], { code: "source_confirms", label: fact.label });
+  }
   if (groups.length > 1) {
     const ordered = found.slice().sort((a, b) => rank(fact.role, a) - rank(fact.role, b));
     const shown = uniqueRaws(ordered).slice(0, 3).join(" и ");
@@ -719,6 +751,16 @@ export function canSum(role: Role, sources: Fact[]): boolean {
   if (new Set(numbers).size < sources.length) return false;
   const values = new Set(sources.map((source) => valueKey(source.parsed)));
   return values.size > 1;
+}
+
+function coalesceGroups(groups: Fact[][]): Fact[][] {
+  const out: Fact[][] = [];
+  for (const group of groups) {
+    const host = out.find((existing) => existing.some((left) => group.some((right) => valuesEqual(left.parsed, right.parsed))));
+    if (host) host.push(...group);
+    else out.push([...group]);
+  }
+  return out;
 }
 
 export function groupByValue(sources: Fact[]): Fact[][] {

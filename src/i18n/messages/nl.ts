@@ -172,7 +172,7 @@ export const nl: Copy = {
     failed: "Controle starten mislukt",
     remove: "Bestand verwijderen",
     chooseTitle: "Wat afstemmen",
-    chooseLead: "Klik een cel of sleep met ingedrukte muisknop. Alleen gekozen cellen worden gemarkeerd. Automatisch bepalen vraagt het model en slaat rijnummers over.",
+    chooseLead: "Klik een cel of sleep met ingedrukte muisknop. Alleen gekozen cellen worden gemarkeerd. Automatisch bepalen markeert de kengetallen van het rapport en slaat rijnummers over.",
     chooseAuto: "Automatisch bepalen",
     choosing: "Bezig met bepalen…",
     startCheck: "Afstemming starten",

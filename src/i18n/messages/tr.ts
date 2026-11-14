@@ -172,7 +172,7 @@ export const tr: Copy = {
     failed: "Kontrol başlatılamadı",
     remove: "Dosyayı kaldır",
     chooseTitle: "Ne mutabık kılınsın",
-    chooseLead: "Bir hücreye tıklayın veya düğmeyi basılı tutup sürükleyin. Yalnızca seçilenler vurgulanır. Otomatik belirle modele sorar ve satır numaralarını atlar.",
+    chooseLead: "Bir hücreye tıklayın veya düğmeyi basılı tutup sürükleyin. Yalnızca seçilenler vurgulanır. Otomatik belirle rapor göstergelerini işaretler ve satır numaralarını atlar.",
     chooseAuto: "Otomatik belirle",
     choosing: "Belirleniyor…",
     startCheck: "Mutabakatı başlat",

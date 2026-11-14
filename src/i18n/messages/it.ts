@@ -172,7 +172,7 @@ export const it: Copy = {
     failed: "Impossibile avviare la verifica",
     remove: "Rimuovi file",
     chooseTitle: "Cosa riconciliare",
-    chooseLead: "Fate clic su una cella o trascinate con il pulsante premuto. Si evidenziano solo le celle scelte. Determina automaticamente chiede al modello e salta i numeri di riga.",
+    chooseLead: "Fate clic su una cella o trascinate con il pulsante premuto. Si evidenziano solo le celle scelte. Determina automaticamente segna gli indicatori del rapporto e salta i numeri di riga.",
     chooseAuto: "Determina automaticamente",
     choosing: "Determinazione…",
     startCheck: "Avvia riconciliazione",

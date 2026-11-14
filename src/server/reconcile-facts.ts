@@ -528,9 +528,7 @@ export function narrowByLabel(fact: Fact, pool: Fact[]): Fact[] {
 
 export function isTotalRow(fact: Fact): boolean {
   const label = `${fact.item ?? ""} ${fact.fragment.rowLabel ?? ""} ${fact.label}`.trim();
-  const match = label.match(/^(?:итого|всего|total|summe|insgesamt|gesamt|suma|totale|toplam|totaal|razem|zusammen|合计|总计)\b\s*(.*)$/i);
-  if (!match) return false;
-  return !/\p{L}{4,}/u.test(match[1] ?? "");
+  return /^(?:итого|всего|total|summe|insgesamt|gesamt|suma|totale|toplam|totaal|razem|zusammen|合计|总计)(?![\p{L}])/iu.test(label);
 }
 
 export function orgTokens(name: string): string[] {
@@ -636,10 +634,49 @@ export function collapseSameDocument(parts: Fact[]): Fact[] {
 export function distinctAmounts(parts: Fact[]): Fact[] {
   const seen = new Map<string, Fact>();
   for (const part of parts) {
-    const key = `${part.documentId}|${amountKey(part)}|${normText(part.item ?? "")}`;
+    const when = part.operationDate ?? part.fragment.anchor;
+    const key = `${part.documentId}|${amountKey(part)}|${normText(part.item ?? "")}|${when}`;
     if (!seen.has(key)) seen.set(key, part);
   }
   return [...seen.values()];
+}
+
+/** The same figure repeated for one operation, rather than the same figure on different days. */
+export function sameQuotedAmount(parts: Fact[]): boolean {
+  if (parts.length <= 1) return true;
+  if (new Set(parts.map(amountKey)).size > 1) return false;
+  const dates = [...new Set(parts.map((part) => part.operationDate).filter((date): date is string => Boolean(date)))];
+  if (dates.length > 1) return false;
+  if (!dates.length && new Set(parts.map((part) => part.fragment.anchor)).size > 1) return false;
+  return true;
+}
+
+/** One return event can be written in a register and again in the return document. */
+export function dedupeReturns(parts: Fact[], basis?: VatBasis): Fact[] {
+  const rest = parts.filter((part) => !isReturnDoc(part));
+  const grouped = new Map<string, Fact[]>();
+  for (const part of parts) {
+    if (!isReturnDoc(part)) continue;
+    const converted = part.parsed.kind === "money" && basis ? convertMoney(part.parsed.minor, part.basis ?? "unknown", basis) : null;
+    const key = `${normText(part.item ?? part.label)}|${converted?.toString() ?? amountKey(part)}`;
+    const list = grouped.get(key) ?? [];
+    list.push(part);
+    grouped.set(key, list);
+  }
+  const returns: Fact[] = [];
+  for (const group of grouped.values()) {
+    const dates = [...new Set(group.map((part) => part.operationDate).filter((date): date is string => Boolean(date)))];
+    if (dates.length <= 1) {
+      const dated = group.find((part) => part.operationDate) ?? group[0];
+      if (dated) returns.push(dated);
+      continue;
+    }
+    for (const date of dates) {
+      const part = group.find((item) => item.operationDate === date);
+      if (part) returns.push(part);
+    }
+  }
+  return [...rest, ...returns];
 }
 
 export function preferNewer(parts: Fact[]): { kept: Fact[]; older: Fact[] } {
@@ -673,7 +710,9 @@ export function cleanupComparable(unit: string): string {
 }
 
 export function isReturnDoc(fact: Fact): boolean {
-  return /возврат/i.test(fact.docName) || /^\s*акт возврата/i.test(fact.docText.slice(0, 180));
+  if (/возврат/i.test(fact.docName) || /^\s*(?:акт\s+)?возврат/i.test(fact.docText.slice(0, 180))) return true;
+  if (/возврат/i.test(fact.fragment.sheet ?? "")) return true;
+  return /^возврат$/i.test((fact.fragment.columnHeader ?? "").trim());
 }
 
 export function isDraftDoc(fact: Fact): boolean {

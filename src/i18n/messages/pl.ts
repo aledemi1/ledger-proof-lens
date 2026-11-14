@@ -172,7 +172,7 @@ export const pl: Copy = {
     failed: "Nie udało się uruchomić kontroli",
     remove: "Usuń plik",
     chooseTitle: "Co uzgadniać",
-    chooseLead: "Kliknij komórkę albo przeciągnij z wciśniętym przyciskiem. Podświetlane są tylko wybrane. Wyznacz automatycznie pyta model i pomija numery wierszy.",
+    chooseLead: "Kliknij komórkę albo przeciągnij z wciśniętym przyciskiem. Podświetlane są tylko wybrane. Wyznacz automatycznie zaznacza wskaźniki raportu i pomija numery wierszy.",
     chooseAuto: "Wyznacz automatycznie",
     choosing: "Wyznaczanie…",
     startCheck: "Rozpocznij uzgodnienie",

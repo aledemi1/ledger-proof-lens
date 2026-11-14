@@ -200,11 +200,20 @@ function parseIndicatorChunk(chunk: string): { label: string; value: string; uni
 export function parseBareShipment(text: string, header: string): ShipmentRow | null {
   if (!/кол|qty|quantity|menge|количество/i.test(header) || !/цен|сумм|price|amount|стоим/i.test(header)) return null;
   const compact = text.replace(/\s+/g, " ").trim();
+  const unit = header.match(/шт\.?|кг|pcs\.?|pieces?/i)?.[0] ?? "шт.";
+  const withUnit = compact.match(new RegExp(`(?:\\d+\\s+)?(.+?)\\s+${unit.replace(/\./g, "\\.")}\\s+(\\d{1,4})\\s+(.+)$`, "i"));
+  if (withUnit?.[1] && withUnit[2] && withUnit[3]) {
+    const amounts = withUnit[3].match(/\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}/g) ?? [];
+    const gross = amounts[amounts.length - 1];
+    const item = withUnit[1].trim();
+    if (gross && amounts.length >= 2 && item.length >= 3 && !/^(итого|всего)\b/i.test(item)) {
+      return { item, quantity: `${withUnit[2]} ${unit}`, unit, gross };
+    }
+  }
   const match = compact.match(/^(?:\d+\s+)?(.+?)\s+(\d{1,4})\s+(\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})\s+(\d{1,3}(?:[ \u00A0]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})$/);
   if (!match?.[1] || !match[2] || !match[3] || !match[4]) return null;
   const item = match[1].trim();
   if (item.length < 3 || /^(итого|всего)\b/i.test(item)) return null;
-  const unit = header.match(/шт\.?|кг|pcs\.?|pieces?/i)?.[0] ?? "шт.";
   return { item, quantity: `${match[2]} ${unit}`, unit, gross: match[4] };
 }
 

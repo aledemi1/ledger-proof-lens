@@ -237,7 +237,7 @@ export interface ReportRegion {
 export interface ReportSelection {
   phase: "deferred" | "selecting" | "chosen";
   regions: ReportRegion[];
-  chosen?: { name: string; value: string }[];
+  chosen?: { anchor?: string; name: string; value: string }[];
   ocrPages: number;
   textChars: number;
 }

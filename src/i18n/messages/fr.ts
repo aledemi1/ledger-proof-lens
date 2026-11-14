@@ -172,7 +172,7 @@ export const fr: Copy = {
     failed: "Échec du lancement du contrôle",
     remove: "Supprimer le fichier",
     chooseTitle: "Quoi rapprocher",
-    chooseLead: "Cliquez une cellule ou faites glisser le pointeur avec le bouton enfoncé. Seules les cellules choisies sont surlignées. Déterminer automatiquement interroge le modèle et ignore les numéros de ligne.",
+    chooseLead: "Cliquez une cellule ou faites glisser le pointeur avec le bouton enfoncé. Seules les cellules choisies sont surlignées. Déterminer automatiquement marque les indicateurs du rapport et ignore les numéros de ligne.",
     chooseAuto: "Déterminer automatiquement",
     choosing: "Détermination…",
     startCheck: "Lancer le rapprochement",

@@ -172,7 +172,7 @@ export const en: Copy = {
     failed: "Could not start review",
     remove: "Remove file",
     chooseTitle: "What to check",
-    chooseLead: "Click a cell or drag across cells with the mouse button held. Only the chosen cells are highlighted. Determine automatically uses the model and skips row numbers.",
+    chooseLead: "Click a cell or drag across cells with the mouse button held. Only the chosen cells are highlighted. Determine automatically marks the report indicators and skips row numbers.",
     chooseAuto: "Determine automatically",
     choosing: "Choosing…",
     startCheck: "Start reconciliation",

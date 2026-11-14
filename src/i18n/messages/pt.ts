@@ -172,7 +172,7 @@ export const pt: Copy = {
     failed: "Não foi possível iniciar a conferência",
     remove: "Remover arquivo",
     chooseTitle: "O que conciliar",
-    chooseLead: "Clique uma célula ou arraste com o botão pressionado. Só as escolhidas ficam marcadas. Determinar automaticamente pergunta ao modelo e ignora números de linha.",
+    chooseLead: "Clique uma célula ou arraste com o botão pressionado. Só as escolhidas ficam marcadas. Determinar automaticamente marca os indicadores do relatório e ignora números de linha.",
     chooseAuto: "Determinar automaticamente",
     choosing: "Determinando…",
     startCheck: "Iniciar conciliação",
