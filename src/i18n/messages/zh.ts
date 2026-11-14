@@ -172,7 +172,7 @@ export const zh: Copy = {
     failed: "无法启动核对",
     remove: "删除文件",
     chooseTitle: "核对哪些数值",
-    chooseLead: "点击单元格，或按住鼠标拖过一片单元格。只有选中的才会高亮。「自动确定」标出报告指标，并跳过行号。",
+    chooseLead: "点击单元格，或按住鼠标拖过一片单元格。只有选中的才会高亮。「自动确定」询问模型，并跳过行号。",
     chooseAuto: "自动确定",
     choosing: "正在确定…",
     startCheck: "开始核对",

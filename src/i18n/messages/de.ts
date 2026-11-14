@@ -172,7 +172,7 @@ export const de: Copy = {
     failed: "Prüfung konnte nicht gestartet werden",
     remove: "Datei entfernen",
     chooseTitle: "Was abgeglichen wird",
-    chooseLead: "Klicken Sie eine Zelle an oder ziehen Sie mit gedrückter Maustaste darüber. Hervorgehoben wird nur die Auswahl. Automatisch bestimmen markiert die Kennzahlen des Berichts und lässt Zeilennummern aus.",
+    chooseLead: "Klicken Sie eine Zelle an oder ziehen Sie mit gedrückter Maustaste darüber. Hervorgehoben wird nur die Auswahl. Automatisch bestimmen fragt das Modell und lässt Zeilennummern aus.",
     chooseAuto: "Automatisch bestimmen",
     choosing: "Wird bestimmt…",
     startCheck: "Abgleich starten",

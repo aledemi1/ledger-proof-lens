@@ -172,7 +172,7 @@ export const es: Copy = {
     failed: "No se pudo iniciar la revisión",
     remove: "Eliminar archivo",
     chooseTitle: "Qué cotejar",
-    chooseLead: "Pulse una celda o arrastre con el botón pulsado. Solo se resaltan las celdas elegidas. Determinar automáticamente marca los indicadores del informe y omite los números de fila.",
+    chooseLead: "Pulse una celda o arrastre con el botón pulsado. Solo se resaltan las celdas elegidas. Determinar automáticamente pregunta al modelo y omite los números de fila.",
     chooseAuto: "Determinar automáticamente",
     choosing: "Determinando…",
     startCheck: "Iniciar cotejo",

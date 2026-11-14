@@ -23,7 +23,7 @@ import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { AuditNotice, CheckResult, CheckStatus } from "@/types/audit";
 import { reconcile, unknownLabels, withoutDuplicates } from "./reconcile";
-import { bareRowIndex, reportRegions } from "./regions";
+import { indicatorPicks, reportRegions } from "./regions";
 import { visualPagesOf, waitSeconds } from "../lib/waitEstimate";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
@@ -225,14 +225,29 @@ async function finishMatching(sessionId: string, pack: HeldPack, chosen: { ancho
   const reportDoc = pack.report;
   const supporting = pack.unique;
   const fileErrors = pack.fileErrors;
-  const ruled = reconcile(reportDoc, supporting, fileErrors);
-  let checks = chosen?.length
-    ? ruled.filter((check) => chosen.some((item) => {
-      const anchor = check.reportReference?.locationInDocument;
-      if (item.anchor && anchor && item.anchor === anchor) return true;
-      return sameIndicator(item.name, check.fieldName);
-    }))
-    : ruled;
+  const docs = [reportDoc, ...supporting];
+  const modelNotices: AuditNotice[] = [];
+  const config = aiConfig();
+  let checks: CheckResult[] = [];
+  // A non-empty two-stage scan is the result. Rules run when the key is missing, the model fails, or the scan returns nothing.
+  if (config) {
+    try {
+      const scan = chosen
+        ? await scanPackForDiscrepancies(reportDoc, supporting, "", chosen)
+        : await scanPackInTwoStages(reportDoc, supporting);
+      checks = findingsToChecks(scan.findings, docs);
+      if (checks.length && !chosen) checks = withOmitted(checks, reportDoc, supporting, fileErrors);
+      if (scan.truncated) modelNotices.push({ code: "context_truncated", kept: scan.kept, limit: scan.limit });
+      if (checks.length) modelNotices.push({ code: "model_two_stage" });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "нет ответа";
+      modelNotices.push({ code: "model_failed", reason });
+    }
+  }
+  if (!checks.length) {
+    const ruled = await ruleChecks(reportDoc, supporting, fileErrors, modelNotices);
+    checks = chosen ? ruled.filter((check) => chosen.some((item) => item.value.replace(/\s+/g, "") === check.reportValue.replace(/\s+/g, ""))) : ruled;
+  }
   if (!checks.length) {
     await markFailed(
       sessionId,
@@ -242,6 +257,7 @@ async function finishMatching(sessionId: string, pack: HeldPack, chosen: { ancho
     return;
   }
   const notices: AuditNotice[] = [
+    ...modelNotices,
     ...pack.duplicates.map((doc) => ({ code: "duplicate_file" as const, name: doc.name })),
   ];
   if (fileErrors.length) notices.unshift({ code: "partial_read" });
@@ -372,19 +388,21 @@ export async function chooseSelection(
   void enqueue(sessionId);
 }
 
-/** Marks the report indicators the rules will compare. Row numbers are not indicators. */
+/** Asks the model which report values are worth checking. A missed answer stays empty: rules do not fill in row numbers. */
 export async function suggestSelection(sessionId: string): Promise<{ anchor: string; name: string; value: string }[]> {
   const session = await readSession(sessionId);
   if (!session?.selection || session.selection.phase !== "selecting") throw new Error("Сначала дождитесь, пока отчёт будет прочитан");
   const report = await reportDocOf(sessionId);
-  const seen = new Set<string>();
-  return reconcile(report, [], []).flatMap((check) => {
-    const anchor = check.reportReference?.locationInDocument;
-    if (!anchor || seen.has(anchor)) return [];
-    if (bareRowIndex(check.reportValue) && !/\p{L}/u.test(check.fieldName)) return [];
-    seen.add(anchor);
-    return [{ anchor, name: check.fieldName, value: check.reportValue }];
-  });
+  if (!aiConfig()) return [];
+  try {
+    const indicators = await listReportIndicators(report);
+    return indicatorPicks(
+      report.read.fragments.map((fragment) => ({ id: `${report.id}:${fragment.id}`, anchor: fragment.anchor, text: fragment.text })),
+      indicators,
+    );
+  } catch {
+    return [];
+  }
 }
 
 async function reportDocOf(sessionId: string): Promise<PreparedDoc> {
