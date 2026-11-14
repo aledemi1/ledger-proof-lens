@@ -9,6 +9,7 @@ process.env["IMAP_HOST"] = "";
 process.env["IMAP_PASS"] = "";
 process.env["AI_API_KEY"] = "";
 process.env["LOVABLE_API_KEY"] = "";
+process.env["POLZA_API_KEY"] = "";
 
 if (!process.env["DATABASE_URL"]?.trim()) {
   throw new Error("PostgreSQL suite needs DATABASE_URL, for example postgres://sverko:sverko@localhost:5432/sverko_test");

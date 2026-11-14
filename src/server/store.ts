@@ -225,6 +225,7 @@ async function open(): Promise<void> {
     pgPool = testPool;
     mode = "postgres";
     for (const statement of SCHEMA) await testPool.query(statement);
+    await testPool.query("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BYTEA NOT NULL)");
     await ensureColumn("sessions", "previous_id", "TEXT");
     await ensureColumn("sessions", "recheck", "TEXT");
     await ensureColumn("reviews", "source_json", "TEXT");
@@ -239,6 +240,7 @@ async function open(): Promise<void> {
     pgPool = pool;
     mode = "postgres";
     for (const statement of SCHEMA) await pool.query(statement);
+    await pool.query("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BYTEA NOT NULL)");
     await ensureColumn("sessions", "previous_id", "TEXT");
     await ensureColumn("sessions", "recheck", "TEXT");
     await ensureColumn("reviews", "source_json", "TEXT");
@@ -265,6 +267,7 @@ async function open(): Promise<void> {
   db.exec("PRAGMA journal_mode = WAL;");
   for (const statement of SCHEMA) db.exec(statement);
   scopeCheckIdsToSession(db);
+  db.exec("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BLOB NOT NULL)");
   ensureSqliteColumn(db, "sessions", "previous_id", "TEXT");
   ensureSqliteColumn(db, "sessions", "recheck", "TEXT");
   ensureSqliteColumn(db, "reviews", "source_json", "TEXT");

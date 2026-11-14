@@ -9,7 +9,10 @@ process.env["SMTP_HOST"] = "";
 process.env["SMTP_PASS"] = "";
 process.env["IMAP_HOST"] = "";
 process.env["IMAP_PASS"] = "";
-if (process.env["SVERKO_LIVE_AI"] !== "1") process.env["AI_API_KEY"] = "";
+if (process.env["SVERKO_LIVE_AI"] !== "1") {
+  process.env["AI_API_KEY"] = "";
+  process.env["POLZA_API_KEY"] = "";
+}
 
 const pythonCandidates = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
 const python = pythonCandidates.find((command) => spawnSync(command, ["--version"], { stdio: "ignore" }).status === 0);

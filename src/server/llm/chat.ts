@@ -1,3 +1,4 @@
+import { polzaConfig } from "../env";
 import { paintPage, pageIsCovered, type WordBox } from "../extract/redact";
 import { maskTexts, unmaskText, type MaskMapping } from "../privacy";
 
@@ -67,7 +68,12 @@ export async function chatJson(config: AiConfig, system: string, data: unknown, 
   throw lastError instanceof Error ? lastError : new Error("модель вернула не JSON");
 }
 
-export async function post(config: AiConfig, body: unknown, timeoutMs = 45_000): Promise<Response> {
+function withModel(body: unknown, model: string): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  return { ...body, model };
+}
+
+async function postOnce(config: AiConfig, body: unknown, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -84,6 +90,21 @@ export async function post(config: AiConfig, body: unknown, timeoutMs = 45_000):
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+export async function post(config: AiConfig, body: unknown, timeoutMs = 45_000): Promise<Response> {
+  const fallback = polzaConfig();
+  const same = fallback != null && fallback.baseUrl === config.baseUrl && fallback.apiKey === config.apiKey;
+  const spare = fallback && !same ? fallback : null;
+  try {
+    const response = await postOnce(config, body, timeoutMs);
+    if (response.ok || !spare) return response;
+    if (response.status === 400 && /temperature/i.test(await response.clone().text())) return response;
+    return postOnce(spare, withModel(body, spare.model), timeoutMs);
+  } catch (error) {
+    if (!spare) throw error;
+    return postOnce(spare, withModel(body, spare.model), timeoutMs);
   }
 }
 

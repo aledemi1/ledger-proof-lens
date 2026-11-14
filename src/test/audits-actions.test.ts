@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
-import { closeDb } from "@/server/db";
+import { closeDb, readDocumentFile } from "@/server/db";
 import { supplyReport, waybill } from "@/server/fixtures";
 import { handleApi } from "@/server/http";
 import { enqueue } from "@/server/process";
@@ -217,5 +217,30 @@ describe("audit actions", () => {
     const after = await sessionOf(cookie, id);
     expect(after.checks.map((check) => check.id)).toEqual(expect.arrayContaining([...ids, manualBody.id, pickedBody.id]));
     expect(after.checks.find((check) => check.id === ids[0])?.status).toBe(ready.checks[0]?.status);
+  });
+
+  it("serves a PDF from the database after the disk copy disappears", async () => {
+    process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-pdf-"));
+    await closeDb();
+    const cookie = await signIn();
+    const pdf = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
+    const form = new FormData();
+    form.set("title", "PDF сохраняется");
+    form.set("idempotencyKey", crypto.randomUUID());
+    form.set("report", new File([new Uint8Array(pdf)], "Отчет.pdf", { type: "application/pdf" }), "Отчет.pdf");
+    form.append("supporting", new File([new Uint8Array(waybill("1", 1))], "Накладная.xlsx"), "Накладная.xlsx");
+    const created = await handleApi(new Request("http://localhost/api/audits", { method: "POST", body: form, headers: { cookie } }));
+    expect(created.status).toBe(201);
+    const id = ((await created.json()) as { id: string }).id;
+    const documents = await handleApi(new Request(`http://localhost/api/audits/${id}/documents`, { headers: { cookie } }));
+    const report = ((await documents.json()) as { id: string; name: string }[]).find((item) => item.name.endsWith(".pdf"));
+    expect(report?.id).toBeTruthy();
+    const stored = await readDocumentFile(id, report!.id);
+    expect(stored?.path).toBeTruthy();
+    rmSync(stored!.path);
+    const file = await handleApi(new Request(`http://localhost/api/audits/${id}/files/${report!.id}`, { headers: { cookie } }));
+    expect(file.status).toBe(200);
+    expect(file.headers.get("content-type")).toBe("application/pdf");
+    expect(Buffer.from(await file.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
   });
 });

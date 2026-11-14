@@ -59,6 +59,7 @@ describe("postgres store", () => {
       size: 10,
       sha256: "abc",
       storagePath: path.join(process.env["SVERKO_DATA_DIR"] ?? "", "report"),
+      body: Buffer.from("report-bytes"),
     });
     await saveOutcome({
       sessionId: "aud_pg",

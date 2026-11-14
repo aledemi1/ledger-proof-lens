@@ -80,6 +80,7 @@ export async function insertDocument(input: {
   size: number;
   sha256: string;
   storagePath: string;
+  body: Buffer;
 }): Promise<void> {
   await run(
     `INSERT INTO documents (id, session_id, role, name, doc_type, mime_type, size, sha256, storage_path, page_count, preview_json)
@@ -97,6 +98,7 @@ export async function insertDocument(input: {
       JSON.stringify({ kind: "none", reason: "Документ в очереди на чтение." }),
     ],
   );
+  await run("INSERT INTO document_bodies (id, body) VALUES (?, ?)", [input.id, input.body]);
 }
 
 export async function setReportDocument(sessionId: string, documentId: string): Promise<void> {
@@ -153,15 +155,53 @@ export async function readDocuments(sessionId: string): Promise<AuditDocument[]>
   return rows.map((row) => toDocument(sessionId, row));
 }
 
+function asBuffer(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (typeof value === "string") {
+    const hex = value.startsWith("\\x") ? value.slice(2) : value;
+    if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) return Buffer.from(hex, "hex");
+  }
+  return null;
+}
+
+async function bytesOf(row: DocumentRow): Promise<Buffer | null> {
+  if (row.storage_path && fs.existsSync(row.storage_path)) return fs.readFileSync(row.storage_path);
+  const stored = await get<{ body: unknown }>("SELECT body FROM document_bodies WHERE id = ?", [row.id]);
+  const bytes = asBuffer(stored?.body);
+  if (!bytes) return null;
+  try {
+    fs.mkdirSync(path.dirname(row.storage_path), { recursive: true });
+    fs.writeFileSync(row.storage_path, bytes);
+  } catch {
+    // The container disk may be new. The bytes are still served from the database.
+  }
+  return bytes;
+}
+
 export async function readDocumentFile(sessionId: string, documentId: string): Promise<{ path: string; mimeType: string; name: string } | null> {
   const row = await get<DocumentRow>("SELECT * FROM documents WHERE id = ? AND session_id = ?", [documentId, sessionId]);
   if (!row) return null;
   return { path: row.storage_path, mimeType: row.mime_type, name: row.name };
 }
 
+export async function readDocumentBytes(sessionId: string, documentId: string): Promise<{ bytes: Buffer; mimeType: string; name: string } | null> {
+  const row = await get<DocumentRow>("SELECT * FROM documents WHERE id = ? AND session_id = ?", [documentId, sessionId]);
+  if (!row) return null;
+  const bytes = await bytesOf(row);
+  if (!bytes) return null;
+  return { bytes, mimeType: row.mime_type, name: row.name };
+}
+
 export async function documentBuffers(sessionId: string): Promise<{ row: DocumentRow; buffer: Buffer }[]> {
   const rows = await documentRows(sessionId);
-  return rows.map((row) => ({ row, buffer: fs.readFileSync(row.storage_path) }));
+  const loaded: { row: DocumentRow; buffer: Buffer }[] = [];
+  for (const row of rows) {
+    const buffer = await bytesOf(row);
+    if (!buffer) throw new Error(`файл «${row.name}» не найден на диске`);
+    loaded.push({ row, buffer });
+  }
+  return loaded;
 }
 
 async function documentRows(sessionId: string, query?: Query): Promise<DocumentRow[]> {
@@ -364,6 +404,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await transaction(async (query) => {
     await query.run("DELETE FROM reviews WHERE session_id = ?", [sessionId]);
     await query.run("DELETE FROM checks WHERE session_id = ?", [sessionId]);
+    await query.run("DELETE FROM document_bodies WHERE id IN (SELECT id FROM documents WHERE session_id = ?)", [sessionId]);
     await query.run("DELETE FROM documents WHERE session_id = ?", [sessionId]);
     await query.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
   });

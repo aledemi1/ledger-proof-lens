@@ -32,10 +32,24 @@ export function aiConfig(): { baseUrl: string; apiKey: string; model: string } |
     };
   }
   const apiKey = process.env["AI_API_KEY"]?.trim();
+  if (apiKey) {
+    return {
+      baseUrl: (process.env["AI_BASE_URL"] || "https://api.openai.com/v1").replace(/\/$/, ""),
+      apiKey,
+      model: process.env["AI_MODEL"] || "gpt-5.6-sol",
+    };
+  }
+  return polzaConfig();
+}
+
+/** Second model endpoint. Used only when the primary call fails. */
+export function polzaConfig(): { baseUrl: string; apiKey: string; model: string } | null {
+  loadEnv();
+  const apiKey = process.env["POLZA_API_KEY"]?.trim();
   if (!apiKey) return null;
   return {
-    baseUrl: (process.env["AI_BASE_URL"] || "https://api.openai.com/v1").replace(/\/$/, ""),
+    baseUrl: (process.env["POLZA_AI_BASE_URL"] || "https://polza.ai/api/v1").replace(/\/$/, ""),
     apiKey,
-    model: process.env["AI_MODEL"] || "gpt-5.6-sol",
+    model: process.env["POLZA_AI_MODEL"] || "openai/gpt-5.6-sol",
   };
 }

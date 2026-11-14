@@ -28,7 +28,7 @@ import {
   insertSession,
   listAllIds,
   listOwnedIds,
-  readDocumentFile,
+  readDocumentBytes,
   readDocuments,
   readSession,
   saveDecision,
@@ -149,6 +149,7 @@ export async function createAudit(request: Request, user: Account): Promise<Resp
       size: buffer.length,
       sha256: sha256(buffer),
       storagePath,
+      body: buffer,
     });
   }
   await setReportDocument(sessionId, reportId);
@@ -200,6 +201,7 @@ export async function addDocuments(request: Request, sessionId: string): Promise
       size: item.buffer.length,
       sha256: sha256(item.buffer),
       storagePath,
+      body: item.buffer,
     });
   }
   const job = enqueueRebuild(sessionId);
@@ -281,9 +283,9 @@ export function revisedCheck(check: CheckResult, value: string): CheckResult {
 
 export async function fileResponse(sessionId: string, documentId: string, request: Request): Promise<Response> {
   if (!/^doc_[a-f0-9]+$/.test(documentId)) return json({ error: "Документ не найден" }, 404);
-  const file = await readDocumentFile(sessionId, documentId);
-  if (!file || !fs.existsSync(file.path)) return json({ error: "Документ не найден" }, 404);
-  let data: Buffer = fs.readFileSync(file.path);
+  const file = await readDocumentBytes(sessionId, documentId);
+  if (!file) return json({ error: "Документ не найден" }, 404);
+  let data = file.bytes;
   const revised = new URL(request.url).searchParams.get("revised") === "1";
   let name = file.name;
   if (revised && file.name.toLowerCase().endsWith(".xlsx")) {

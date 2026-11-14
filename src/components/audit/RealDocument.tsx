@@ -1,4 +1,5 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { EvidenceReference, FlowBlock, GridCell, GridSheet } from "@/types/audit";
 import type { DocMark } from "@/lib/marks";
 import { fill } from "@/i18n/fill";
@@ -294,8 +295,7 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
     void (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
-        const worker = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
-        pdfjs.GlobalWorkerOptions.workerSrc = worker.toString();
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
         const response = await fetch(url, { credentials: "same-origin" });
         if (!response.ok) throw new Error(t.work.fileOpenFailed);
         const data = new Uint8Array(await response.arrayBuffer());
@@ -341,8 +341,9 @@ export function PdfView({ url, layer, focus, zoom }: { url: string; layer: MarkL
   }, [url, zoom]);
 
   if (error) return <p className="p-6 text-center text-sm text-muted-foreground">{error}</p>;
-  if (showFile) return <iframe src={url} title="" className="h-full min-h-[70vh] w-full border-0 bg-white" />;
-  if (!pages.length) return <p className="p-6 text-center text-sm text-muted-foreground">{t.work.opening}</p>;
+  if (showFile || !pages.length) {
+    return <object data={url} type="application/pdf" className="h-full min-h-[70vh] w-full bg-white" aria-label={t.work.opening} />;
+  }
   return (
     <div className="mx-auto flex w-max flex-col gap-4">
       {pages.map((page) => (

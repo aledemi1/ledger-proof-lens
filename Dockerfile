@@ -73,4 +73,13 @@ ENV PATH=/opt/venv/bin:$PATH
 
 EXPOSE 8080
 
+# Эти переменные задаются при запуске, не в образе: ключи в слой Docker не попадают.
+# Без них сервер всё равно открывается и считает правила.
+# AI_API_KEY, AI_BASE_URL, AI_MODEL — основной вызов модели.
+# POLZA_API_KEY, POLZA_AI_BASE_URL, POLZA_AI_MODEL — запасной вызов, если основной не ответил.
+# DATABASE_URL, PGSSLROOTCERT — PostgreSQL вместо SQLite в /data.
+# ADMIN_EMAIL, ADMIN_PASSWORD — первый администратор.
+# APP_URL, SMTP_*, IMAP_*, MAIL_FROM — почта регистрации.
+# SVERKO_PRIVACY=off отключает маскировку. SVERKO_PAGE_IMAGES=off не отправляет картинки страниц.
+
 CMD ["node", ".output/server/index.mjs"]
