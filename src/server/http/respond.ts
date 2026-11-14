@@ -55,7 +55,7 @@ export function cookieValue(header: string | null, name: string): string | null 
 }
 
 export function asType(value: string | undefined, filename: string): DocumentType {
-  if (value && TYPES.has(value) && value !== "report") return value as DocumentType;
+  if (value && TYPES.has(value) && value !== "report" && value !== "unknown") return value as DocumentType;
   const name = filename.toLowerCase();
   if (/наклад/.test(name)) return "waybill";
   if (/акт/.test(name)) return "act";

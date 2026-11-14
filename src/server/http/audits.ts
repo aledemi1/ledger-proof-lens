@@ -43,7 +43,8 @@ import { fileExtension, validateFile } from "../extract/index";
 import { dataDir } from "../paths";
 import { formatSigned, parseMoney, parseQuantity } from "../values";
 import * as XLSX from "xlsx";
-import { enqueue, enqueueRebuild, findSelectedIndicator, sha256, whenRebuildQueued } from "../process";
+import { chooseSelection, enqueue, enqueueRebuild, findSelectedIndicator, sha256, suggestSelection, whenRebuildQueued } from "../process";
+import { saveSelection } from "../db";
 import { canRead } from "./access";
 import { asType, json, mimeOf, readJson } from "./respond";
 
@@ -67,6 +68,23 @@ export async function auditsApi(request: Request, parts: string[], user: Account
   if (parts.length === 3 && request.method === "DELETE") {
     await deleteSession(id);
     return json({ ok: true }, 200);
+  }
+  if (parts[3] === "selection" && parts[4] === "suggest" && request.method === "POST") {
+    try {
+      return json({ ids: await suggestSelection(id) }, 200);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Не удалось выбрать показатели" }, 400);
+    }
+  }
+  if (parts[3] === "selection" && request.method === "POST") {
+    const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown } | null;
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((item): item is string => typeof item === "string") : [];
+    try {
+      await chooseSelection(id, body?.all === true ? null : ids);
+      return json(await readSession(id), 200);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Не удалось начать сверку" }, 400);
+    }
   }
   if (parts[3] === "documents" && request.method === "GET") return json(await readDocuments(id), 200);
   if (parts[3] === "documents" && request.method === "POST") return addDocuments(request, id);
@@ -153,6 +171,9 @@ export async function createAudit(request: Request, user: Account): Promise<Resp
     });
   }
   await setReportDocument(sessionId, reportId);
+  if (form.get("deferSelection") === "1") {
+    await saveSelection(sessionId, { phase: "deferred", regions: [], ocrPages: 0, textChars: 0 });
+  }
   void enqueue(sessionId);
   return json(await readSession(sessionId), 201);
 }

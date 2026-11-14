@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseNotices } from "../lib/notice-codes";
-import type { AuditDocument, AuditNotice, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReviewerDecision, ReviewerStatus } from "@/types/audit";
+import type { AuditDocument, AuditNotice, AuditSession, CheckResult, Decision, DocumentType, EvidenceReference, ProcessingStage, RecheckSummary, ReportSelection, ReviewerDecision, ReviewerStatus } from "@/types/audit";
 import { withUrls, type PreviewDraft } from "./model";
 import { dataDir } from "./paths";
 import { all, get, run, transaction, type Query, closeDb } from "./store";
@@ -25,6 +25,8 @@ interface SessionRow {
   decision: string | null;
   previous_id: string | null;
   recheck: string | null;
+  selection: string | null;
+  estimate_seconds: number | string | null;
 }
 
 interface DocumentRow {
@@ -145,6 +147,8 @@ export async function readSession(id: string): Promise<AuditSession | null> {
   if (row.file_errors) session.fileErrors = JSON.parse(row.file_errors) as { fileName: string; reason: string }[];
   if (row.notices) session.notices = parseNotices(JSON.parse(row.notices));
   if (row.recheck) session.recheck = JSON.parse(row.recheck) as RecheckSummary;
+  if (row.selection) session.selection = JSON.parse(row.selection) as ReportSelection;
+  if (row.estimate_seconds != null && row.estimate_seconds !== "") session.estimateSeconds = Number(row.estimate_seconds);
   const owner = await get<{ email: string }>("SELECT email FROM users WHERE id = ?", [row.owner]);
   if (owner?.email) session.ownerEmail = owner.email;
   return session;
@@ -248,6 +252,14 @@ async function readChecks(sessionId: string, query?: Query): Promise<CheckResult
 export async function checkCount(sessionId: string): Promise<number> {
   const row = await get<{ n: number | string }>("SELECT COUNT(*) AS n FROM checks WHERE session_id = ?", [sessionId]);
   return Number(row?.n ?? 0);
+}
+
+export async function saveSelection(sessionId: string, selection: ReportSelection): Promise<void> {
+  await run("UPDATE sessions SET selection = ? WHERE id = ?", [JSON.stringify(selection), sessionId]);
+}
+
+export async function setEstimate(sessionId: string, seconds: number): Promise<void> {
+  await run("UPDATE sessions SET estimate_seconds = ? WHERE id = ?", [Math.round(seconds), sessionId]);
 }
 
 export async function setStage(sessionId: string, stage: string, error?: string): Promise<void> {

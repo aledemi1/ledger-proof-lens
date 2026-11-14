@@ -118,6 +118,7 @@ export const apiAuditService: AuditService = {
     if (input.description) form.set("description", input.description);
     form.set("idempotencyKey", input.idempotencyKey || crypto.randomUUID());
     if (input.previousSessionId) form.set("previousSessionId", input.previousSessionId);
+    if (input.deferSelection) form.set("deferSelection", "1");
     form.set("report", input.report.file, input.report.name);
     for (const file of input.supporting) {
       if (!file.file) throw new AuditApiError(`Файл «${file.name}» не приложен`, 400);
@@ -125,6 +126,18 @@ export const apiAuditService: AuditService = {
     }
     form.set("supportingTypes", JSON.stringify(input.supporting.map((file) => file.type)));
     const session = await request<AuditSession>("/api/audits", { method: "POST", body: form });
+    emit();
+    return session;
+  },
+  async suggestIndicators(sessionId) {
+    const result = await request<{ ids: string[] }>(`/api/audits/${sessionId}/selection/suggest`, { method: "POST", body: "{}" });
+    return result.ids;
+  },
+  async startSelection(sessionId, ids) {
+    const session = await request<AuditSession>(`/api/audits/${sessionId}/selection`, {
+      method: "POST",
+      body: JSON.stringify(ids.length ? { ids } : { all: true }),
+    });
     emit();
     return session;
   },

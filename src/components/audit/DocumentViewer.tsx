@@ -97,7 +97,7 @@ export function DocumentViewer(p: Props) {
             <span className="min-w-0 flex-1 truncate text-sm font-medium" title={doc?.name}>{doc?.name ?? t.work.noDocument}</span>
           </>
         )}
-        {doc && !p.title && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docText(t, doc.type)}</span>}
+        {doc && !p.title && doc.type !== "unknown" && <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{docText(t, doc.type)}</span>}
         {scalable && (
           <div className="flex items-center gap-0.5">
             <Button variant="ghost" size="icon" className="size-7" onClick={() => setZoom((value) => Math.max(0.6, Math.round((value - 0.2) * 10) / 10))} aria-label={t.work.zoomOut}>

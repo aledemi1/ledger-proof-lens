@@ -7,7 +7,7 @@ export interface Copy {
   status: { match: string; mismatch: string; notFound: string; needsReview: string };
   category: { match: string; mismatch: string; notFound: string; needsReview: string };
   reviewer: { pending: string; confirmed: string; verified: string };
-  session: { awaiting: string; review: string; completed: string };
+  session: { awaiting: string; processing: string; choosing: string; review: string; completed: string };
   filters: { all: string; review: string; awaiting: string; completed: string };
   recommendation: { revise: string; reviseShort: string; manual: string; manualShort: string; accept: string; acceptShort: string };
   severity: { high: string; medium: string; low: string };
@@ -34,6 +34,7 @@ export interface Copy {
     title: string; lead: string; openDemo: string; guest: string; signIn: string; create: string;
     steps: [string, string, string]; report: string; privacy: string; dropReport: string; badReport: string; documents: string; documentsLead: string; dropSupporting: string; badSupporting: string; composition: string; titleLabel: string; description: string; recheck: string; none: string; afterStart: string;
     toList: string; back: string; next: string; start: string; started: string; failed: string; remove: string;
+    chooseTitle: string; chooseLead: string; chooseAuto: string; choosing: string; startCheck: string; starting: string; chooseEmpty: string; removeValue: string; selectionFailed: string; preparing: string; noValues: string;
   };
   work: {
     loading: string; openFailed: string; backToAudits: string; missing: string; reviewed: string; of: string; summary: string; summaryLead: string; results: string; hideHint: string; auditStatus: string; more: string; reset: string; resetDone: string; toConclusion: string; hintFill: string; saveValue: string; downloadFile: string; downloadRevised: string; unread: string; recheck: string;
@@ -42,6 +43,7 @@ export interface Copy {
     inReport: string; notFoundIn: string; inDocument: string; difference: string; sourceN: string; prevSource: string; nextSource: string; hide: string; details: string; notInOpen: string; openFile: string;
     calculation: string; chosen: string; autoStatus: string; wrongDoc: string; clearChoice: string; severity: string; sheet: string; columnWidth: string; zoomOut: string; zoomIn: string; pickDocument: string; noDocument: string; copy: string; copyTitle: string; sourceBadge: string; noPrimary: string; page: string; moreFiles: string;
     reading: string; matching: string; running: string; waiting: string; incomplete: string; background: string; created: string; composition: string; deleteDraft: string; fileOpenFailed: string; pdfFailed: string; opening: string; sheets: string;
+    etaLeft: string; etaNext: string; underMinute: string; aboutMinutes: string; rangeMinutes: string;
     noteDatesSame: string; noteDatesDiffer: string; noteSaved: string; noteSame: string; noteDiffer: string; noteNoNumber: string;
     commentRequired: string; comment: string; whyDismiss: string; commentPh: string; dismiss: string; confirmIssue: string; commentSaved: string; issueConfirmed: string; issueDismissed: string; decisionUndone: string; commentMark: string; undo: string; autoKept: string;
   };

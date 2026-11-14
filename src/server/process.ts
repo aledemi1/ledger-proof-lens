@@ -11,22 +11,54 @@ import {
   readSession,
   saveDocumentRead,
   saveOutcome,
+  saveSelection,
+  setEstimate,
   setStage,
 } from "./db";
 import { readFile, validateFile } from "./extract/index";
 import { aiConfig } from "./env";
 import { evidenceFromFragment } from "./evidence";
-import { classifyLabels, compareLinkedValues, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, shownStatus, type PackFinding } from "./llm";
+import { classifyLabels, compareLinkedValues, listReportIndicators, refineWithModel, reviewPackWithModel, scanPackForDiscrepancies, scanPackInTwoStages, shownStatus, type PackFinding } from "./llm";
 import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { AuditNotice, CheckResult, CheckStatus } from "@/types/audit";
 import { reconcile, unknownLabels, withoutDuplicates } from "./reconcile";
+import { regionIdsFor, reportRegions } from "./regions";
+import { visualPagesOf, waitSeconds } from "../lib/waitEstimate";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
 const sessionLimit = createLimiter(workerCount("SVERKO_SESSION_CONCURRENCY", Math.min(4, Math.max(2, cores))));
 const readLimit = createLimiter(workerCount("SVERKO_READ_CONCURRENCY", Math.min(4, Math.max(2, cores))));
 
 const jobs = new Map<string, Promise<void>>();
+
+interface HeldPack {
+  reportId: string;
+  reportName: string;
+  report: PreparedDoc;
+  unique: PreparedDoc[];
+  duplicates: PreparedDoc[];
+  fileErrors: { fileName: string; reason: string }[];
+  textChars: number;
+}
+
+const heldPacks = new Map<string, { pack: HeldPack; timer: ReturnType<typeof setTimeout> }>();
+
+function rememberPack(sessionId: string, pack: HeldPack): void {
+  const previous = heldPacks.get(sessionId);
+  if (previous) clearTimeout(previous.timer);
+  const timer = setTimeout(() => heldPacks.delete(sessionId), 30 * 60 * 1000);
+  if (typeof timer === "object" && timer && "unref" in timer) timer.unref();
+  heldPacks.set(sessionId, { pack, timer });
+}
+
+function takePack(sessionId: string): HeldPack | undefined {
+  const held = heldPacks.get(sessionId);
+  if (!held) return undefined;
+  clearTimeout(held.timer);
+  heldPacks.delete(sessionId);
+  return held.pack;
+}
 
 function track(sessionId: string, job: Promise<void>): Promise<void> {
   const tracked = job.finally(() => {
@@ -105,6 +137,15 @@ export async function processSession(sessionId: string, replace = false): Promis
   if (!replace && (await checkCount(sessionId)) > 0) return;
   const existing = await readSession(sessionId);
   if (!existing || (!replace && existing.processingStage === "failed")) return;
+  if (existing.selection?.phase === "selecting") return;
+  const held = existing.selection?.phase === "chosen" ? takePack(sessionId) : undefined;
+  if (held) {
+    const chosen = existing.selection?.chosen?.length ? existing.selection.chosen : undefined;
+    await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: held.textChars, model: Boolean(aiConfig()), queued: false }));
+    await setStage(sessionId, "matching");
+    await finishMatching(sessionId, held, chosen, replace);
+    return;
+  }
   const files = await documentBuffers(sessionId);
   const reportFile = files.find((file) => file.row.role === "report");
   if (!reportFile) {
@@ -112,6 +153,14 @@ export async function processSession(sessionId: string, replace = false): Promis
     return;
   }
   await setStage(sessionId, "reading");
+  const model = Boolean(aiConfig());
+  await setEstimate(sessionId, waitSeconds({
+    pendingVisualPages: files.reduce((sum, file) => sum + visualPagesOf(file.row.name, file.buffer.length), 0),
+    pendingTextFiles: files.filter((file) => visualPagesOf(file.row.name, file.buffer.length) === 0).length,
+    textChars: 0,
+    model,
+    queued: false,
+  }));
   const fileErrors: { fileName: string; reason: string }[] = [];
   let reportDoc: PreparedDoc;
   try {
@@ -143,18 +192,51 @@ export async function processSession(sessionId: string, replace = false): Promis
     )
   ).filter((doc): doc is PreparedDoc => doc != null);
 
-  await setStage(sessionId, "matching");
   const separated = withoutDuplicates(reportDoc, supporting);
-  const docs = [reportDoc, ...separated.unique];
+  const textChars = [reportDoc, ...supporting].reduce((sum, doc) => sum + doc.read.text.length, 0);
+  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars, model, queued: false }));
+  const pack: HeldPack = {
+    reportId: reportFile.row.id,
+    reportName: reportFile.row.name,
+    report: reportDoc,
+    unique: separated.unique,
+    duplicates: separated.duplicates,
+    fileErrors,
+    textChars,
+  };
+  if (existing.selection?.phase === "deferred") {
+    rememberPack(sessionId, pack);
+    const readPack = [reportDoc, ...supporting];
+    await saveSelection(sessionId, {
+      phase: "selecting",
+      regions: reportRegions(reportDoc),
+      ocrPages: readPack.reduce((sum, doc) => sum + (/\.(pdf|png|jpe?g)$/i.test(doc.name) ? Math.max(doc.read.pageCount, 1) : 0), 0),
+      textChars,
+    });
+    await setStage(sessionId, "selecting");
+    return;
+  }
+  await setStage(sessionId, "matching");
+  const picked = existing.selection?.phase === "chosen" ? existing.selection.chosen : undefined;
+  await finishMatching(sessionId, pack, picked?.length ? picked : undefined, replace);
+}
+
+async function finishMatching(sessionId: string, pack: HeldPack, chosen: { name: string; value: string }[] | undefined, replace: boolean): Promise<void> {
+  const reportDoc = pack.report;
+  const supporting = pack.unique;
+  const fileErrors = pack.fileErrors;
+  const docs = [reportDoc, ...supporting];
   const modelNotices: AuditNotice[] = [];
   const config = aiConfig();
   let checks: CheckResult[] = [];
   // A non-empty two-stage scan is the result. Rules run when the key is missing, the model fails, or the scan returns nothing.
   if (config) {
     try {
-      const scan = await scanPackInTwoStages(reportDoc, separated.unique);
+      const scan = chosen
+        ? await scanPackForDiscrepancies(reportDoc, supporting, "", chosen)
+        : await scanPackInTwoStages(reportDoc, supporting);
       checks = findingsToChecks(scan.findings, docs);
-      if (checks.length) checks = withOmitted(checks, reportDoc, separated.unique, fileErrors);
+      if (checks.length && !chosen) checks = withOmitted(checks, reportDoc, supporting, fileErrors);
       if (scan.truncated) modelNotices.push({ code: "context_truncated", kept: scan.kept, limit: scan.limit });
       if (checks.length) modelNotices.push({ code: "model_two_stage" });
     } catch (error) {
@@ -162,24 +244,27 @@ export async function processSession(sessionId: string, replace = false): Promis
       modelNotices.push({ code: "model_failed", reason });
     }
   }
-  if (!checks.length) checks = await ruleChecks(reportDoc, separated.unique, fileErrors, modelNotices);
+  if (!checks.length) {
+    const ruled = await ruleChecks(reportDoc, supporting, fileErrors, modelNotices);
+    checks = chosen ? ruled.filter((check) => chosen.some((item) => item.value.replace(/\s+/g, "") === check.reportValue.replace(/\s+/g, ""))) : ruled;
+  }
   if (!checks.length) {
     await markFailed(
       sessionId,
-      `Не удалось выделить показатели из отчёта «${reportFile.row.name}». Пустой результат не трактуется как «без замечаний».`,
+      `Не удалось выделить показатели из отчёта «${pack.reportName}». Пустой результат не трактуется как «без замечаний».`,
       fileErrors,
     );
     return;
   }
   const notices: AuditNotice[] = [
     ...modelNotices,
-    ...separated.duplicates.map((doc) => ({ code: "duplicate_file" as const, name: doc.name })),
+    ...pack.duplicates.map((doc) => ({ code: "duplicate_file" as const, name: doc.name })),
   ];
   if (fileErrors.length) notices.unshift({ code: "partial_read" });
   if (!replace && (await checkCount(sessionId)) > 0) return;
   await saveOutcome({
     sessionId,
-    reportDocumentId: reportFile.row.id,
+    reportDocumentId: pack.reportId,
     checks,
     fileErrors,
     notices,
@@ -279,6 +364,42 @@ async function readOne(id: string, name: string, buffer: Buffer, sha256Value: st
   const read = await readFile(name, buffer);
   await saveDocumentRead({ id, pageCount: read.pageCount, preview: read.preview });
   return { id, name, sha256: sha256Value, read, isReport };
+}
+
+/** Marks the values the person kept and starts the reconciliation. Null means the model may choose. */
+export async function chooseSelection(sessionId: string, ids: string[] | null): Promise<void> {
+  const session = await readSession(sessionId);
+  if (!session?.selection || session.selection.phase !== "selecting") throw new Error("Сначала дождитесь, пока отчёт будет прочитан");
+  const chosen = ids
+    ? session.selection.regions.filter((region) => ids.includes(region.id)).map((region) => ({ name: region.name, value: region.value }))
+    : [];
+  if (ids && !chosen.length) throw new Error("Выберите хотя бы одно значение");
+  const next = { ...session.selection, phase: "chosen" as const, ...(chosen.length ? { chosen } : {}) };
+  await saveSelection(sessionId, next);
+  await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: session.selection.textChars, model: Boolean(aiConfig()), queued: false }));
+  await setStage(sessionId, "queued");
+  void enqueue(sessionId);
+}
+
+/** Asks the model which report values are worth checking. Without a key, the same choice comes from the rules. */
+export async function suggestSelection(sessionId: string): Promise<string[]> {
+  const session = await readSession(sessionId);
+  if (!session?.selection || session.selection.phase !== "selecting") throw new Error("Сначала дождитесь, пока отчёт будет прочитан");
+  const files = await documentBuffers(sessionId);
+  const reportFile = files.find((file) => file.row.role === "report");
+  if (!reportFile) throw new Error("В проверке нет основного отчёта");
+  const report = await readOne(reportFile.row.id, reportFile.row.name, reportFile.buffer, reportFile.row.sha256, true);
+  const config = aiConfig();
+  let indicators: { name: string; value: string }[] = [];
+  if (config) {
+    try {
+      indicators = await listReportIndicators(report);
+    } catch {
+      indicators = [];
+    }
+  }
+  if (!indicators.length) indicators = reconcile(report, [], []).map((check) => ({ name: check.fieldName, value: check.reportValue }));
+  return regionIdsFor(session.selection.regions, indicators);
 }
 
 /** Looks up one indicator the reviewer selected after the automatic pass. Does not change existing checks. */

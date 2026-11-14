@@ -22,6 +22,8 @@ export interface AuditService {
   resetReviews(sessionId: string): Promise<void>;
   setReviewerDecision(sessionId: string, decision: Decision | null, comment?: string): Promise<AuditSession>;
   createDraft(input: NewDraftInput): Promise<AuditSession>;
+  suggestIndicators(sessionId: string): Promise<string[]>;
+  startSelection(sessionId: string, ids: string[]): Promise<AuditSession>;
   addDocuments(sessionId: string, files: File[]): Promise<AuditSession>;
   findIndicator(sessionId: string, input: { text: string; anchor?: string | null }): Promise<CheckResult>;
   deleteDraft(sessionId: string): Promise<void>;

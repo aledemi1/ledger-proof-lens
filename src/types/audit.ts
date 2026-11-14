@@ -64,7 +64,7 @@ export type Severity = "high" | "medium" | "low";
 /** Reviewer verdict — stored separately from the automatic CheckStatus. */
 export type ReviewerStatus = "pending" | "confirmed" | "verified";
 export type SessionStatus = "awaiting_processing" | "in_review" | "completed";
-export type ProcessingStage = "queued" | "reading" | "extracting" | "matching" | "done" | "failed";
+export type ProcessingStage = "queued" | "reading" | "extracting" | "matching" | "selecting" | "done" | "failed";
 export type Recommendation = "accept" | "revise" | "manual_review";
 export type Decision = "accept" | "revise";
 
@@ -207,12 +207,33 @@ export interface AuditSession {
   recommendation: Recommendation | null;
   reviewerDecision: ReviewerDecision | null;
   processingStage?: ProcessingStage;
+  /** Rough seconds still expected for the current read or the upcoming reconciliation. */
+  estimateSeconds?: number;
+  /** Present while the person is choosing report values, and after they confirm them. */
+  selection?: ReportSelection;
   processingError?: string;
   fileErrors?: { fileName: string; reason: string }[];
   incomplete?: boolean;
   /** How this run differs from an earlier check of the same subject. */
   recheck?: RecheckSummary;
   notices?: AuditNotice[];
+}
+
+export interface ReportRegion {
+  id: string;
+  name: string;
+  value: string;
+  pageNumber: number;
+  anchor: string;
+  box?: EvidenceBox;
+}
+
+export interface ReportSelection {
+  phase: "deferred" | "selecting" | "chosen";
+  regions: ReportRegion[];
+  chosen?: { name: string; value: string }[];
+  ocrPages: number;
+  textChars: number;
 }
 
 export interface RecheckSummary {
@@ -271,6 +292,8 @@ export interface NewDraftInput {
   idempotencyKey?: string;
   /** Earlier check this upload is meant to replace. */
   previousSessionId?: string;
+  /** Read the report first and wait for the person to choose values. */
+  deferSelection?: boolean;
   report: NewDraftFile;
   supporting: NewDraftFile[];
 }

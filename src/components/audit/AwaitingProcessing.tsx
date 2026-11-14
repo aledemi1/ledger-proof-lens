@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FileText, Loader, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoBadge, SessionStatusBadge } from "./badges";
+import { WaitTime } from "./WaitTime";
 import { docText } from "@/i18n/labels";
 import { fill } from "@/i18n/fill";
 import { useCopy } from "@/i18n/messages";
@@ -23,7 +24,7 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
       </Button>
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold tracking-tight">{session.title}</h1>
-        <SessionStatusBadge status={session.status} />
+        <SessionStatusBadge status={session.status} stage={session.processingStage} />
         {session.isDemo && <DemoBadge />}
       </div>
       <p className="mt-1 text-sm text-muted-foreground">{fill(t.work.created, { date: formatDate(session.createdAt, true, locale) })}</p>
@@ -39,10 +40,13 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
                 ? t.work.reading
                 : session.processingStage === "matching"
                   ? t.work.matching
-                  : session.processingStage
-                    ? t.work.running
-                    : t.work.waiting}
+                  : session.processingStage === "queued" || !session.processingStage
+                    ? t.work.waiting
+                    : t.session.processing}
           </p>
+          {!session.processingError && session.processingStage !== "failed" && session.processingStage !== "done" && (
+            <WaitTime seconds={session.estimateSeconds} />
+          )}
           <p className="mt-1 text-muted-foreground">
             {session.processingError ??
               t.work.background}
@@ -61,7 +65,7 @@ export function AwaitingProcessing({ session, documents }: { session: AuditSessi
           <div key={d!.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
             <FileText className="size-4 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">{d!.name}</span>
-            <span className="text-xs text-muted-foreground">{d === report ? t.doc.mainReport : docText(t, d!.type)}</span>
+            <span className="text-xs text-muted-foreground">{d === report ? t.doc.mainReport : d!.type === "unknown" ? "" : docText(t, d!.type)}</span>
             <span className="w-14 text-right text-xs uppercase text-muted-foreground">{fileExt(d!.name)}</span>
             <span className="w-16 text-right text-xs text-muted-foreground tabular">{formatSize(d!.size)}</span>
           </div>

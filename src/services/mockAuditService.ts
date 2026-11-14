@@ -145,6 +145,12 @@ export const mockAuditService: AuditService = {
     write(store);
     return session;
   },
+  async suggestIndicators() {
+    throw new Error("Демонстрационный комплект уже посчитан.");
+  },
+  async startSelection() {
+    throw new Error("Демонстрационный комплект уже посчитан.");
+  },
   async addDocuments(sessionId, files) {
     const store = read();
     const draft = store.drafts.find((item) => item.session.id === sessionId);

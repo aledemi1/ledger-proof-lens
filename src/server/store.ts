@@ -227,7 +227,9 @@ async function open(): Promise<void> {
     for (const statement of SCHEMA) await testPool.query(statement);
     await testPool.query("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BYTEA NOT NULL)");
     await ensureColumn("sessions", "previous_id", "TEXT");
+    await ensureColumn("sessions", "selection", "TEXT");
     await ensureColumn("sessions", "recheck", "TEXT");
+    await ensureColumn("sessions", "estimate_seconds", "INTEGER");
     await ensureColumn("reviews", "source_json", "TEXT");
     if (await ensureColumn("users", "email_verified_at", "TEXT")) {
       await testPool.query("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
@@ -242,7 +244,9 @@ async function open(): Promise<void> {
     for (const statement of SCHEMA) await pool.query(statement);
     await pool.query("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BYTEA NOT NULL)");
     await ensureColumn("sessions", "previous_id", "TEXT");
+    await ensureColumn("sessions", "selection", "TEXT");
     await ensureColumn("sessions", "recheck", "TEXT");
+    await ensureColumn("sessions", "estimate_seconds", "INTEGER");
     await ensureColumn("reviews", "source_json", "TEXT");
     if (await ensureColumn("users", "email_verified_at", "TEXT")) {
       await pool.query("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");
@@ -269,7 +273,9 @@ async function open(): Promise<void> {
   scopeCheckIdsToSession(db);
   db.exec("CREATE TABLE IF NOT EXISTS document_bodies (id TEXT PRIMARY KEY, body BLOB NOT NULL)");
   ensureSqliteColumn(db, "sessions", "previous_id", "TEXT");
+  ensureSqliteColumn(db, "sessions", "selection", "TEXT");
   ensureSqliteColumn(db, "sessions", "recheck", "TEXT");
+  ensureSqliteColumn(db, "sessions", "estimate_seconds", "INTEGER");
   ensureSqliteColumn(db, "reviews", "source_json", "TEXT");
   if (ensureSqliteColumn(db, "users", "email_verified_at", "TEXT")) {
     db.exec("UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL");

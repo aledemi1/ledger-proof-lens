@@ -53,7 +53,7 @@ export function DocumentSwitcher({
                 {sourceIds.has(doc.id) && <span className="ml-auto shrink-0 rounded bg-primary px-1 text-[9px] font-semibold uppercase text-primary-foreground">{t.work.sourceBadge}</span>}
               </span>
               <span className="flex w-full items-center gap-2 text-[11px] text-muted-foreground">
-                {docText(t, doc.type)}
+                {doc.type !== "unknown" && docText(t, doc.type)}
                 <span className="ml-auto flex gap-1.5">
                   {statusOrder.map((s) => c?.[s] ? <span key={s} className="flex items-center gap-0.5"><span className={cn("size-1.5 rounded-full", checkStatusMeta[s].dot)} />{c[s]}</span> : null)}
                 </span>

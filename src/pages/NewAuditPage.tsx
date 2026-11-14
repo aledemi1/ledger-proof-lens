@@ -1,21 +1,23 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { ArrowLeft, ArrowRight, Check, FileText, PlayCircle, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, PlayCircle, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { SelectionPanel } from "@/components/audit/SelectionPanel";
+import { WaitTime } from "@/components/audit/WaitTime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { REPORT_EXTENSIONS, selectableDocTypes, SUPPORTING_EXTENSIONS } from "@/lib/documentTypes";
+import { REPORT_EXTENSIONS, SUPPORTING_EXTENSIONS } from "@/lib/documentTypes";
 import { fileExt, formatSize } from "@/lib/format";
+import { previewWait } from "@/lib/waitEstimate";
 import { cn } from "@/lib/utils";
 import { AuditApiError } from "@/services/apiAuditService";
-import { docText } from "@/i18n/labels";
 import { useCopy } from "@/i18n/messages";
 import { auditService } from "@/services/auditService";
 import { DEMO_SESSION_ID } from "@/mocks/demoAudit";
-import type { AuditSession, DocumentType } from "@/types/audit";
+import type { AuditDocument, AuditSession, DocumentType } from "@/types/audit";
 
 interface Picked {
   key: string;
@@ -36,11 +38,27 @@ export function NewAuditPage() {
   const [earlier, setEarlier] = useState<AuditSession[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploadErrors, setUploadErrors] = useState<{ fileName: string; reason: string }[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [liveSession, setLiveSession] = useState<AuditSession | null>(null);
+  const [liveDocs, setLiveDocs] = useState<AuditDocument[]>([]);
   const idempotencyKey = useRef(crypto.randomUUID());
+  const preparing = useRef(false);
+  const generation = useRef(0);
 
   useEffect(() => {
     auditService.listSessions().then((sessions) => setEarlier(sessions.filter((session) => !session.isDemo))).catch(() => setEarlier([]));
   }, []);
+
+  useEffect(() => {
+    if (!draftId || liveSession?.processingStage === "selecting" || liveSession?.processingStage === "failed") return;
+    const timer = window.setInterval(() => {
+      void auditService.getSession(draftId).then((session) => {
+        if (session) setLiveSession(session);
+      }).catch(() => undefined);
+      void auditService.getDocuments(draftId).then(setLiveDocs).catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [draftId, liveSession?.processingStage]);
 
   const canNext = [!!report, supporting.length > 0, title.trim().length > 0][step];
 
@@ -61,8 +79,10 @@ export function NewAuditPage() {
     ]);
   };
 
-  const create = async () => {
-    if (!report) return;
+  const prepare = async (force = false) => {
+    if (!report || preparing.current || (!force && draftId)) return;
+    const ticket = generation.current;
+    preparing.current = true;
     setBusy(true);
     setUploadErrors([]);
     try {
@@ -70,22 +90,49 @@ export function NewAuditPage() {
         title: title.trim(),
         description: description.trim() || undefined,
         idempotencyKey: idempotencyKey.current,
+        deferSelection: true,
         ...(previousId ? { previousSessionId: previousId } : {}),
         report: { name: report.name, size: report.size, mimeType: report.type, type: "report", file: report },
         supporting: supporting.map((p) => ({ name: p.file.name, size: p.file.size, mimeType: p.file.type, type: p.type, file: p.file })),
       });
-      toast.success(t.neu.started);
-      navigate({ to: "/audits/$id", params: { id: s.id } });
+      if (ticket !== generation.current) {
+        await auditService.deleteDraft(s.id).catch(() => undefined);
+        return;
+      }
+      setDraftId(s.id);
+      setLiveSession(s);
+      const docs = await auditService.getDocuments(s.id);
+      setLiveDocs(docs);
     } catch (reason) {
       const files = reason instanceof AuditApiError ? reason.files : [];
       setUploadErrors(files);
       toast.error(reason instanceof Error ? reason.message : t.neu.failed);
+      preparing.current = false;
+    } finally {
       setBusy(false);
     }
   };
 
+  const abandon = async () => {
+    generation.current += 1;
+    const id = draftId;
+    setDraftId(null);
+    setLiveSession(null);
+    setLiveDocs([]);
+    preparing.current = false;
+    idempotencyKey.current = crypto.randomUUID();
+    if (id) await auditService.deleteDraft(id).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    if (step !== 2 || draftId || !report || !title.trim() || supporting.length === 0) return;
+    void prepare();
+    // prepare reads the latest files when the step opens; later edits go through abandon.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, draftId, title, supporting.length]);
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 lg:px-8 lg:py-8">
+    <div className={cn("mx-auto px-4 py-6 lg:px-8 lg:py-8", liveSession?.processingStage === "selecting" ? "max-w-6xl" : "max-w-3xl")}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">{t.neu.title}</h1>
@@ -101,7 +148,10 @@ export function NewAuditPage() {
           <li key={s}>
             <Button variant="ghost" className="h-auto w-full flex-col items-stretch px-0 hover:bg-transparent"
               disabled={i > step}
-              onClick={() => setStep(i)}
+              onClick={() => {
+                if (step === 2 && i < 2) void abandon();
+                setStep(i);
+              }}
             >
               <div className={cn("h-1 rounded-full bg-muted", i <= step && "bg-primary")} />
               <div className={cn("mt-2 flex items-center gap-1.5 text-xs", i === step ? "font-semibold text-primary" : "text-muted-foreground")}>
@@ -155,14 +205,6 @@ export function NewAuditPage() {
                     bare
                     file={p.file}
                     onRemove={() => setSupporting((prev) => prev.filter((x) => x.key !== p.key))}
-                    extra={
-                      <Select value={p.type} onValueChange={(v) => setSupporting((prev) => prev.map((x) => (x.key === p.key ? { ...x, type: v as DocumentType } : x)))}>
-                        <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {selectableDocTypes.map((kind) => <SelectItem key={kind} value={kind}>{docText(t, kind)}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    }
                   />
                 ))}
               </div>
@@ -178,15 +220,17 @@ export function NewAuditPage() {
 
         {step === 2 && report && (
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="title">{t.neu.titleLabel}</Label>
-              <Input id="title" value={title} onChange={(event) => { setTitleTouched(true); setTitle(event.target.value); }} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="title">{t.neu.titleLabel}</Label>
+                <Input id="title" value={title} onChange={(event) => { setTitleTouched(true); setTitle(event.target.value); }} disabled={Boolean(draftId)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="desc">{t.neu.description}</Label>
+                <Textarea id="desc" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t.neu.description} disabled={Boolean(draftId)} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="desc">{t.neu.description}</Label>
-              <Textarea id="desc" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t.neu.description} />
-            </div>
-            {earlier.length > 0 && (
+            {earlier.length > 0 && !draftId && (
               <div className="space-y-1.5">
                 <Label>{t.neu.recheck}</Label>
                 <Select value={previousId || "none"} onValueChange={(value) => setPreviousId(value === "none" ? "" : value)}>
@@ -196,23 +240,8 @@ export function NewAuditPage() {
                     {earlier.map((session) => <SelectItem key={session.id} value={session.id}>{session.title}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t.neu.recheck}</p>
               </div>
             )}
-            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">{t.neu.titleLabel}</dt><dd className="font-medium">{title}</dd>
-              <dt className="text-muted-foreground">{t.neu.report}</dt><dd>{report.name}</dd>
-              <dt className="text-muted-foreground">{t.neu.documents}</dt><dd>{supporting.length}</dd>
-            </dl>
-            <div className="divide-y divide-border rounded-md border border-border text-sm">
-              {supporting.map((p) => (
-                <div key={p.key} className="flex items-center gap-3 px-3 py-2">
-                  <FileText className="size-4 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{p.file.name}</span>
-                  <span className="text-xs text-muted-foreground">{docText(t, p.type)}</span>
-                </div>
-              ))}
-            </div>
             {uploadErrors.length > 0 && (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
                 {uploadErrors.map((item) => (
@@ -220,9 +249,29 @@ export function NewAuditPage() {
                 ))}
               </div>
             )}
-            <p className="text-sm text-muted-foreground">
-              {t.neu.afterStart}
-            </p>
+            {liveSession?.processingStage === "selecting" && liveSession.selection ? (
+              <SelectionPanel
+                session={liveSession}
+                report={liveDocs.find((doc) => doc.id === liveSession.reportDocumentId) ?? {
+                  id: liveSession.reportDocumentId ?? "report",
+                  name: report.name,
+                  type: "report",
+                  mimeType: report.type,
+                  size: report.size,
+                  pageCount: 0,
+                  preview: { kind: "none", reason: t.work.opening },
+                }}
+                regions={liveSession.selection.regions}
+                copy={t}
+                onStarted={() => navigate({ to: "/audits/$id", params: { id: liveSession.id } })}
+              />
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-4 text-sm">
+                <p className="font-medium">{liveSession?.processingError ? t.work.incomplete : t.neu.preparing}</p>
+                <WaitTime seconds={liveSession?.estimateSeconds ?? previewWait([{ name: report.name, size: report.size }, ...supporting.map((item) => ({ name: item.file.name, size: item.file.size }))])} />
+                {liveSession?.processingError && <p className="mt-2 text-destructive">{liveSession.processingError}</p>}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -231,12 +280,22 @@ export function NewAuditPage() {
         {step === 0 ? (
           <Button asChild variant="ghost"><Link to="/audits"><ArrowLeft /> {t.neu.toList}</Link></Button>
         ) : (
-          <Button variant="ghost" onClick={() => setStep(step - 1)}><ArrowLeft /> {t.neu.back}</Button>
+          <Button variant="ghost" onClick={() => { if (step === 2) void abandon(); setStep(step - 1); }}><ArrowLeft /> {t.neu.back}</Button>
         )}
         {step < 2 ? (
           <Button disabled={!canNext} onClick={() => setStep(step + 1)}>{t.neu.next} <ArrowRight /></Button>
+        ) : liveSession?.processingStage === "failed" ? (
+          <Button onClick={() => {
+            const failedId = draftId;
+            preparing.current = false;
+            setDraftId(null);
+            setLiveSession(null);
+            idempotencyKey.current = crypto.randomUUID();
+            if (failedId) void auditService.deleteDraft(failedId).catch(() => undefined);
+            void prepare(true);
+          }}>{t.common.tryAgain}</Button>
         ) : (
-          <Button disabled={busy} onClick={create}><PlayCircle /> {t.neu.start}</Button>
+          <span />
         )}
       </div>
     </div>

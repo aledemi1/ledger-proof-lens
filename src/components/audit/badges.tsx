@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, FlaskConical, HelpCircle, Clock, XCircle, Loader } from "lucide-react";
 import { useCopy } from "@/i18n/messages";
 import { cn } from "@/lib/utils";
-import type { CheckStatus, Recommendation, ReviewerStatus, SessionStatus, Severity } from "@/types/audit";
+import type { CheckStatus, ProcessingStage, Recommendation, ReviewerStatus, SessionStatus, Severity } from "@/types/audit";
 
 const pill = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 
@@ -40,7 +40,7 @@ export function ReviewerBadge({ status }: { status: ReviewerStatus }) {
   );
 }
 
-export function SessionStatusBadge({ status }: { status: SessionStatus }) {
+export function SessionStatusBadge({ status, stage }: { status: SessionStatus; stage?: ProcessingStage | undefined }) {
   const t = useCopy();
   const map: Record<SessionStatus, { label: string; cls: string; Icon: typeof Clock }> = {
     awaiting_processing: { label: t.session.awaiting, cls: "bg-muted text-muted-foreground", Icon: Loader },
@@ -48,10 +48,13 @@ export function SessionStatusBadge({ status }: { status: SessionStatus }) {
     completed: { label: t.session.completed, cls: "bg-secondary text-secondary-foreground", Icon: CheckCircle2 },
   };
   const m = map[status];
+  const running = status === "awaiting_processing" && !!stage && stage !== "queued" && stage !== "failed" && stage !== "selecting" && stage !== "done";
+  const choosing = status === "awaiting_processing" && stage === "selecting";
+  const label = running ? t.session.processing : choosing ? t.session.choosing : m.label;
   return (
     <span className={cn(pill, m.cls)}>
       <m.Icon className="size-3.5" />
-      {m.label}
+      {label}
     </span>
   );
 }

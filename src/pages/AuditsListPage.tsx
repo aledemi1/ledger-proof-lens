@@ -145,7 +145,7 @@ function ProjectFolder({ session: s, showDemo }: { session: AuditSession; showDe
           </span>
         )}
         <span className="ml-auto flex flex-wrap justify-end gap-1">
-          {r ? <RecommendationBadge rec={r} /> : <SessionStatusBadge status={s.status} />}
+          {r ? <RecommendationBadge rec={r} /> : <SessionStatusBadge status={s.status} stage={s.processingStage} />}
         </span>
       </div>
     </Link>
