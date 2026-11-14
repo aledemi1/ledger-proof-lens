@@ -10,8 +10,7 @@ import { actPdf, supplyReport, waybill } from "@/server/fixtures";
 import { handleApi } from "@/server/http";
 import { enqueue } from "@/server/process";
 import type { PreparedDoc } from "@/server/reconcile";
-import { duplicateFileNames, formatNotice, parseNotices } from "@/lib/notices";
-import { ru } from "@/i18n/messages/ru";
+import { duplicateFileNames, parseNotices } from "@/lib/notices";
 
 async function signIn(): Promise<string> {
   const response = await handleApi(
@@ -88,7 +87,7 @@ describe("processSession contract", () => {
     expect(fallback?.notices?.some((notice) => notice.code === "model_two_stage")).toBe(false);
   }, 120_000);
 
-  it("replaces the rule result when the model cites a real fragment, and keeps its page and box", async () => {
+  it("keeps the rule result when the model cites a different fragment", async () => {
     process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-model-"));
     await closeDb();
     const cookie = await signIn();
@@ -96,54 +95,22 @@ describe("processSession contract", () => {
     process.env["AI_BASE_URL"] = "https://model.test/v1";
     process.env["AI_MODEL"] = "test-model";
     process.env["SVERKO_PRIVACY"] = "off";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as { messages: { content: unknown }[] };
-        const system = typeof body.messages[0]?.content === "string" ? body.messages[0].content : "";
-        const user = body.messages[1]?.content;
-        const userText = typeof user === "string" ? user : Array.isArray(user) ? String((user.find((part) => part && typeof part === "object" && "text" in part) as { text?: string } | undefined)?.text ?? "") : "";
-        const data = JSON.parse(userText || "{}") as {
-          report?: { fragments?: { id: string; text: string }[] };
-          sources?: { fragments?: { id: string; text: string }[] };
-        };
-        const reportFragment = data.report?.fragments?.[0];
-        const source = data.sources?.fragments?.find((item) => item.text.length > 12);
-        const content = system.includes("только отчёт") || !source
-          ? { indicators: [{ name: "Контракт модели", reportValue: "1", reportFragmentId: reportFragment?.id ?? "", reportQuote: reportFragment?.text.slice(0, 24) ?? "1" }] }
-          : {
-              findings: [{
-                name: "Контракт модели",
-                reportValue: "1",
-                reportFragmentId: reportFragment?.id ?? "",
-                reportQuote: reportFragment?.text.slice(0, 24) ?? "1",
-                sourceCount: 1,
-                sources: `${source.id} | ${source.text.slice(0, 40)}`,
-                relation: "same",
-              }],
-            };
-        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }), { status: 200 });
-      }),
-    );
-    const id = await upload(cookie, "Модель вместо правил", supplyReport(), "Отчет_поставка.xlsx", [{ name: "Акт_14.pdf", bytes: await actPdf("250 000,00 руб.", 1) }]);
+    const called = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+      indicators: [{ name: "Контракт модели", reportValue: "1", reportFragmentId: "missing", reportQuote: "1" }],
+      findings: [{ name: "Контракт модели", reportValue: "1", reportFragmentId: "missing", reportQuote: "1", sourceCount: 1, sources: "missing | 1", relation: "same" }],
+    }) } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", called);
+    const id = await upload(cookie, "Модель не подменяет правила", supplyReport(), "Отчет_поставка.xlsx", [{ name: "Акт_14.pdf", bytes: await actPdf("250 000,00 руб.", 1) }]);
     await enqueue(id);
     const session = await readSession(id);
-    const model = session?.checks.find((check) => check.fieldName === "Контракт модели");
-    expect(model).toBeTruthy();
-    const omitted = session?.checks.filter((check) => check.id.startsWith("omitted-")) ?? [];
-    expect(omitted.length).toBeGreaterThan(0);
-    expect(omitted.every((check) => {
-      const note = Array.isArray(check.explanation) ? check.explanation[0] : undefined;
-      return check.status === "needs_review" && check.discrepancy == null && note?.code === "model_omitted";
-    })).toBe(true);
-    expect(session?.notices?.some((notice) => notice.code === "model_two_stage")).toBe(true);
-    const evidence = model?.evidenceReferences[0];
-    expect(evidence?.pageNumber).toBeGreaterThan(0);
-    expect(evidence?.box).toBeTruthy();
-    expect(evidence?.locationInDocument).toBeTruthy();
+    expect(called).not.toHaveBeenCalled();
+    expect(session?.checks.find((check) => check.fieldName === "Контракт модели")).toBeUndefined();
+    expect(session?.checks.some((check) => check.id.startsWith("omitted-"))).toBe(false);
+    expect(session?.notices?.some((notice) => notice.code === "model_two_stage")).toBe(false);
+    expect(session?.checks.find((check) => check.fieldName === "Стоимость поставки")?.status).toBe("mismatch");
   });
 
-  it("tells the reviewer when the model did not see the whole pack", async () => {
+  it("keeps the rule result when the model context would have been cut", async () => {
     process.env["SVERKO_DATA_DIR"] = mkdtempSync(path.join(tmpdir(), "sverko-cut-"));
     await closeDb();
     const cookie = await signIn();
@@ -154,14 +121,15 @@ describe("processSession contract", () => {
     process.env["SVERKO_SCAN_CHAR_LIMIT"] = "30";
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ indicators: [{ name: "Количество", reportValue: "50 шт", reportFragmentId: "missing", reportQuote: "50" }], findings: [{ name: "Количество", reportValue: "50 шт", reportFragmentId: "missing", reportQuote: "50", sourceCount: 0, sources: "", relation: "missing" }] }) } }] }), { status: 200 })),
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: "{}" } }] }), { status: 200 })),
     );
     const id = await upload(cookie, "Обрезанный комплект", supplyReport(), "Отчет_поставка.xlsx", [{ name: "Накладная_34.xlsx", bytes: waybill("34", 47) }]);
     await enqueue(id);
     const session = await readSession(id);
-    expect(session?.incomplete).toBe(true);
-    expect(session?.notices?.some((notice) => notice.code === "context_truncated" && notice.limit === 30)).toBe(true);
-    expect(formatNotice(session!.notices!.find((notice) => notice.code === "context_truncated")!, ru)).toContain("30");
+    expect(session?.checks.length).toBeGreaterThan(0);
+    expect(session?.incomplete ?? false).toBe(false);
+    expect(session?.notices?.some((notice) => notice.code === "context_truncated")).toBe(false);
+    expect(session?.checks.find((check) => check.fieldName === "Количество")?.status).toBe("mismatch");
   });
 
   it("copies a measured box and reads an old Russian notice", async () => {
