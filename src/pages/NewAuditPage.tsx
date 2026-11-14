@@ -129,7 +129,15 @@ export function NewAuditPage() {
     void prepare();
     // prepare reads the latest files when the step opens; later edits go through abandon.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, draftId, title, supporting.length]);
+  }, [step, draftId, supporting.length]);
+
+  useEffect(() => {
+    if (!draftId || !title.trim()) return;
+    const handle = window.setTimeout(() => {
+      void auditService.updateDetails(draftId, { title: title.trim(), description: description.trim() }).catch(() => undefined);
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [draftId, title, description]);
 
   return (
     <div className={cn("mx-auto px-4 py-6 lg:px-8 lg:py-8", liveSession?.processingStage === "selecting" ? "max-w-6xl" : "max-w-3xl")}>
@@ -223,11 +231,11 @@ export function NewAuditPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="title">{t.neu.titleLabel}</Label>
-                <Input id="title" value={title} onChange={(event) => { setTitleTouched(true); setTitle(event.target.value); }} disabled={Boolean(draftId)} />
+                <Input id="title" value={title} onChange={(event) => { setTitleTouched(true); setTitle(event.target.value); }} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="desc">{t.neu.description}</Label>
-                <Textarea id="desc" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t.neu.description} disabled={Boolean(draftId)} />
+                <Textarea id="desc" value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t.neu.description} />
               </div>
             </div>
             {earlier.length > 0 && !draftId && (
@@ -261,7 +269,6 @@ export function NewAuditPage() {
                   pageCount: 0,
                   preview: { kind: "none", reason: t.work.opening },
                 }}
-                regions={liveSession.selection.regions}
                 copy={t}
                 onStarted={() => navigate({ to: "/audits/$id", params: { id: liveSession.id } })}
               />

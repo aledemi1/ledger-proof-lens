@@ -30,7 +30,7 @@ export function WorkspacePage({ id }: { id: string }) {
   if (session.processingStage === "selecting" && session.selection?.phase === "selecting" && report)
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8">
-        <SelectionPanel session={session} report={report} regions={session.selection.regions} copy={t} onStarted={() => undefined} />
+        <SelectionPanel session={session} report={report} copy={t} onStarted={() => undefined} />
       </div>
     );
   if (session.status === "awaiting_processing" || session.checks.length === 0)

@@ -4,6 +4,7 @@ import type {
   AuditSession,
   CheckResult,
   Decision,
+  ChosenCell,
   NewDraftInput,
   ReviewUpdate,
 } from "@/types/audit";
@@ -22,8 +23,9 @@ export interface AuditService {
   resetReviews(sessionId: string): Promise<void>;
   setReviewerDecision(sessionId: string, decision: Decision | null, comment?: string): Promise<AuditSession>;
   createDraft(input: NewDraftInput): Promise<AuditSession>;
-  suggestIndicators(sessionId: string): Promise<string[]>;
-  startSelection(sessionId: string, ids: string[]): Promise<AuditSession>;
+  updateDetails(sessionId: string, input: { title: string; description: string }): Promise<void>;
+  suggestIndicators(sessionId: string): Promise<ChosenCell[]>;
+  startSelection(sessionId: string, items: ChosenCell[]): Promise<AuditSession>;
   addDocuments(sessionId: string, files: File[]): Promise<AuditSession>;
   findIndicator(sessionId: string, input: { text: string; anchor?: string | null }): Promise<CheckResult>;
   deleteDraft(sessionId: string): Promise<void>;

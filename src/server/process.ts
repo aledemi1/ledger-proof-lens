@@ -23,7 +23,7 @@ import { createLimiter, workerCount } from "./pool";
 import type { PreparedDoc, RoleHints } from "./reconcile";
 import type { AuditNotice, CheckResult, CheckStatus } from "@/types/audit";
 import { reconcile, unknownLabels, withoutDuplicates } from "./reconcile";
-import { regionIdsFor, reportRegions } from "./regions";
+import { indicatorPicks, reportRegions } from "./regions";
 import { visualPagesOf, waitSeconds } from "../lib/waitEstimate";
 
 const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
@@ -367,13 +367,20 @@ async function readOne(id: string, name: string, buffer: Buffer, sha256Value: st
 }
 
 /** Marks the values the person kept and starts the reconciliation. Null means the model may choose. */
-export async function chooseSelection(sessionId: string, ids: string[] | null): Promise<void> {
+export async function chooseSelection(
+  sessionId: string,
+  ids: string[] | null,
+  items?: { anchor: string; name: string; value: string }[],
+): Promise<void> {
   const session = await readSession(sessionId);
   if (!session?.selection || session.selection.phase !== "selecting") throw new Error("Сначала дождитесь, пока отчёт будет прочитан");
-  const chosen = ids
-    ? session.selection.regions.filter((region) => ids.includes(region.id)).map((region) => ({ name: region.name, value: region.value }))
-    : [];
-  if (ids && !chosen.length) throw new Error("Выберите хотя бы одно значение");
+  const fromItems = items?.length ? await chosenFromReport(sessionId, items) : [];
+  const chosen = fromItems.length
+    ? fromItems
+    : ids
+      ? session.selection.regions.filter((region) => ids.includes(region.id)).map((region) => ({ name: region.name, value: region.value }))
+      : [];
+  if ((items?.length || ids) && !chosen.length) throw new Error("Выберите хотя бы одно значение");
   const next = { ...session.selection, phase: "chosen" as const, ...(chosen.length ? { chosen } : {}) };
   await saveSelection(sessionId, next);
   await setEstimate(sessionId, waitSeconds({ pendingVisualPages: 0, pendingTextFiles: 0, textChars: session.selection.textChars, model: Boolean(aiConfig()), queued: false }));
@@ -381,25 +388,41 @@ export async function chooseSelection(sessionId: string, ids: string[] | null): 
   void enqueue(sessionId);
 }
 
-/** Asks the model which report values are worth checking. Without a key, the same choice comes from the rules. */
-export async function suggestSelection(sessionId: string): Promise<string[]> {
+/** Asks the model which report values are worth checking. A missed answer stays empty: rules do not fill in row numbers. */
+export async function suggestSelection(sessionId: string): Promise<{ anchor: string; name: string; value: string }[]> {
   const session = await readSession(sessionId);
   if (!session?.selection || session.selection.phase !== "selecting") throw new Error("Сначала дождитесь, пока отчёт будет прочитан");
+  const report = await reportDocOf(sessionId);
+  if (!aiConfig()) return [];
+  try {
+    const indicators = await listReportIndicators(report);
+    return indicatorPicks(
+      report.read.fragments.map((fragment) => ({ id: `${report.id}:${fragment.id}`, anchor: fragment.anchor, text: fragment.text })),
+      indicators,
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function reportDocOf(sessionId: string): Promise<PreparedDoc> {
+  const held = heldPacks.get(sessionId)?.pack.report;
+  if (held) return held;
   const files = await documentBuffers(sessionId);
   const reportFile = files.find((file) => file.row.role === "report");
   if (!reportFile) throw new Error("В проверке нет основного отчёта");
-  const report = await readOne(reportFile.row.id, reportFile.row.name, reportFile.buffer, reportFile.row.sha256, true);
-  const config = aiConfig();
-  let indicators: { name: string; value: string }[] = [];
-  if (config) {
-    try {
-      indicators = await listReportIndicators(report);
-    } catch {
-      indicators = [];
-    }
-  }
-  if (!indicators.length) indicators = reconcile(report, [], []).map((check) => ({ name: check.fieldName, value: check.reportValue }));
-  return regionIdsFor(session.selection.regions, indicators);
+  return readOne(reportFile.row.id, reportFile.row.name, reportFile.buffer, reportFile.row.sha256, true);
+}
+
+async function chosenFromReport(sessionId: string, items: { anchor: string; name: string; value: string }[]): Promise<{ name: string; value: string }[]> {
+  const report = await reportDocOf(sessionId);
+  const byAnchor = new Map(report.read.fragments.map((fragment) => [fragment.anchor, fragment.text.replace(/\s+/g, " ").trim()]));
+  return items.flatMap((item) => {
+    const text = byAnchor.get(item.anchor);
+    if (!text) return [];
+    const name = item.name.replace(/\s+/g, " ").trim();
+    return [{ name: name || text, value: text }];
+  });
 }
 
 /** Looks up one indicator the reviewer selected after the automatic pass. Does not change existing checks. */

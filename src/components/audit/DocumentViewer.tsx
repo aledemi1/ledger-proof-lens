@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FileSpreadsheet, FileText, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkProvider, SyntheticPage } from "./SyntheticDocument";
-import { FlowView, GridView, ImageView, PdfView, type MarkLayer } from "./RealDocument";
+import { FlowView, GridView, ImageView, PdfView, type MarkLayer, type PickCell } from "./RealDocument";
 import { docText } from "@/i18n/labels";
 import { useCopy } from "@/i18n/messages";
 import type { DocMark } from "@/lib/marks";
@@ -15,6 +15,8 @@ interface Props {
   /** Reference to scroll to and outline. Ignored when it belongs to another document. */
   focus: EvidenceReference | null;
   onMarkClick?: (mark: DocMark) => void;
+  /** Chooses report cells before reconciliation. A drag passes the whole rectangle. */
+  onCells?: (cells: PickCell[], drag: boolean | "start") => void;
   /** A word or cell the reviewer selected in this document after the automatic pass. */
   onTextSelect?: (selection: { text: string; anchor: string | null }) => void;
   /** Rendered between the toolbar and the page, e.g. the report-versus-source comparison. */
@@ -36,8 +38,8 @@ export function DocumentViewer(p: Props) {
   const layer = useMemo<MarkLayer>(() => {
     const marks = new Map<string, DocMark>();
     p.marks.forEach((mark) => mark.anchor && marks.set(mark.anchor, mark));
-    return { marks, active: activeAnchor, onMark: p.onMarkClick };
-  }, [p.marks, activeAnchor, p.onMarkClick]);
+    return { marks, active: activeAnchor, onMark: p.onMarkClick, ...(p.onCells ? { onCells: p.onCells } : {}) };
+  }, [p.marks, activeAnchor, p.onMarkClick, p.onCells]);
   const statuses = useMemo(() => {
     const map = new Map<string, CheckStatus>();
     layer.marks.forEach((mark, anchor) => map.set(anchor, mark.status));

@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { EvidenceReference, FlowBlock, GridCell, GridSheet } from "@/types/audit";
 import type { DocMark } from "@/lib/marks";
@@ -7,11 +7,19 @@ import { useCopy } from "@/i18n/messages";
 import { imagePreviewWidth, pdfPreviewScale } from "@/lib/previewScale";
 import { cn } from "@/lib/utils";
 
+export interface PickCell {
+  anchor: string;
+  name: string;
+  value: string;
+}
+
 export interface MarkLayer {
   /** Marks keyed by anchor. */
   marks: Map<string, DocMark>;
   active?: string | undefined;
   onMark?: ((mark: DocMark) => void) | undefined;
+  /** Present while the person is choosing report values. Drag adds the rectangle; a click toggles one cell. */
+  onCells?: ((cells: PickCell[], drag: boolean | "start") => void) | undefined;
 }
 
 function markProps(anchor: string, layer: MarkLayer) {
@@ -120,6 +128,11 @@ function columnWidths(sheet: GridSheet, columns: number, cells: Map<string, Grid
   });
 }
 
+function cellName(text: string, left: string): string {
+  if (/\p{L}/u.test(text)) return text;
+  return /\p{L}/u.test(left) ? left : text;
+}
+
 function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
   const t = useCopy();
   const { cells, columns, rows } = sheetMatrix(sheet);
@@ -142,6 +155,63 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
   }
   const letters = Array.from({ length: columns }, (_, index) => columnName(index + 1));
   const template = `46px ${widths.map((width) => `${width}px`).join(" ")}`;
+  const drag = useRef<{ row: number; col: number; moved: boolean } | null>(null);
+
+  const describe = (row: number, col: number): PickCell | null => {
+    const cell = cells.get(`${col}:${row}`);
+    const text = cell?.text.replace(/\s+/g, " ").trim() ?? "";
+    if (!cell || !text) return null;
+    let left = "";
+    for (let cursor = col - 1; cursor >= 1; cursor -= 1) {
+      const side = cells.get(`${cursor}:${row}`)?.text.replace(/\s+/g, " ").trim() ?? "";
+      if (/\p{L}/u.test(side)) {
+        left = side;
+        break;
+      }
+    }
+    return { anchor: cell.anchor, name: cellName(text, left), value: text };
+  };
+
+  const rectangle = (row: number, col: number): PickCell[] => {
+    if (!drag.current) return [];
+    const top = Math.min(drag.current.row, row);
+    const bottom = Math.max(drag.current.row, row);
+    const left = Math.min(drag.current.col, col);
+    const right = Math.max(drag.current.col, col);
+    const picked: PickCell[] = [];
+    for (let cursorRow = top; cursorRow <= bottom; cursorRow += 1) {
+      for (let cursorCol = left; cursorCol <= right; cursorCol += 1) {
+        const item = describe(cursorRow, cursorCol);
+        if (item) picked.push(item);
+      }
+    }
+    return picked;
+  };
+
+  const pickFrom = (row: number, col: number, event: ReactPointerEvent) => {
+    if (!layer.onCells || (event.target instanceof Element && event.target.closest(".excel-resize"))) return;
+    const item = describe(row, col);
+    if (!item) return;
+    event.preventDefault();
+    drag.current = { row, col, moved: false };
+    layer.onCells([], "start");
+    const move = (pointer: PointerEvent) => {
+      const hit = document.elementFromPoint(pointer.clientX, pointer.clientY)?.closest<HTMLElement>("[data-row]");
+      const nextRow = Number(hit?.dataset["row"] ?? 0);
+      const nextCol = Number(hit?.dataset["col"] ?? 0);
+      if (!drag.current || !nextRow || !nextCol) return;
+      if (nextRow !== drag.current.row || nextCol !== drag.current.col) drag.current.moved = true;
+      layer.onCells?.(rectangle(nextRow, nextCol), true);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      if (drag.current && !drag.current.moved) layer.onCells?.([item], false);
+      drag.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
 
   const startResize = (index: number, event: ReactPointerEvent) => {
     event.preventDefault();
@@ -160,7 +230,7 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
   };
 
   return (
-    <div className="excel-grid text-[13px] leading-5" style={{ gridTemplateColumns: template }}>
+    <div className={cn("excel-grid text-[13px] leading-5", layer.onCells && "select-none")} style={{ gridTemplateColumns: template }}>
       <div className="excel-corner" />
       {letters.map((letter, index) => (
         <div key={letter} className={cn("excel-col", index + 1 === activeColumn && "excel-axis-active")}>
@@ -174,11 +244,21 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
           <div key={rowNumber} className="contents">
             <div className={cn("excel-row", rowNumber === activeRow && "excel-axis-active")}>{rowNumber}</div>
             {letters.map((letter, columnOffset) => {
-              const cell = cells.get(`${columnOffset + 1}:${rowNumber}`);
-              if (!cell) return <div key={letter} className="excel-cell" />;
+              const column = columnOffset + 1;
+              const cell = cells.get(`${column}:${rowNumber}`);
+              if (!cell) return <div key={letter} data-row={rowNumber} data-col={column} className="excel-cell" />;
               const mark = markProps(cell.anchor, layer);
               return (
-                <div key={cell.anchor} data-anchor={cell.anchor} title={cell.text} {...mark} className={cn("excel-cell", mark.className)}>
+                <div
+                  key={cell.anchor}
+                  data-anchor={cell.anchor}
+                  data-row={rowNumber}
+                  data-col={column}
+                  title={cell.text}
+                  {...mark}
+                  onPointerDown={(event) => pickFrom(rowNumber, column, event)}
+                  className={cn("excel-cell", layer.onCells && cell.text.trim() && "cursor-cell", mark.className)}
+                >
                   {cell.text}
                 </div>
               );
@@ -191,13 +271,77 @@ function ExcelSheet({ sheet, layer }: { sheet: GridSheet; layer: MarkLayer }) {
 }
 
 export function FlowView({ blocks, layer }: { blocks: FlowBlock[]; layer: MarkLayer }) {
+  const drag = useRef<{ table: number; row: number; col: number; moved: boolean } | null>(null);
+  const pickCell = (table: number, row: number, col: number): PickCell | null => {
+    const cell = blocks[table]?.rows?.[row]?.cells[col];
+    const text = cell?.text.replace(/\s+/g, " ").trim() ?? "";
+    if (!cell || !text) return null;
+    let left = "";
+    for (let cursor = col - 1; cursor >= 0; cursor -= 1) {
+      const side = blocks[table]?.rows?.[row]?.cells[cursor]?.text.replace(/\s+/g, " ").trim() ?? "";
+      if (/\p{L}/u.test(side)) {
+        left = side;
+        break;
+      }
+    }
+    return { anchor: cell.anchor, name: cellName(text, left), value: text };
+  };
+  const rectangle = (table: number, row: number, col: number): PickCell[] => {
+    if (!drag.current || drag.current.table !== table) return [];
+    const top = Math.min(drag.current.row, row);
+    const bottom = Math.max(drag.current.row, row);
+    const left = Math.min(drag.current.col, col);
+    const right = Math.max(drag.current.col, col);
+    const picked: PickCell[] = [];
+    for (let cursorRow = top; cursorRow <= bottom; cursorRow += 1) {
+      for (let cursorCol = left; cursorCol <= right; cursorCol += 1) {
+        const item = pickCell(table, cursorRow, cursorCol);
+        if (item) picked.push(item);
+      }
+    }
+    return picked;
+  };
+  const pickFrom = (table: number, row: number, col: number, event: ReactPointerEvent) => {
+    const item = pickCell(table, row, col);
+    if (!layer.onCells || !item) return;
+    event.preventDefault();
+    drag.current = { table, row, col, moved: false };
+    layer.onCells([], "start");
+    const move = (pointer: PointerEvent) => {
+      const hit = document.elementFromPoint(pointer.clientX, pointer.clientY)?.closest<HTMLElement>("[data-pick-table]");
+      const nextTable = Number(hit?.dataset["pickTable"] ?? -1);
+      const nextRow = Number(hit?.dataset["pickRow"] ?? -1);
+      const nextCol = Number(hit?.dataset["pickCol"] ?? -1);
+      if (!drag.current || nextTable < 0 || nextRow < 0 || nextCol < 0) return;
+      if (nextTable !== drag.current.table || nextRow !== drag.current.row || nextCol !== drag.current.col) drag.current.moved = true;
+      layer.onCells?.(rectangle(nextTable, nextRow, nextCol), true);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      if (drag.current && !drag.current.moved) layer.onCells?.([item], false);
+      drag.current = null;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
   return (
-    <div className="mx-auto max-w-3xl rounded-md border border-border bg-white p-6 shadow-panel text-sm leading-relaxed">
+    <div className={cn("mx-auto max-w-3xl rounded-md border border-border bg-white p-6 shadow-panel text-sm leading-relaxed", layer.onCells && "select-none")}>
       {blocks.map((block, index) => {
         if (block.kind === "paragraph") {
           const mark = block.anchor ? markProps(block.anchor, layer) : { className: undefined };
+          const text = block.text?.replace(/\s+/g, " ").trim() ?? "";
           return (
-            <p key={block.anchor ?? index} data-anchor={block.anchor} {...mark} className={cn("mb-3", mark.className)}>
+            <p
+              key={block.anchor ?? index}
+              data-anchor={block.anchor}
+              {...mark}
+              onPointerDown={layer.onCells && block.anchor && text ? (event) => {
+                event.preventDefault();
+                layer.onCells?.([{ anchor: block.anchor ?? "", name: text, value: text }], false);
+              } : undefined}
+              className={cn("mb-3", layer.onCells && text && "cursor-cell", mark.className)}
+            >
               {block.text}
             </p>
           );
@@ -207,10 +351,19 @@ export function FlowView({ blocks, layer }: { blocks: FlowBlock[]; layer: MarkLa
             <tbody>
               {block.rows?.map((row, rowIndex) => (
                 <tr key={rowIndex}>
-                  {row.cells.map((cell) => {
+                  {row.cells.map((cell, column) => {
                     const mark = markProps(cell.anchor, layer);
                     return (
-                      <td key={cell.anchor} data-anchor={cell.anchor} {...mark} className={cn("border border-border px-2 py-1", mark.className)}>
+                      <td
+                        key={cell.anchor}
+                        data-anchor={cell.anchor}
+                        data-pick-table={index}
+                        data-pick-row={rowIndex}
+                        data-pick-col={column}
+                        {...mark}
+                        onPointerDown={(event) => pickFrom(index, rowIndex, column, event)}
+                        className={cn("border border-border px-2 py-1", layer.onCells && cell.text.trim() && "cursor-cell", mark.className)}
+                      >
                         {cell.text}
                       </td>
                     );

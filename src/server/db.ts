@@ -254,6 +254,10 @@ export async function checkCount(sessionId: string): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
+export async function saveSessionText(sessionId: string, title: string, description: string): Promise<void> {
+  await run("UPDATE sessions SET title = ?, description = ? WHERE id = ?", [title, description || null, sessionId]);
+}
+
 export async function saveSelection(sessionId: string, selection: ReportSelection): Promise<void> {
   await run("UPDATE sessions SET selection = ? WHERE id = ?", [JSON.stringify(selection), sessionId]);
 }

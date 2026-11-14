@@ -145,6 +145,9 @@ export const mockAuditService: AuditService = {
     write(store);
     return session;
   },
+  async updateDetails() {
+    return;
+  },
   async suggestIndicators() {
     throw new Error("Демонстрационный комплект уже посчитан.");
   },

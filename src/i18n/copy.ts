@@ -34,7 +34,7 @@ export interface Copy {
     title: string; lead: string; openDemo: string; guest: string; signIn: string; create: string;
     steps: [string, string, string]; report: string; privacy: string; dropReport: string; badReport: string; documents: string; documentsLead: string; dropSupporting: string; badSupporting: string; composition: string; titleLabel: string; description: string; recheck: string; none: string; afterStart: string;
     toList: string; back: string; next: string; start: string; started: string; failed: string; remove: string;
-    chooseTitle: string; chooseLead: string; chooseAuto: string; choosing: string; startCheck: string; starting: string; chooseEmpty: string; removeValue: string; selectionFailed: string; preparing: string; noValues: string;
+    chooseTitle: string; chooseLead: string; chooseAuto: string; choosing: string; startCheck: string; starting: string; chooseEmpty: string; chooseNone: string; removeValue: string; selectionFailed: string; preparing: string; noValues: string;
   };
   work: {
     loading: string; openFailed: string; backToAudits: string; missing: string; reviewed: string; of: string; summary: string; summaryLead: string; results: string; hideHint: string; auditStatus: string; more: string; reset: string; resetDone: string; toConclusion: string; hintFill: string; saveValue: string; downloadFile: string; downloadRevised: string; unread: string; recheck: string;

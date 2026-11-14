@@ -23,6 +23,7 @@ import {
 import {
   clearReviews,
   deleteSession,
+  saveSessionText,
   findByIdempotency,
   insertDocument,
   insertSession,
@@ -65,22 +66,31 @@ export async function auditsApi(request: Request, parts: string[], user: Account
     const session = await readSession(id);
     return session ? json(session, 200) : json({ error: "Проверка не найдена" }, 404);
   }
+  if (parts.length === 3 && request.method === "PATCH") return updateSessionText(request, id);
   if (parts.length === 3 && request.method === "DELETE") {
     await deleteSession(id);
     return json({ ok: true }, 200);
   }
   if (parts[3] === "selection" && parts[4] === "suggest" && request.method === "POST") {
     try {
-      return json({ ids: await suggestSelection(id) }, 200);
+      return json({ items: await suggestSelection(id) }, 200);
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "Не удалось выбрать показатели" }, 400);
     }
   }
   if (parts[3] === "selection" && request.method === "POST") {
-    const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown; items?: unknown } | null;
     const ids = Array.isArray(body?.ids) ? body.ids.filter((item): item is string => typeof item === "string") : [];
+    const items = Array.isArray(body?.items) ? body.items.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      const anchor = typeof row["anchor"] === "string" ? row["anchor"] : "";
+      const name = typeof row["name"] === "string" ? row["name"] : "";
+      const value = typeof row["value"] === "string" ? row["value"] : "";
+      return anchor && value ? [{ anchor, name, value }] : [];
+    }) : [];
     try {
-      await chooseSelection(id, body?.all === true ? null : ids);
+      await chooseSelection(id, body?.all === true ? null : ids, items);
       return json(await readSession(id), 200);
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "Не удалось начать сверку" }, 400);
@@ -98,6 +108,15 @@ export async function auditsApi(request: Request, parts: string[], user: Account
     return json(await readSession(id), 200);
   }
   return json({ error: "Не найдено" }, 404);
+}
+
+async function updateSessionText(request: Request, id: string): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as { title?: unknown; description?: unknown } | null;
+  const title = typeof body?.title === "string" ? body.title.trim() : "";
+  const description = typeof body?.description === "string" ? body.description.trim() : "";
+  if (!title) return json({ error: "Укажите название проверки" }, 400);
+  await saveSessionText(id, title, description);
+  return json(await readSession(id), 200);
 }
 
 export async function createAudit(request: Request, user: Account): Promise<Response> {

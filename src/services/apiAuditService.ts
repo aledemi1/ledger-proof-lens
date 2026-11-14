@@ -1,6 +1,6 @@
 import { buildConclusion } from "@/lib/conclusion";
 import { mockAuditService } from "@/services/mockAuditService";
-import type { AuditDocument, AuditSession, CheckResult, NewDraftInput } from "@/types/audit";
+import type { AuditDocument, AuditSession, CheckResult, ChosenCell, NewDraftInput } from "@/types/audit";
 import type { AuditService } from "./auditService";
 
 export class AuditApiError extends Error {
@@ -129,14 +129,18 @@ export const apiAuditService: AuditService = {
     emit();
     return session;
   },
-  async suggestIndicators(sessionId) {
-    const result = await request<{ ids: string[] }>(`/api/audits/${sessionId}/selection/suggest`, { method: "POST", body: "{}" });
-    return result.ids;
+  async updateDetails(sessionId, input) {
+    await request<AuditSession>(`/api/audits/${sessionId}`, { method: "PATCH", body: JSON.stringify(input) });
+    emit();
   },
-  async startSelection(sessionId, ids) {
+  async suggestIndicators(sessionId) {
+    const result = await request<{ items: ChosenCell[] }>(`/api/audits/${sessionId}/selection/suggest`, { method: "POST", body: "{}" });
+    return result.items;
+  },
+  async startSelection(sessionId, items) {
     const session = await request<AuditSession>(`/api/audits/${sessionId}/selection`, {
       method: "POST",
-      body: JSON.stringify(ids.length ? { ids } : { all: true }),
+      body: JSON.stringify(items.length ? { items } : { all: true }),
     });
     emit();
     return session;

@@ -219,6 +219,12 @@ export interface AuditSession {
   notices?: AuditNotice[];
 }
 
+export interface ChosenCell {
+  anchor: string;
+  name: string;
+  value: string;
+}
+
 export interface ReportRegion {
   id: string;
   name: string;
