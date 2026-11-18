@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAccount } from "@/hooks/useAccount";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import type { Copy } from "@/i18n/copy";
+import { AccessRequest } from "@/components/audit/AccessRequest";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { useCopy } from "@/i18n/messages";
 import { loadAccount } from "@/lib/account";
@@ -96,38 +97,50 @@ export function AppShell({ children }: { children: ReactNode }) {
         {workspace ? <Link to="/" aria-label="Sverko — главная" className="mx-auto grid size-9 place-items-center rounded-md bg-primary text-primary-foreground"><ScanSearch className="size-5" /></Link> : <Logo />}
         {!workspace && <div className="mt-4 flex gap-1.5 px-2"><ThemeSwitcher align="left" /><LocaleSwitcher align="left" /></div>}
         <nav className={cn(workspace ? "mt-6" : "mt-4", "flex flex-col gap-0.5 px-2")}>
-          {items.map(({ to, Icon, exact }) => (
-            <Link
-              key={to}
-              to={to}
-              activeOptions={{ exact }}
-              aria-label={navLabel(to, t)}
-              title={workspace ? navLabel(to, t) : undefined}
-              className={cn("group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent", workspace && "h-10 justify-center")}
-              activeProps={{ className: "bg-sidebar-accent font-medium text-sidebar-accent-foreground" }}
-            >
-              <Icon className="size-4" />
-              {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{navLabel(to, t)}</span> : navLabel(to, t)}
-            </Link>
-          ))}
+          {items.map(({ to, Icon, exact }) => {
+            const label = navLabel(to, t);
+            const className = cn("group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent", workspace && "h-10 justify-center");
+            const body = (
+              <>
+                <Icon className="size-4" />
+                {workspace ? <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-panel group-hover:block group-focus-visible:block">{label}</span> : label}
+              </>
+            );
+            if (to === "/new") {
+              return (
+                <AccessRequest key={to}>
+                  <button type="button" aria-label={label} title={workspace ? label : undefined} className={className}>{body}</button>
+                </AccessRequest>
+              );
+            }
+            return (
+              <Link key={to} to={to} activeOptions={{ exact }} aria-label={label} title={workspace ? label : undefined} className={className} activeProps={{ className: "bg-sidebar-accent font-medium text-sidebar-accent-foreground" }}>
+                {body}
+              </Link>
+            );
+          })}
         </nav>
         <div className="mt-auto px-2"><AccountLinks compact={workspace} adminLinks={false} /></div>
       </aside>
       <header className="no-print sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-card px-3 md:hidden">
         <Logo shortOnPhone />
         <nav className="flex gap-1">
-          {items.map(({ to, Icon, exact }) => (
-            <Link
-              key={to}
-              to={to}
-              activeOptions={{ exact }}
-              aria-label={navLabel(to, t)}
-              className={cn("grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent")}
-              activeProps={{ className: "bg-accent text-accent-foreground" }}
-            >
-              <Icon className="size-4" />
-            </Link>
-          ))}
+          {items.map(({ to, Icon, exact }) => {
+            const label = navLabel(to, t);
+            const className = "grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent";
+            if (to === "/new") {
+              return (
+                <AccessRequest key={to}>
+                  <button type="button" aria-label={label} className={className}><Icon className="size-4" /></button>
+                </AccessRequest>
+              );
+            }
+            return (
+              <Link key={to} to={to} activeOptions={{ exact }} aria-label={label} className={className} activeProps={{ className: "bg-accent text-accent-foreground" }}>
+                <Icon className="size-4" />
+              </Link>
+            );
+          })}
           <AccountLinks compact adminLinks={false} />
           <ThemeSwitcher compact />
           <LocaleSwitcher />

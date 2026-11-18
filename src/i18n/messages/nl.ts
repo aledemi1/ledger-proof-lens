@@ -20,6 +20,7 @@ export const nl: Copy = {
     conclusion: "Conclusie — Sverko",
   },
   common: { loading: "Laden…", notFoundTitle: "Pagina niet gevonden", notFoundText: "Deze pagina bestaat niet of is verplaatst.", home: "Naar start", tryAgain: "Opnieuw proberen", pageFailed: "Pagina kon niet worden geladen", pageFailedText: "Er ging iets mis. Vernieuw de pagina of ga terug naar start.", cancel: "Annuleren", save: "Opslaan", close: "Sluiten", demo: "Demo", demoTitle: "Alle gegevens zijn synthetisch en horen niet bij echte organisaties", example: "voorbeeld" },
+  access: { title: "Neem contact op voor toegang" },
   status: { match: "Komt overeen", mismatch: "Afwijking", notFound: "Geen bevestiging gevonden", needsReview: "Vereist controle" },
   category: { match: "Komt overeen", mismatch: "Afwijkingen", notFound: "Geen bevestiging", needsReview: "Handmatige controle" },
   reviewer: { pending: "Niet beoordeeld", confirmed: "Opmerking bevestigd", verified: "Gecontroleerd" },

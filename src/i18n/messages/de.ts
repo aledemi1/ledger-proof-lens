@@ -20,6 +20,7 @@ export const de: Copy = {
     conclusion: "Schlussfolgerung — Sverko",
   },
   common: { loading: "Laden…", notFoundTitle: "Seite nicht gefunden", notFoundText: "Diese Seite existiert nicht oder wurde verschoben.", home: "Zur Startseite", tryAgain: "Erneut versuchen", pageFailed: "Seite konnte nicht geladen werden", pageFailedText: "Etwas ist schiefgelaufen. Aktualisieren Sie die Seite oder kehren Sie zur Startseite zurück.", cancel: "Abbrechen", save: "Speichern", close: "Schließen", demo: "Demo", demoTitle: "Alle Daten sind synthetisch und beziehen sich nicht auf reale Organisationen", example: "Beispiel" },
+  access: { title: "Kontaktieren Sie uns, um Zugang zu erhalten" },
   status: { match: "Übereinstimmung", mismatch: "Abweichung", notFound: "Kein Beleg gefunden", needsReview: "Prüfung erforderlich" },
   category: { match: "Übereinstimmung", mismatch: "Abweichungen", notFound: "Kein Beleg", needsReview: "Manuelle Prüfung" },
   reviewer: { pending: "Nicht bearbeitet", confirmed: "Feststellung bestätigt", verified: "Geprüft" },

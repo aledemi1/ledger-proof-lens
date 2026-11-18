@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { FileSpreadsheet, Files, Folder, FolderOpen, Plus, Search } from "lucide-react";
+import { AccessRequest } from "@/components/audit/AccessRequest";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkStatusMeta, DemoBadge, RecommendationBadge, SessionStatusBadge } from "@/components/audit/badges";
@@ -43,9 +44,9 @@ export function AuditsListPage() {
             {t.audits.lead}
           </p>
         </div>
-        <Button asChild>
-          <Link to="/new"><Plus /> {t.audits.new}</Link>
-        </Button>
+        <AccessRequest>
+          <Button><Plus /> {t.audits.new}</Button>
+        </AccessRequest>
       </div>
 
       {error && (
@@ -81,12 +82,11 @@ export function AuditsListPage() {
         {list.map((s) => (
           <ProjectFolder key={s.id} session={s} showDemo={!allDemo} />
         ))}
-        <Link
-          to="/new"
-          className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-        >
-          <Plus className="size-5" /> {t.audits.new}
-        </Link>
+        <AccessRequest>
+          <button type="button" className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary">
+            <Plus className="size-5" /> {t.audits.new}
+          </button>
+        </AccessRequest>
       </div>
       {sessions && list.length === 0 && <p className="mt-4 text-sm text-muted-foreground">{t.audits.empty}</p>}
       {!sessions && !error && <p className="mt-4 text-sm text-muted-foreground">{t.audits.loading}</p>}

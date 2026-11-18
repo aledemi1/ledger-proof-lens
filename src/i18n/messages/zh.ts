@@ -20,6 +20,7 @@ export const zh: Copy = {
     conclusion: "结论 — Sverko",
   },
   common: { loading: "加载中…", notFoundTitle: "页面未找到", notFoundText: "该页面不存在或已移动。", home: "返回首页", tryAgain: "重试", pageFailed: "页面加载失败", pageFailedText: "出现问题。请刷新页面或返回首页。", cancel: "取消", save: "保存", close: "关闭", demo: "演示", demoTitle: "所有数据均为合成数据，与真实机构无关", example: "示例" },
+  access: { title: "请联系我们以获取访问权限" },
   status: { match: "一致", mismatch: "差异", notFound: "未找到佐证", needsReview: "待复核" },
   category: { match: "一致", mismatch: "差异", notFound: "无佐证", needsReview: "人工复核" },
   reviewer: { pending: "未处理", confirmed: "问题已确认", verified: "已复核" },

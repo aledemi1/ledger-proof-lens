@@ -20,6 +20,7 @@ export const tr: Copy = {
     conclusion: "Sonuç — Sverko",
   },
   common: { loading: "Yükleniyor…", notFoundTitle: "Sayfa bulunamadı", notFoundText: "Böyle bir sayfa yok veya taşınmış.", home: "Ana sayfaya", tryAgain: "Yeniden dene", pageFailed: "Sayfa yüklenemedi", pageFailedText: "Bir şeyler ters gitti. Sayfayı yenileyin veya ana sayfaya dönün.", cancel: "İptal", save: "Kaydet", close: "Kapat", demo: "Demo", demoTitle: "Tüm veriler sentetiktir ve gerçek kuruluşlara ait değildir", example: "örnek" },
+  access: { title: "Erişim için bizimle iletişime geçin" },
   status: { match: "Eşleşiyor", mismatch: "Uyumsuzluk", notFound: "Doğrulama bulunamadı", needsReview: "İnceleme gerekir" },
   category: { match: "Eşleşiyor", mismatch: "Uyumsuzluklar", notFound: "Doğrulama yok", needsReview: "Elle inceleme" },
   reviewer: { pending: "İncelenmedi", confirmed: "Bulgu onaylandı", verified: "Kontrol edildi" },

@@ -20,6 +20,7 @@ export const pt: Copy = {
     conclusion: "Conclusão — Sverko",
   },
   common: { loading: "Carregando…", notFoundTitle: "Página não encontrada", notFoundText: "Esta página não existe ou foi movida.", home: "Ir ao início", tryAgain: "Tentar novamente", pageFailed: "Não foi possível carregar a página", pageFailedText: "Algo deu errado. Atualize a página ou volte ao início.", cancel: "Cancelar", save: "Salvar", close: "Fechar", demo: "Demo", demoTitle: "Todos os dados são sintéticos e não se referem a organizações reais", example: "exemplo" },
+  access: { title: "Contacte-nos para obter acesso" },
   status: { match: "Confere", mismatch: "Divergência", notFound: "Confirmação não encontrada", needsReview: "Requer revisão" },
   category: { match: "Confere", mismatch: "Divergências", notFound: "Sem confirmação", needsReview: "Revisão manual" },
   reviewer: { pending: "Não analisado", confirmed: "Apontamento confirmado", verified: "Verificado" },

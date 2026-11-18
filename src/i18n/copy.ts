@@ -4,6 +4,7 @@ export interface Copy {
   theme: { label: string; light: string; dusk: string; night: string };
   meta: { homeTitle: string; homeDescription: string; login: string; register: string; admin: string; inbox: string; stats: string; newTitle: string; newDescription: string; auditsTitle: string; auditsDescription: string; workspace: string; conclusion: string };
   common: { loading: string; notFoundTitle: string; notFoundText: string; home: string; tryAgain: string; pageFailed: string; pageFailedText: string; cancel: string; save: string; close: string; demo: string; demoTitle: string; example: string };
+  access: { title: string };
   status: { match: string; mismatch: string; notFound: string; needsReview: string };
   category: { match: string; mismatch: string; notFound: string; needsReview: string };
   reviewer: { pending: string; confirmed: string; verified: string };

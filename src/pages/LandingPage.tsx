@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, FileText, GitCompareArrows, ClipboardCheck, ArrowUpRight, Check, CircleAlert, Link2 } from "lucide-react";
+import { AccessRequest } from "@/components/audit/AccessRequest";
 import { Button } from "@/components/ui/button";
 import { MarkProvider, SyntheticPage } from "@/components/audit/SyntheticDocument";
 import { useAuditSession } from "@/hooks/useAudit";
@@ -27,7 +28,7 @@ export function LandingPage() {
         <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">{t.landing.lead}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg" className="px-5"><Link to="/audits/$id" params={{ id: DEMO_SESSION_ID }}>{t.landing.openDemo} <ArrowRight /></Link></Button>
-          <Button asChild size="lg" variant="outline" className="bg-card px-5"><Link to="/new">{t.landing.newCheck}</Link></Button>
+          <AccessRequest><Button size="lg" variant="outline" className="bg-card px-5">{t.landing.newCheck}</Button></AccessRequest>
         </div>
       </section>
       <section aria-label={t.landing.sample} className="overflow-hidden rounded-lg border border-border bg-card shadow-panel">

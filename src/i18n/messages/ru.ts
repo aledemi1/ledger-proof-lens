@@ -20,6 +20,7 @@ export const ru: Copy = {
     conclusion: "Заключение — Sverko",
   },
   common: { loading: "Загрузка…", notFoundTitle: "Страница не найдена", notFoundText: "Такой страницы нет или она была перемещена.", home: "На главную", tryAgain: "Попробовать снова", pageFailed: "Страница не загрузилась", pageFailedText: "Что-то пошло не так. Обновите страницу или вернитесь на главную.", cancel: "Отмена", save: "Сохранить", close: "Закрыть", demo: "Демо", demoTitle: "Все данные синтетические и не относятся к реальным организациям", example: "пример" },
+  access: { title: "Свяжитесь с нами для предоставления доступа" },
   status: { match: "Совпадает", mismatch: "Расхождение", notFound: "Не найдено подтверждение", needsReview: "Требует проверки" },
   category: { match: "Совпадает", mismatch: "Расхождения", notFound: "Нет подтверждения", needsReview: "Ручная проверка" },
   reviewer: { pending: "Не рассмотрено", confirmed: "Замечание подтверждено", verified: "Проверено" },

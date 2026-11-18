@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Clock, Wallet, ShieldCheck, Search, FileStack, Highlighter, MessageSquareText, Scale, FileCheck2, Lock, UserCheck, X, Check } from "lucide-react";
+import { AccessRequest } from "@/components/audit/AccessRequest";
 import { Button } from "@/components/ui/button";
 import { LOCALE_INTL } from "@/i18n/locales";
 import { fill } from "@/i18n/fill";
@@ -129,7 +130,7 @@ export function LandingSections() {
         <p className="mx-auto mt-3 max-w-xl text-muted-foreground">{t.ctaText}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg"><Link to="/audits/$id" params={{ id: DEMO_SESSION_ID }}>{t.openDemo} <ArrowRight /></Link></Button>
-          <Button asChild size="lg" variant="outline" className="bg-card"><Link to="/new">{t.newCheck}</Link></Button>
+          <AccessRequest><Button size="lg" variant="outline" className="bg-card">{t.newCheck}</Button></AccessRequest>
         </div>
       </section>
     </>
